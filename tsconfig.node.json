@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "target": "ES2022",
+    "outDir": "out",
+    "baseUrl": ".",
+    "paths": {
+      "@electron/*": ["electron/*"],
+      "@/shared/*": ["src/shared/*"]
+    }
+  },
+  "include": [
+    "electron/**/*.ts",
+    "electron.vite.config.ts",
+    "scripts/**/*.ts"
+  ]
+}
