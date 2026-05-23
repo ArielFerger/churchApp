@@ -5,8 +5,10 @@ import { registerProjectionHandlers } from './ipc/projection'
 import { registerSettingsHandlers } from './ipc/settings'
 import { registerDisplayHandlers } from './ipc/displays'
 import { registerMediaHandlers } from './ipc/files'
+import { registerSongsHandlers } from './ipc/songs'
 import { getSettings } from './services/settingsService'
 import { mediaScanner } from './services/mediaScanner'
+import { songsService } from './services/songsService'
 import {
   registerMediaSchemeAsPrivileged,
   registerMediaProtocolHandler
@@ -32,6 +34,8 @@ app.whenReady().then(async () => {
   registerProjectionHandlers(controlWindow, projectionWindow)
   registerDisplayHandlers()
   registerMediaHandlers(controlWindow, projectionWindow)
+  registerSongsHandlers(controlWindow)
+  void songsService.init()
 
   registerSettingsHandlers((next, prev) => {
     if (
@@ -69,6 +73,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   void mediaScanner.dispose()
+  void songsService.dispose()
 })
 
 export { controlWindow, projectionWindow }

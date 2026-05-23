@@ -80,17 +80,50 @@ function FadeBlock({ children, pad = true }: { children: React.ReactNode; pad?: 
 }
 
 function SlideBlock({ content }: { content: SlideContent }) {
+  // Auto-shrink for crowded slides: 6 lines → 6xl, 8 → 5xl, more → 4xl.
+  // Long single lines still wrap (break-words) so nothing overflows.
+  const visibleLines = content.lines.filter((l) => l !== undefined)
+  const sizeClass =
+    visibleLines.length <= 4
+      ? 'text-7xl leading-[1.05]'
+      : visibleLines.length <= 6
+        ? 'text-6xl leading-[1.1]'
+        : visibleLines.length <= 8
+          ? 'text-5xl leading-tight'
+          : 'text-4xl leading-snug'
+
   return (
-    <div className="space-y-6">
-      {content.lines.map((line, idx) => (
-        <p
-          key={idx}
-          className="font-display text-6xl font-semibold leading-tight text-white"
-          style={{ textShadow: '0 4px 16px rgba(0,0,0,0.85)' }}
-        >
-          {line}
-        </p>
-      ))}
+    <div className="mx-auto max-w-[90vw]">
+      <div className="space-y-4">
+        {visibleLines.map((line, idx) => (
+          <p
+            key={idx}
+            className={`font-display ${sizeClass} break-words font-semibold text-white`}
+            style={{ textShadow: '0 4px 24px rgba(0,0,0,0.9), 0 2px 4px rgba(0,0,0,0.6)' }}
+          >
+            {line || ' '}
+          </p>
+        ))}
+      </div>
+
+      {(content.songTitle || content.sectionLabel) && (
+        <div className="mt-12 flex items-center justify-center gap-3 text-xl font-medium text-slate-300/90">
+          {content.songTitle && (
+            <span style={{ textShadow: '0 2px 12px rgba(0,0,0,0.85)' }}>{content.songTitle}</span>
+          )}
+          {content.songTitle && content.sectionLabel && (
+            <span className="text-slate-500">·</span>
+          )}
+          {content.sectionLabel && (
+            <span
+              className="rounded-full bg-black/30 px-3 py-0.5 text-base text-slate-200 backdrop-blur-sm"
+              style={{ textShadow: '0 2px 8px rgba(0,0,0,0.7)' }}
+            >
+              {content.sectionLabel}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
