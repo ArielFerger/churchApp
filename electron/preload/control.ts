@@ -3,6 +3,7 @@ import { IPC_CHANNELS } from '../../src/shared/constants'
 import type { ProjectionCommand, AppSettings, DisplayInfo } from '../../src/shared/types/ipc'
 import type { MediaItem } from '../../src/shared/types/media'
 import type { Song } from '../../src/shared/types/song'
+import type { BibleBook } from '../../src/shared/types/bible'
 
 contextBridge.exposeInMainWorld('electronAPI', {
   sendProjectionCommand: (cmd: ProjectionCommand) =>
@@ -46,6 +47,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(IPC_CHANNELS.SONGS_UPDATED, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.SONGS_UPDATED, handler)
   },
+
+  getBibleVersions: () => ipcRenderer.invoke(IPC_CHANNELS.GET_BIBLE_VERSIONS),
+
+  getBibleBooks: (version: string): Promise<BibleBook[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_BIBLE_BOOKS, version),
+
+  lookupVerse: (req: {
+    version: string
+    bookId: string
+    chapter: number
+    verse: number
+    endVerse?: number
+  }) => ipcRenderer.invoke(IPC_CHANNELS.SEARCH_VERSE, req),
 
   onShortcut: (callback: (key: string) => void) => {
     const handler = (_: Electron.IpcRendererEvent, key: string) => callback(key)

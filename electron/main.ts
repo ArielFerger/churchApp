@@ -6,9 +6,11 @@ import { registerSettingsHandlers } from './ipc/settings'
 import { registerDisplayHandlers } from './ipc/displays'
 import { registerMediaHandlers } from './ipc/files'
 import { registerSongsHandlers } from './ipc/songs'
+import { registerBibleHandlers } from './ipc/bible'
 import { getSettings } from './services/settingsService'
 import { mediaScanner } from './services/mediaScanner'
 import { songsService } from './services/songsService'
+import { bibleService } from './services/bibleService'
 import {
   registerMediaSchemeAsPrivileged,
   registerMediaProtocolHandler
@@ -36,6 +38,8 @@ app.whenReady().then(async () => {
   registerMediaHandlers(controlWindow, projectionWindow)
   registerSongsHandlers(controlWindow)
   void songsService.init()
+  registerBibleHandlers()
+  void bibleService.init()
 
   registerSettingsHandlers((next, prev) => {
     if (
