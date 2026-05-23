@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '../../src/shared/constants'
 import type { ProjectionCommand, AppSettings, DisplayInfo } from '../../src/shared/types/ipc'
 import type { MediaItem } from '../../src/shared/types/media'
+import type { Song } from '../../src/shared/types/song'
 
 contextBridge.exposeInMainWorld('electronAPI', {
   sendProjectionCommand: (cmd: ProjectionCommand) =>
@@ -31,6 +32,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: Electron.IpcRendererEvent, cmd: ProjectionCommand) => callback(cmd)
     ipcRenderer.on(IPC_CHANNELS.PROJECTION_STATE, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.PROJECTION_STATE, handler)
+  },
+
+  getSongs: (): Promise<Song[]> => ipcRenderer.invoke(IPC_CHANNELS.GET_SONGS),
+
+  saveSong: (song: Partial<Song> & { title: string }): Promise<Song> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SAVE_SONG, song),
+
+  deleteSong: (id: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.DELETE_SONG, id),
+
+  onSongsUpdated: (callback: (songs: Song[]) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, songs: Song[]) => callback(songs)
+    ipcRenderer.on(IPC_CHANNELS.SONGS_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.SONGS_UPDATED, handler)
   },
 
   onShortcut: (callback: (key: string) => void) => {

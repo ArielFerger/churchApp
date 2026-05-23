@@ -16,6 +16,7 @@ export const IPC_CHANNELS = {
   GET_SONGS: 'songs:get',
   SAVE_SONG: 'songs:save',
   DELETE_SONG: 'songs:delete',
+  SONGS_UPDATED: 'songs:updated',
   GET_BIBLE_VERSIONS: 'bible:getVersions',
   SEARCH_VERSE: 'bible:searchVerse',
   SHOW_OPEN_DIALOG: 'dialog:showOpen'

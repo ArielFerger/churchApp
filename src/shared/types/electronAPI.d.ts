@@ -1,5 +1,6 @@
 import type { ProjectionCommand, AppSettings, DisplayInfo } from './ipc'
 import type { MediaItem } from './media'
+import type { Song } from './song'
 
 export interface ControlElectronAPI {
   sendProjectionCommand: (cmd: ProjectionCommand) => void
@@ -12,6 +13,10 @@ export interface ControlElectronAPI {
   getMedia: () => Promise<MediaItem[]>
   onMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
   onProjectionState: (callback: (cmd: ProjectionCommand) => void) => () => void
+  getSongs: () => Promise<Song[]>
+  saveSong: (song: Partial<Song> & { title: string }) => Promise<Song>
+  deleteSong: (id: string) => Promise<void>
+  onSongsUpdated: (callback: (songs: Song[]) => void) => () => void
   onShortcut: (callback: (key: string) => void) => () => void
 }
 
