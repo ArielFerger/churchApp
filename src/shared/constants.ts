@@ -4,6 +4,8 @@ export const TARGET_HEIGHT = 1080
 
 export const IPC_CHANNELS = {
   PROJECTION_COMMAND: 'projection:command',
+  PROJECTION_STATE: 'projection:state',
+  SHORTCUT_FIRED: 'shortcut:fired',
   GET_DISPLAYS: 'displays:get',
   GET_SETTINGS: 'settings:get',
   SET_SETTINGS: 'settings:set',

@@ -1,4 +1,0 @@
-allowBuilds:
-  - electron
-  - esbuild
-  - electron-winstaller

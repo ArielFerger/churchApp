@@ -6,15 +6,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sendProjectionCommand: (cmd: ProjectionCommand) =>
     ipcRenderer.send(IPC_CHANNELS.PROJECTION_COMMAND, cmd),
 
-  getDisplays: (): Promise<DisplayInfo[]> =>
-    ipcRenderer.invoke(IPC_CHANNELS.GET_DISPLAYS),
+  getDisplays: (): Promise<DisplayInfo[]> => ipcRenderer.invoke(IPC_CHANNELS.GET_DISPLAYS),
 
-  getSettings: (): Promise<AppSettings> =>
-    ipcRenderer.invoke(IPC_CHANNELS.GET_SETTINGS),
+  getSettings: (): Promise<AppSettings> => ipcRenderer.invoke(IPC_CHANNELS.GET_SETTINGS),
 
-  setSettings: (settings: Partial<AppSettings>): Promise<void> =>
+  setSettings: (settings: Partial<AppSettings>): Promise<AppSettings> =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_SETTINGS, settings),
 
-  showOpenDialog: (options: Electron.OpenDialogOptions): Promise<Electron.OpenDialogReturnValue> =>
-    ipcRenderer.invoke(IPC_CHANNELS.SHOW_OPEN_DIALOG, options)
+  showOpenDialog: (
+    options: Electron.OpenDialogOptions
+  ): Promise<Electron.OpenDialogReturnValue> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SHOW_OPEN_DIALOG, options),
+
+  onProjectionState: (callback: (cmd: ProjectionCommand) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, cmd: ProjectionCommand) => callback(cmd)
+    ipcRenderer.on(IPC_CHANNELS.PROJECTION_STATE, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.PROJECTION_STATE, handler)
+  },
+
+  onShortcut: (callback: (key: string) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, key: string) => callback(key)
+    ipcRenderer.on(IPC_CHANNELS.SHORTCUT_FIRED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.SHORTCUT_FIRED, handler)
+  }
 })

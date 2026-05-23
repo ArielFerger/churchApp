@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { HashRouter, Routes, Route, NavLink } from 'react-router-dom'
 import Live from './pages/Live'
 import Songs from './pages/Songs'
@@ -5,6 +6,9 @@ import Bible from './pages/Bible'
 import Media from './pages/Media'
 import Audio from './pages/Audio'
 import Settings from './pages/Settings'
+import LiveIndicator from './components/LiveIndicator'
+import { useProjectionBridge } from './hooks/useProjectionBridge'
+import { useSettingsStore } from '@/shared/store/settingsStore'
 import { APP_NAME } from '@/shared/constants'
 
 const navItems = [
@@ -17,6 +21,13 @@ const navItems = [
 ]
 
 export default function App() {
+  useProjectionBridge()
+  const load = useSettingsStore((s) => s.load)
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
   return (
     <HashRouter>
       <div className="flex h-screen flex-col bg-slate-900 text-slate-100">
@@ -40,6 +51,9 @@ export default function App() {
               </NavLink>
             ))}
           </nav>
+          <div className="ml-auto">
+            <LiveIndicator />
+          </div>
         </header>
 
         <main className="flex-1 overflow-hidden">
