@@ -12,7 +12,7 @@ export function createControlWindow(): BrowserWindow {
     backgroundColor: '#0f172a',
     show: false,
     webPreferences: {
-      preload: join(__dirname, '../preload/control.js'),
+      preload: join(__dirname, '../preload/control.mjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false
