@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '../../src/shared/constants'
 import type { ProjectionCommand, AppSettings, DisplayInfo } from '../../src/shared/types/ipc'
+import type { MediaItem } from '../../src/shared/types/media'
 
 contextBridge.exposeInMainWorld('electronAPI', {
   sendProjectionCommand: (cmd: ProjectionCommand) =>
@@ -17,6 +18,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     options: Electron.OpenDialogOptions
   ): Promise<Electron.OpenDialogReturnValue> =>
     ipcRenderer.invoke(IPC_CHANNELS.SHOW_OPEN_DIALOG, options),
+
+  getMedia: (): Promise<MediaItem[]> => ipcRenderer.invoke(IPC_CHANNELS.GET_MEDIA),
+
+  onMediaUpdated: (callback: (items: MediaItem[]) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, items: MediaItem[]) => callback(items)
+    ipcRenderer.on(IPC_CHANNELS.MEDIA_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.MEDIA_UPDATED, handler)
+  },
 
   onProjectionState: (callback: (cmd: ProjectionCommand) => void) => {
     const handler = (_: Electron.IpcRendererEvent, cmd: ProjectionCommand) => callback(cmd)
