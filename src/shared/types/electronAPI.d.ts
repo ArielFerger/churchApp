@@ -1,6 +1,33 @@
 import type { ProjectionCommand, AppSettings, DisplayInfo } from './ipc'
 import type { MediaItem } from './media'
 import type { Song } from './song'
+import type { BibleBook } from './bible'
+
+export interface BibleVersionSummary {
+  version: string
+  name: string
+  language: string
+  bookCount: number
+}
+
+export interface BibleLookupRequest {
+  version: string
+  bookId: string
+  chapter: number
+  verse: number
+  endVerse?: number
+}
+
+export interface BibleLookupResult {
+  version: BibleVersionSummary
+  bookId: string
+  bookName: string
+  chapter: number
+  verse: number
+  endVerse?: number
+  text: string
+  verses: { number: number; text: string }[]
+}
 
 export interface ControlElectronAPI {
   sendProjectionCommand: (cmd: ProjectionCommand) => void
@@ -17,6 +44,9 @@ export interface ControlElectronAPI {
   saveSong: (song: Partial<Song> & { title: string }) => Promise<Song>
   deleteSong: (id: string) => Promise<void>
   onSongsUpdated: (callback: (songs: Song[]) => void) => () => void
+  getBibleVersions: () => Promise<BibleVersionSummary[]>
+  getBibleBooks: (version: string) => Promise<BibleBook[]>
+  lookupVerse: (req: BibleLookupRequest) => Promise<BibleLookupResult | null>
   onShortcut: (callback: (key: string) => void) => () => void
 }
 

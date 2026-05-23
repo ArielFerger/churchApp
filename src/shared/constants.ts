@@ -18,6 +18,7 @@ export const IPC_CHANNELS = {
   DELETE_SONG: 'songs:delete',
   SONGS_UPDATED: 'songs:updated',
   GET_BIBLE_VERSIONS: 'bible:getVersions',
+  GET_BIBLE_BOOKS: 'bible:getBooks',
   SEARCH_VERSE: 'bible:searchVerse',
   SHOW_OPEN_DIALOG: 'dialog:showOpen'
 } as const
