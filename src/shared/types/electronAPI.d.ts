@@ -1,4 +1,5 @@
 import type { ProjectionCommand, AppSettings, DisplayInfo } from './ipc'
+import type { MediaItem } from './media'
 
 export interface ControlElectronAPI {
   sendProjectionCommand: (cmd: ProjectionCommand) => void
@@ -8,12 +9,16 @@ export interface ControlElectronAPI {
   showOpenDialog: (
     options: Electron.OpenDialogOptions
   ) => Promise<Electron.OpenDialogReturnValue>
+  getMedia: () => Promise<MediaItem[]>
+  onMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
   onProjectionState: (callback: (cmd: ProjectionCommand) => void) => () => void
   onShortcut: (callback: (key: string) => void) => () => void
 }
 
 export interface ProjectionElectronAPI {
   onCommand: (callback: (cmd: ProjectionCommand) => void) => () => void
+  getMedia: () => Promise<MediaItem[]>
+  onMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
 }
 
 declare global {

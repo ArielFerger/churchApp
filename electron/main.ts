@@ -4,15 +4,26 @@ import { createProjectionWindow, moveProjectionToDisplay } from './windows/proje
 import { registerProjectionHandlers } from './ipc/projection'
 import { registerSettingsHandlers } from './ipc/settings'
 import { registerDisplayHandlers } from './ipc/displays'
+import { registerMediaHandlers } from './ipc/files'
 import { getSettings } from './services/settingsService'
+import { mediaScanner } from './services/mediaScanner'
+import {
+  registerMediaSchemeAsPrivileged,
+  registerMediaProtocolHandler
+} from './services/mediaProtocol'
 import log from 'electron-log'
 
 log.initialize()
+
+// MUST run before app is ready.
+registerMediaSchemeAsPrivileged()
 
 let controlWindow: BrowserWindow | null = null
 let projectionWindow: BrowserWindow | null = null
 
 app.whenReady().then(async () => {
+  registerMediaProtocolHandler()
+
   const settings = getSettings()
 
   controlWindow = createControlWindow()
@@ -20,13 +31,30 @@ app.whenReady().then(async () => {
 
   registerProjectionHandlers(controlWindow, projectionWindow)
   registerDisplayHandlers()
+  registerMediaHandlers(controlWindow, projectionWindow)
+
   registerSettingsHandlers((next, prev) => {
-    if (next.projectionDisplayId !== prev.projectionDisplayId && next.projectionDisplayId !== null) {
+    if (
+      next.projectionDisplayId !== prev.projectionDisplayId &&
+      next.projectionDisplayId !== null
+    ) {
       if (projectionWindow && !projectionWindow.isDestroyed()) {
         moveProjectionToDisplay(projectionWindow, next.projectionDisplayId)
       }
     }
+    if (next.mediaFolder !== prev.mediaFolder) {
+      void mediaScanner.setFolder(next.mediaFolder).catch((err) => {
+        log.error('mediaScanner.setFolder failed', err)
+      })
+    }
   })
+
+  // Initial scan from persisted folder (if any)
+  if (settings.mediaFolder) {
+    void mediaScanner.setFolder(settings.mediaFolder).catch((err) => {
+      log.error('mediaScanner initial scan failed', err)
+    })
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -37,6 +65,10 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  void mediaScanner.dispose()
 })
 
 export { controlWindow, projectionWindow }

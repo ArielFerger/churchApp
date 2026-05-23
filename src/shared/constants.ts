@@ -9,6 +9,8 @@ export const IPC_CHANNELS = {
   GET_DISPLAYS: 'displays:get',
   GET_SETTINGS: 'settings:get',
   SET_SETTINGS: 'settings:set',
+  GET_MEDIA: 'media:list',
+  MEDIA_UPDATED: 'media:updated',
   SCAN_MEDIA: 'media:scan',
   SCAN_AUDIO: 'audio:scan',
   GET_SONGS: 'songs:get',
