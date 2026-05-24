@@ -7,7 +7,9 @@ import Media from './pages/Media'
 import Audio from './pages/Audio'
 import Settings from './pages/Settings'
 import LiveIndicator from './components/LiveIndicator'
+import MiniPlayer from './components/audio/MiniPlayer'
 import { useProjectionBridge } from './hooks/useProjectionBridge'
+import { useAudioPlayer } from './audio/useAudioPlayer'
 import { useSettingsStore } from '@/shared/store/settingsStore'
 import { APP_NAME } from '@/shared/constants'
 
@@ -22,6 +24,7 @@ const navItems = [
 
 export default function App() {
   useProjectionBridge()
+  useAudioPlayer()
   const load = useSettingsStore((s) => s.load)
 
   useEffect(() => {
@@ -31,7 +34,7 @@ export default function App() {
   return (
     <HashRouter>
       <div className="flex h-screen flex-col bg-slate-900 text-slate-100">
-        <header className="flex items-center gap-4 border-b border-slate-700 px-4 py-2">
+        <header className="flex shrink-0 items-center gap-4 border-b border-slate-700 px-4 py-2">
           <span className="text-sm font-semibold text-slate-400">{APP_NAME}</span>
           <nav className="flex gap-1">
             {navItems.map((item) => (
@@ -66,6 +69,8 @@ export default function App() {
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>
+
+        <MiniPlayer />
       </div>
     </HashRouter>
   )

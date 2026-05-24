@@ -7,26 +7,34 @@ import { registerDisplayHandlers } from './ipc/displays'
 import { registerMediaHandlers } from './ipc/files'
 import { registerSongsHandlers } from './ipc/songs'
 import { registerBibleHandlers } from './ipc/bible'
+import { registerAudioHandlers } from './ipc/audio'
 import { getSettings } from './services/settingsService'
 import { mediaScanner } from './services/mediaScanner'
 import { songsService } from './services/songsService'
 import { bibleService } from './services/bibleService'
+import { audioScanner } from './services/audioScanner'
 import {
   registerMediaSchemeAsPrivileged,
   registerMediaProtocolHandler
 } from './services/mediaProtocol'
+import {
+  registerAudioSchemeAsPrivileged,
+  registerAudioProtocolHandler
+} from './services/audioProtocol'
 import log from 'electron-log'
 
 log.initialize()
 
 // MUST run before app is ready.
 registerMediaSchemeAsPrivileged()
+registerAudioSchemeAsPrivileged()
 
 let controlWindow: BrowserWindow | null = null
 let projectionWindow: BrowserWindow | null = null
 
 app.whenReady().then(async () => {
   registerMediaProtocolHandler()
+  registerAudioProtocolHandler()
 
   const settings = getSettings()
 
@@ -40,6 +48,7 @@ app.whenReady().then(async () => {
   void songsService.init()
   registerBibleHandlers()
   void bibleService.init()
+  registerAudioHandlers(controlWindow)
 
   registerSettingsHandlers((next, prev) => {
     if (
@@ -55,12 +64,22 @@ app.whenReady().then(async () => {
         log.error('mediaScanner.setFolder failed', err)
       })
     }
+    if (next.audioFolder !== prev.audioFolder) {
+      void audioScanner.setFolder(next.audioFolder).catch((err) => {
+        log.error('audioScanner.setFolder failed', err)
+      })
+    }
   })
 
-  // Initial scan from persisted folder (if any)
+  // Initial scan from persisted folders (if any)
   if (settings.mediaFolder) {
     void mediaScanner.setFolder(settings.mediaFolder).catch((err) => {
       log.error('mediaScanner initial scan failed', err)
+    })
+  }
+  if (settings.audioFolder) {
+    void audioScanner.setFolder(settings.audioFolder).catch((err) => {
+      log.error('audioScanner initial scan failed', err)
     })
   }
 
@@ -77,6 +96,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   void mediaScanner.dispose()
+  void audioScanner.dispose()
   void songsService.dispose()
 })
 

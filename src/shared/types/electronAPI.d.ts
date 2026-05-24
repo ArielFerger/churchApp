@@ -2,6 +2,13 @@ import type { ProjectionCommand, AppSettings, DisplayInfo } from './ipc'
 import type { MediaItem } from './media'
 import type { Song } from './song'
 import type { BibleBook } from './bible'
+import type { AudioTrack } from './audio'
+
+export interface AudioPersistedState {
+  lastTrackId: string | null
+  position: number
+  volume: number
+}
 
 export interface BibleVersionSummary {
   version: string
@@ -47,6 +54,10 @@ export interface ControlElectronAPI {
   getBibleVersions: () => Promise<BibleVersionSummary[]>
   getBibleBooks: (version: string) => Promise<BibleBook[]>
   lookupVerse: (req: BibleLookupRequest) => Promise<BibleLookupResult | null>
+  getAudio: () => Promise<AudioTrack[]>
+  onAudioUpdated: (callback: (items: AudioTrack[]) => void) => () => void
+  getAudioState: () => Promise<AudioPersistedState>
+  setAudioState: (partial: Partial<AudioPersistedState>) => Promise<AudioPersistedState>
   onShortcut: (callback: (key: string) => void) => () => void
 }
 

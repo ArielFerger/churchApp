@@ -4,6 +4,7 @@ import type { ProjectionCommand, AppSettings, DisplayInfo } from '../../src/shar
 import type { MediaItem } from '../../src/shared/types/media'
 import type { Song } from '../../src/shared/types/song'
 import type { BibleBook } from '../../src/shared/types/bible'
+import type { AudioTrack } from '../../src/shared/types/audio'
 
 contextBridge.exposeInMainWorld('electronAPI', {
   sendProjectionCommand: (cmd: ProjectionCommand) =>
@@ -60,6 +61,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     verse: number
     endVerse?: number
   }) => ipcRenderer.invoke(IPC_CHANNELS.SEARCH_VERSE, req),
+
+  getAudio: (): Promise<AudioTrack[]> => ipcRenderer.invoke(IPC_CHANNELS.GET_AUDIO),
+
+  onAudioUpdated: (callback: (items: AudioTrack[]) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, items: AudioTrack[]) => callback(items)
+    ipcRenderer.on(IPC_CHANNELS.AUDIO_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.AUDIO_UPDATED, handler)
+  },
+
+  getAudioState: () => ipcRenderer.invoke(IPC_CHANNELS.GET_AUDIO_STATE),
+
+  setAudioState: (partial: { lastTrackId?: string | null; position?: number; volume?: number }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_AUDIO_STATE, partial),
 
   onShortcut: (callback: (key: string) => void) => {
     const handler = (_: Electron.IpcRendererEvent, key: string) => callback(key)
