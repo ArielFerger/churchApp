@@ -14,9 +14,13 @@
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
     "convert-bibles": "tsx scripts/convert-bible.ts",
+    "build:icons": "tsx scripts/build-icons.ts",
     "package": "electron-builder --dir",
-    "make:win": "electron-builder --win",
-    "make:linux": "electron-builder --linux"
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "make:win": "npm run dist:win",
+    "make:linux": "npm run dist:linux"
   },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
@@ -33,6 +37,7 @@
     "zustand": "^5.0.5"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/forms": "^0.5.10",
     "@types/howler": "^2.2.12",
     "@types/react": "^18.3.23",
@@ -47,6 +52,7 @@
     "eslint": "^9.27.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.2.0",
+    "png-to-ico": "^3.0.1",
     "postcss": "^8.5.3",
     "prettier": "^3.5.3",
     "prettier-plugin-tailwindcss": "^0.6.12",
