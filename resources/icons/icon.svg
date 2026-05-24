@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    Church Projector — placeholder app icon.
+    Replace this SVG (and re-run `npm run build:icons`) with the actual church logo.
+  -->
+
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="beam" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#60a5fa" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Rounded background tile -->
+  <rect x="0" y="0" width="1024" height="1024" rx="180" ry="180" fill="url(#bg)"/>
+
+  <!-- Projection beam (cone of light) -->
+  <path d="M 380 320 L 644 320 L 820 720 L 204 720 Z" fill="url(#beam)"/>
+
+  <!-- Cross glyph in the beam — universal sign for a church projector -->
+  <g transform="translate(512 540)">
+    <rect x="-44" y="-220" width="88" height="380" rx="14" fill="#ffffff"/>
+    <rect x="-150" y="-110" width="300" height="88" rx="14" fill="#ffffff"/>
+  </g>
+
+  <!-- Light source dot at the top of the cone -->
+  <circle cx="512" cy="320" r="40" fill="url(#glow)"/>
+  <circle cx="512" cy="320" r="14" fill="#ffffff"/>
+</svg>
