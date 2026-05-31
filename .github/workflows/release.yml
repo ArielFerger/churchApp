@@ -33,6 +33,10 @@ jobs:
         run: npm run make:linux
       - uses: softprops/action-gh-release@v2
         with:
-          files: release/**/*
+          # Only the installers — not the unpacked app dirs under release/.
+          files: |
+            release/*.exe
+            release/*.AppImage
+            release/*.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
