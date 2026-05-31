@@ -4,7 +4,10 @@
   "description": "App de proyección para iglesia — letras, versículos, media y audio",
   "type": "module",
   "main": "out/main/index.js",
-  "author": "ArielFerger",
+  "author": {
+    "name": "ArielFerger",
+    "email": "arielferger@users.noreply.github.com"
+  },
   "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev",

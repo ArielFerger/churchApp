@@ -49,6 +49,7 @@ linux:
       arch: [x64]
   icon: resources/icons/icon.png
   category: AudioVideo
+  maintainer: ArielFerger <arielferger@users.noreply.github.com>
   synopsis: App de proyección para iglesias — canciones, biblia, media, audio
   description: |
     App de escritorio para proyectar letras de canciones, versículos bíblicos,
