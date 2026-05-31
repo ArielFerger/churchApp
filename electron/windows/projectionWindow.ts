@@ -43,7 +43,9 @@ export function createProjectionWindow(savedDisplayId: number | null): BrowserWi
       preload: join(__dirname, '../preload/projection.mjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      // Allow videos to autoplay WITH sound when projected (no click needed).
+      autoplayPolicy: 'no-user-gesture-required'
     }
   })
 

@@ -1,6 +1,15 @@
 import { useEffect } from 'react'
-import { Monitor, RefreshCw } from 'lucide-react'
+import { Monitor, RefreshCw, Folder, FolderOpen, X, Volume2, TrendingUp, TrendingDown } from 'lucide-react'
 import { useSettingsStore } from '@/shared/store/settingsStore'
+import type { AppSettings } from '@/shared/types/ipc'
+
+type FolderKey = Extract<keyof AppSettings, 'mediaFolder' | 'audioFolder' | 'songsFolder'>
+
+const folderRows: { key: FolderKey; label: string; phase: string }[] = [
+  { key: 'mediaFolder', label: 'Imágenes / videos / GIFs', phase: 'Fase 2' },
+  { key: 'audioFolder', label: 'Música', phase: 'Fase 5' },
+  { key: 'songsFolder', label: 'Canciones', phase: 'Fase 3' }
+]
 
 export default function Settings() {
   const { settings, displays, loaded, load, update, refreshDisplays } = useSettingsStore()
@@ -18,6 +27,17 @@ export default function Settings() {
   }
 
   const selectedId = settings?.projectionDisplayId ?? null
+
+  async function pickFolder(key: FolderKey, title: string) {
+    const api = window.electronAPI
+    if (!api) return
+    const result = await api.showOpenDialog({
+      title,
+      properties: ['openDirectory']
+    })
+    if (result.canceled || result.filePaths.length === 0) return
+    await update({ [key]: result.filePaths[0] } as Partial<AppSettings>)
+  }
 
   return (
     <div className="h-full overflow-y-auto p-6">
@@ -89,10 +109,158 @@ export default function Settings() {
         </section>
 
         <section className="rounded-lg border border-slate-700 bg-slate-800/40 p-4">
-          <h2 className="text-sm font-medium text-slate-200">Carpetas de contenido</h2>
-          <p className="mt-1 text-xs text-slate-500">Se configuran en las fases 2 y 5.</p>
+          <h2 className="mb-1 flex items-center gap-2 text-sm font-medium text-slate-200">
+            <Volume2 className="h-4 w-4" />
+            Audio de los videos
+          </h2>
+          <p className="mb-3 text-xs text-slate-500">
+            Suavizá el sonido de los videos al proyectarlos. Las dos opciones son independientes.
+          </p>
+          <div className="grid gap-2">
+            <ToggleRow
+              icon={<TrendingUp className="h-4 w-4 shrink-0 text-emerald-400" />}
+              label="Entrada — audio de bajito a alto"
+              description="Al empezar el video, el audio sube gradualmente."
+              checked={settings?.videoFadeIn ?? true}
+              onChange={(v) => void update({ videoFadeIn: v })}
+              durationSec={settings?.videoFadeInSec ?? 1}
+              onDurationChange={(s) => void update({ videoFadeInSec: s })}
+            />
+            <ToggleRow
+              icon={<TrendingDown className="h-4 w-4 shrink-0 text-amber-400" />}
+              label="Salida — audio de alto a bajito"
+              description="Al terminar el video, el audio baja gradualmente."
+              checked={settings?.videoFadeOut ?? false}
+              onChange={(v) => void update({ videoFadeOut: v })}
+              durationSec={settings?.videoFadeOutSec ?? 2.5}
+              onDurationChange={(s) => void update({ videoFadeOutSec: s })}
+            />
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-slate-700 bg-slate-800/40 p-4">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-200">
+            <Folder className="h-4 w-4" />
+            Carpetas de contenido
+          </h2>
+          <ul className="grid gap-2">
+            {folderRows.map((row) => {
+              const value = settings?.[row.key] ?? null
+              return (
+                <li
+                  key={row.key}
+                  className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-800/40 px-3 py-2"
+                >
+                  <FolderOpen className="h-4 w-4 shrink-0 text-slate-500" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-slate-200">{row.label}</span>
+                      <span className="rounded bg-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
+                        {row.phase}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 truncate font-mono text-xs text-slate-500">
+                      {value ?? 'no configurada'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void pickFolder(row.key, `Carpeta de ${row.label.toLowerCase()}`)}
+                    className="rounded bg-slate-700 px-2 py-1 text-xs text-slate-100 hover:bg-slate-600"
+                  >
+                    {value ? 'Cambiar' : 'Seleccionar'}
+                  </button>
+                  {value && (
+                    <button
+                      type="button"
+                      onClick={() => void update({ [row.key]: null } as Partial<AppSettings>)}
+                      className="rounded p-1 text-slate-500 hover:bg-slate-700 hover:text-red-400"
+                      title="Limpiar"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
         </section>
       </div>
+    </div>
+  )
+}
+
+interface ToggleRowProps {
+  icon: React.ReactNode
+  label: string
+  description: string
+  checked: boolean
+  onChange: (v: boolean) => void
+  durationSec: number
+  onDurationChange: (s: number) => void
+}
+
+function ToggleRow({
+  icon,
+  label,
+  description,
+  checked,
+  onChange,
+  durationSec,
+  onDurationChange
+}: ToggleRowProps) {
+  return (
+    <div className="rounded-md border border-slate-700 bg-slate-800/40 px-3 py-2">
+      <div className="flex items-center gap-3">
+        {icon}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-slate-200">{label}</p>
+          <p className="text-xs text-slate-500">{description}</p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          onClick={() => onChange(!checked)}
+          className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+            checked ? 'bg-blue-600' : 'bg-slate-600'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
+              checked ? 'translate-x-4' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
+      </div>
+
+      {checked && (
+        <div className="mt-2 flex items-center gap-2 border-t border-slate-700/60 pt-2 pl-7">
+          <span className="text-xs text-slate-400">Duración</span>
+          <input
+            type="number"
+            min={0.5}
+            max={10}
+            step={0.5}
+            value={durationSec}
+            onChange={(e) => {
+              const n = Number(e.target.value)
+              if (Number.isFinite(n)) onDurationChange(Math.max(0.5, Math.min(10, n)))
+            }}
+            className="w-16 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 focus:border-blue-500 focus:outline-none"
+          />
+          <span className="text-xs text-slate-500">seg (máx 10)</span>
+          <input
+            type="range"
+            min={0.5}
+            max={10}
+            step={0.5}
+            value={durationSec}
+            onChange={(e) => onDurationChange(Number(e.target.value))}
+            className="seek-range h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-slate-700"
+          />
+        </div>
+      )}
     </div>
   )
 }

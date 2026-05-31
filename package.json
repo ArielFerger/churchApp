@@ -1,6 +1,6 @@
 {
   "name": "church-projector",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "App de proyección para iglesia — letras, versículos, media y audio",
   "type": "module",
   "main": "out/main/index.js",
@@ -13,9 +13,14 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
+    "convert-bibles": "tsx scripts/convert-bible.ts",
+    "build:icons": "tsx scripts/build-icons.ts",
     "package": "electron-builder --dir",
-    "make:win": "electron-builder --win",
-    "make:linux": "electron-builder --linux"
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "make:win": "npm run dist:win",
+    "make:linux": "npm run dist:linux"
   },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
@@ -32,6 +37,7 @@
     "zustand": "^5.0.5"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/forms": "^0.5.10",
     "@types/howler": "^2.2.12",
     "@types/react": "^18.3.23",
@@ -46,12 +52,14 @@
     "eslint": "^9.27.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.2.0",
+    "png-to-ico": "^3.0.1",
     "postcss": "^8.5.3",
     "prettier": "^3.5.3",
     "prettier-plugin-tailwindcss": "^0.6.12",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.22.3",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"
   }

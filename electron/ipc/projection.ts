@@ -1,7 +1,9 @@
 import { BrowserWindow, ipcMain } from 'electron'
+import log from 'electron-log'
 import { IPC_CHANNELS } from '../../src/shared/constants'
-import type { ProjectionCommand } from '../../src/shared/types/ipc'
-import { toggleProjectionVisibility } from '../windows/projectionWindow'
+import type { ProjectionCommand, MediaPlaybackState } from '../../src/shared/types/ipc'
+import { toggleProjectionVisibility, moveProjectionToDisplay } from '../windows/projectionWindow'
+import { getSettings } from '../services/settingsService'
 
 export function registerProjectionHandlers(
   controlWindow: BrowserWindow,
@@ -21,6 +23,32 @@ export function registerProjectionHandlers(
     }
   })
 
+  // Video playback telemetry: projection → control (for the scrubber/transport).
+  ipcMain.on(IPC_CHANNELS.MEDIA_PLAYBACK_STATE, (_event, state: MediaPlaybackState) => {
+    if (!controlWindow.isDestroyed()) {
+      controlWindow.webContents.send(IPC_CHANNELS.MEDIA_PLAYBACK_STATE, state)
+    }
+  })
+
+  // Recover the projection window if it got hidden (F11), sent to the wrong
+  // monitor, or buried behind other windows. Reconnects it to the configured
+  // display and brings it to the front. As a last resort (renderer stuck/blank)
+  // it reloads the projection page.
+  ipcMain.handle(IPC_CHANNELS.SHOW_PROJECTION, (_event, opts?: { reload?: boolean }) => {
+    if (projectionWindow.isDestroyed()) {
+      log.warn('SHOW_PROJECTION: projection window is destroyed')
+      return false
+    }
+    const settings = getSettings()
+    if (settings.projectionDisplayId != null) {
+      moveProjectionToDisplay(projectionWindow, settings.projectionDisplayId)
+    }
+    if (!projectionWindow.isVisible()) projectionWindow.show()
+    projectionWindow.focus()
+    if (opts?.reload) projectionWindow.webContents.reload()
+    return true
+  })
+
   // Debug shortcuts captured BEFORE the renderer sees them.
   // Esc = blackout, F11 = toggle projection window visibility.
   const handleShortcut = (
@@ -29,7 +57,11 @@ export function registerProjectionHandlers(
   ): void => {
     if (input.type !== 'keyDown') return
     if (input.key === 'Escape') {
-      sendToProjection({ type: 'blackout' })
+      // Panic stop: black out AND stop every presentation (slideshow, video…).
+      sendToProjection({ type: 'stopAll' })
+      if (!controlWindow.isDestroyed()) {
+        controlWindow.webContents.send(IPC_CHANNELS.PROJECTION_STATE, { type: 'stopAll' })
+      }
     } else if (input.key === 'F11') {
       toggleProjectionVisibility(projectionWindow)
     } else {
