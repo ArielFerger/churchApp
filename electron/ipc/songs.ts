@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain } from 'electron'
 import { IPC_CHANNELS } from '../../src/shared/constants'
 import { songsService } from '../services/songsService'
-import type { Song } from '../../src/shared/types/song'
+import type { Song, Album } from '../../src/shared/types/song'
 
 export function registerSongsHandlers(controlWindow: BrowserWindow): () => void {
   ipcMain.handle(IPC_CHANNELS.GET_SONGS, async (): Promise<Song[]> => {
@@ -20,11 +20,36 @@ export function registerSongsHandlers(controlWindow: BrowserWindow): () => void 
     return songsService.delete(id)
   })
 
-  const unsub = songsService.onChange((songs) => {
+  ipcMain.handle(IPC_CHANNELS.GET_ALBUMS, async (): Promise<Album[]> => {
+    await songsService.init()
+    return songsService.listAlbums()
+  })
+
+  ipcMain.handle(
+    IPC_CHANNELS.SAVE_ALBUM,
+    async (_event, input: Partial<Album> & { name: string }): Promise<Album> => {
+      return songsService.saveAlbum(input)
+    }
+  )
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_ALBUM, async (_event, id: string): Promise<void> => {
+    return songsService.deleteAlbum(id)
+  })
+
+  const unsubSongs = songsService.onChange((songs) => {
     if (!controlWindow.isDestroyed()) {
       controlWindow.webContents.send(IPC_CHANNELS.SONGS_UPDATED, songs)
     }
   })
 
-  return unsub
+  const unsubAlbums = songsService.onAlbumsChange((albums) => {
+    if (!controlWindow.isDestroyed()) {
+      controlWindow.webContents.send(IPC_CHANNELS.ALBUMS_UPDATED, albums)
+    }
+  })
+
+  return () => {
+    unsubSongs()
+    unsubAlbums()
+  }
 }

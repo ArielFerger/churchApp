@@ -1,79 +1,338 @@
-import { Eye, EyeOff, Power } from 'lucide-react'
+import { useEffect, useMemo } from 'react'
+import {
+  Eye,
+  Wallpaper,
+  Film,
+  Image as ImageIcon,
+  Repeat,
+  Images,
+  Play,
+  Square
+} from 'lucide-react'
 import { useLiveStore } from '@/shared/store/liveStore'
+import { useLibraryStore } from '@/shared/store/libraryStore'
+import { useLiveControlsStore } from '@/shared/store/liveControlsStore'
 import type { ProjectionCommand } from '@/shared/types/ipc'
+import type { MediaItem } from '@/shared/types/media'
 
 function send(cmd: ProjectionCommand) {
   window.electronAPI?.sendProjectionCommand(cmd)
 }
 
 export default function Live() {
-  const { isLive, isBlackout, lastCommand } = useLiveStore()
+  const { lastCommand } = useLiveStore()
+  const { media, mediaLoaded, loadMedia, subscribeMedia } = useLibraryStore()
+  const {
+    testSlideText,
+    setTestSlideText,
+    resetTestSlideText,
+    backgroundId,
+    setBackgroundId,
+    slideshowIds,
+    slideshowIntervalSec,
+    slideshowActive,
+    toggleSlideshowItem,
+    clearSlideshow,
+    setSlideshowInterval,
+    setSlideshowActive
+  } = useLiveControlsStore()
+
+  useEffect(() => {
+    void loadMedia()
+    const unsub = subscribeMedia()
+    return unsub
+  }, [loadMedia, subscribeMedia])
+
+  // Videos first (most useful as looping backgrounds), then images/gifs.
+  const bgCandidates = useMemo(
+    () =>
+      [...media].sort((a, b) => {
+        const rank = (m: MediaItem) => (m.type === 'video' ? 0 : 1)
+        return rank(a) - rank(b)
+      }),
+    [media]
+  )
+
+  // Images / gifs available for the slideshow.
+  const slideshowCandidates = useMemo(
+    () => media.filter((m) => m.type === 'image' || m.type === 'gif'),
+    [media]
+  )
+
+  // Keep the projection slideshow in sync while it's running.
+  useEffect(() => {
+    if (slideshowActive && slideshowIds.length > 0) {
+      send({
+        type: 'setBackgroundSlideshow',
+        mediaIds: slideshowIds,
+        intervalSec: slideshowIntervalSec
+      })
+    }
+  }, [slideshowActive, slideshowIds, slideshowIntervalSec])
+
+  function projectTestSlide() {
+    send({ type: 'showSlide', content: { lines: testSlideText.split('\n') } })
+  }
+
+  function setSingleBackground(id: string | null) {
+    setBackgroundId(id)
+    setSlideshowActive(false) // single bg supersedes any slideshow
+    send({ type: 'setBackground', mediaId: id })
+  }
+
+  function startSlideshow() {
+    if (slideshowIds.length === 0) return
+    setBackgroundId(null)
+    setSlideshowActive(true)
+    send({ type: 'setBackgroundSlideshow', mediaIds: slideshowIds, intervalSec: slideshowIntervalSec })
+  }
+
+  function stopSlideshow() {
+    setSlideshowActive(false)
+    send({ type: 'setBackground', mediaId: null })
+  }
 
   return (
-    <div className="flex h-full">
-      <aside className="w-64 border-r border-slate-700 p-4">
-        <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-slate-500">
-          Acciones rápidas
-        </h2>
-        <div className="space-y-2">
-          <button
-            type="button"
-            onClick={() => send({ type: 'blackout' })}
-            disabled={isBlackout}
-            className="flex w-full items-center gap-2 rounded-md bg-slate-800 px-3 py-2 text-sm text-slate-100 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <EyeOff className="h-4 w-4" />
-            Blackout
-            <kbd className="ml-auto rounded bg-slate-900 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
-              Esc
-            </kbd>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => send({ type: 'clear' })}
-            disabled={!isLive}
-            className="flex w-full items-center gap-2 rounded-md bg-slate-800 px-3 py-2 text-sm text-slate-100 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Power className="h-4 w-4" />
-            Clear
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              send({
-                type: 'showSlide',
-                content: { lines: ['Bienvenidos', 'a la prueba de proyección'] }
-              })
-            }
-            className="flex w-full items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500"
-          >
-            <Eye className="h-4 w-4" />
-            Slide de prueba
-          </button>
-        </div>
-
-        <p className="mt-6 text-xs text-slate-500">
-          Atajos: <kbd className="rounded bg-slate-800 px-1">Esc</kbd> blackout ·{' '}
-          <kbd className="rounded bg-slate-800 px-1">F11</kbd> toggle proyección
-        </p>
-      </aside>
-
-      <section className="flex-1 p-6">
+    <div className="flex h-full flex-col">
+      {/* Editors */}
+      <section className="flex-1 overflow-y-auto p-6">
         <h1 className="text-xl font-semibold">En Vivo</h1>
         <p className="mt-1 text-sm text-slate-400">
-          Probá el sistema de capas. Las pantallas reales se conectan en las fases siguientes.
+          Editá el slide de prueba, ponele un fondo en loop o armá una presentación de imágenes. Las
+          acciones rápidas (Detener, Blackout, Clear) están siempre arriba a la derecha.
         </p>
 
-        <div className="mt-6 rounded-lg border border-slate-700 bg-slate-800/30 p-4">
-          <h3 className="text-xs font-medium uppercase tracking-wider text-slate-500">
+        {/* Editable test slide */}
+        <div className="mt-6 max-w-3xl rounded-lg border border-slate-700 bg-slate-800/30 p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-slate-500">
+              Slide de prueba
+            </h3>
+            <button
+              type="button"
+              onClick={resetTestSlideText}
+              className="text-xs text-slate-500 hover:text-slate-300"
+            >
+              Restablecer
+            </button>
+          </div>
+          <textarea
+            value={testSlideText}
+            onChange={(e) => setTestSlideText(e.target.value)}
+            rows={Math.max(3, testSlideText.split('\n').length)}
+            placeholder="Escribí el texto del slide — una línea por renglón"
+            className="mt-2 w-full resize-y rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-blue-500 focus:outline-none"
+          />
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={projectTestSlide}
+              disabled={!testSlideText.trim()}
+              className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-40"
+            >
+              <Eye className="h-4 w-4" />
+              Proyectar slide
+            </button>
+          </div>
+        </div>
+
+        {/* Single background picker */}
+        <div className="mt-6 max-w-3xl rounded-lg border border-slate-700 bg-slate-800/30 p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-slate-500">
+              <Wallpaper className="h-3.5 w-3.5" />
+              Fondo único (loop)
+            </h3>
+            {backgroundId && (
+              <button
+                type="button"
+                onClick={() => setSingleBackground(null)}
+                className="text-xs text-slate-400 hover:text-red-400"
+              >
+                Quitar fondo
+              </button>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Un video o imagen fijo. Los videos se repiten en loop detrás del contenido.
+          </p>
+
+          {!mediaLoaded ? (
+            <p className="mt-3 text-xs text-slate-500">Cargando media…</p>
+          ) : bgCandidates.length === 0 ? (
+            <p className="mt-3 text-xs text-slate-500">
+              No hay media. Configurá la carpeta en Ajustes.
+            </p>
+          ) : (
+            <ul className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
+              {bgCandidates.map((item) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSingleBackground(item.id)}
+                    className={`group relative block w-full overflow-hidden rounded-md border bg-black text-left transition-colors ${
+                      backgroundId === item.id
+                        ? 'border-blue-500 ring-2 ring-blue-500/40'
+                        : 'border-slate-700 hover:border-slate-500'
+                    }`}
+                    title={item.fileName}
+                  >
+                    <div className="aspect-video">
+                      {item.type === 'video' ? (
+                        <video
+                          src={`media://${item.id}`}
+                          className="h-full w-full object-cover"
+                          preload="metadata"
+                          muted
+                          playsInline
+                        />
+                      ) : (
+                        <img
+                          src={`media://${item.id}`}
+                          alt={item.fileName}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      )}
+                    </div>
+                    <span className="absolute left-1 top-1 rounded bg-black/60 p-0.5 text-slate-200">
+                      {item.type === 'video' ? (
+                        <Film className="h-3 w-3" />
+                      ) : (
+                        <ImageIcon className="h-3 w-3" />
+                      )}
+                    </span>
+                    {backgroundId === item.id && item.type === 'video' && (
+                      <span className="absolute right-1 top-1 rounded bg-blue-600 p-0.5 text-white">
+                        <Repeat className="h-3 w-3" />
+                      </span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Background slideshow builder */}
+        <div className="mt-6 max-w-3xl rounded-lg border border-slate-700 bg-slate-800/30 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-slate-500">
+              <Images className="h-3.5 w-3.5" />
+              Presentación de fondo
+              {slideshowActive && (
+                <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                  EN VIVO
+                </span>
+              )}
+            </h3>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5 text-xs text-slate-400">
+                Tiempo por imagen
+                <input
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={slideshowIntervalSec}
+                  onChange={(e) =>
+                    setSlideshowInterval(Math.max(1, Math.min(120, Number(e.target.value) || 1)))
+                  }
+                  className="w-16 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 focus:border-blue-500 focus:outline-none"
+                />
+                <span className="text-slate-500">seg</span>
+              </label>
+            </div>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Elegí varias imágenes (en orden) y se irán pasando solas en loop. Seleccionadas:{' '}
+            <span className="font-medium text-slate-300">{slideshowIds.length}</span>
+          </p>
+
+          {!mediaLoaded ? (
+            <p className="mt-3 text-xs text-slate-500">Cargando media…</p>
+          ) : slideshowCandidates.length === 0 ? (
+            <p className="mt-3 text-xs text-slate-500">
+              No hay imágenes en la carpeta de media.
+            </p>
+          ) : (
+            <ul className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
+              {slideshowCandidates.map((item) => {
+                const order = slideshowIds.indexOf(item.id)
+                const selected = order !== -1
+                return (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      onClick={() => toggleSlideshowItem(item.id)}
+                      className={`group relative block w-full overflow-hidden rounded-md border bg-black text-left transition-colors ${
+                        selected
+                          ? 'border-emerald-500 ring-2 ring-emerald-500/40'
+                          : 'border-slate-700 hover:border-slate-500'
+                      }`}
+                      title={item.fileName}
+                    >
+                      <div className="aspect-video">
+                        <img
+                          src={`media://${item.id}`}
+                          alt={item.fileName}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+                      {selected && (
+                        <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[11px] font-bold text-white">
+                          {order + 1}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {!slideshowActive ? (
+              <button
+                type="button"
+                onClick={startSlideshow}
+                disabled={slideshowIds.length === 0}
+                className="flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40"
+              >
+                <Play className="h-4 w-4" />
+                Iniciar presentación
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={stopSlideshow}
+                className="flex items-center gap-2 rounded-md bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600"
+              >
+                <Square className="h-4 w-4" />
+                Detener
+              </button>
+            )}
+            {slideshowIds.length > 0 && (
+              <button
+                type="button"
+                onClick={clearSlideshow}
+                className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-400 hover:bg-slate-800"
+              >
+                Limpiar selección
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Debug: last command */}
+        <details className="mt-6 max-w-3xl">
+          <summary className="cursor-pointer text-xs font-medium uppercase tracking-wider text-slate-600 hover:text-slate-400">
             Último comando enviado
-          </h3>
-          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded bg-slate-900 p-3 font-mono text-xs text-slate-300">
+          </summary>
+          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded bg-slate-900 p-3 font-mono text-xs text-slate-400">
             {lastCommand ? JSON.stringify(lastCommand, null, 2) : 'ningún comando todavía'}
           </pre>
-        </div>
+        </details>
       </section>
     </div>
   )

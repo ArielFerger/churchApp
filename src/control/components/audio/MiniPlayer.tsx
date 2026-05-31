@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Play, Pause, SkipBack, SkipForward, Square, Volume2, Music } from 'lucide-react'
 import { useAudioStore } from '@/shared/store/audioStore'
 import { audioEngine } from '@/control/audio/audioEngine'
@@ -13,6 +13,7 @@ export default function MiniPlayer() {
     duration,
     volume,
     isFadingOut,
+    queue,
     nextTrack,
     prevTrack
   } = useAudioStore()
@@ -113,10 +114,15 @@ export default function MiniPlayer() {
           type="button"
           onClick={onNext}
           disabled={library.length === 0}
-          className="rounded p-1.5 text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-30"
-          title="Siguiente"
+          className="relative rounded p-1.5 text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-30"
+          title={queue.length > 0 ? `Siguiente (${queue.length} en cola)` : 'Siguiente'}
         >
           <SkipForward className="h-4 w-4" />
+          {queue.length > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-blue-500 px-1 text-[9px] font-semibold text-white">
+              {queue.length}
+            </span>
+          )}
         </button>
       </div>
 
@@ -142,18 +148,27 @@ interface ProgressBarProps {
 }
 
 function ProgressBar({ position, duration, onSeek }: ProgressBarProps) {
-  const pct = duration > 0 ? Math.min(100, (position / duration) * 100) : 0
+  // Local scrub state so dragging isn't fought by the 4×/sec playback tick.
+  const [scrub, setScrub] = useState<number | null>(null)
+  const shown = scrub ?? position
+  const pct = duration > 0 ? Math.min(100, (shown / duration) * 100) : 0
   return (
     <div className="flex flex-1 items-center gap-2 text-[10px] text-slate-500">
-      <span className="w-9 text-right font-mono">{formatTime(position)}</span>
+      <span className="w-9 text-right font-mono">{formatTime(shown)}</span>
       <input
         type="range"
         min={0}
         max={Math.max(duration, 1)}
         step="0.5"
-        value={position}
-        onChange={(e) => onSeek(parseFloat(e.target.value))}
-        className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-slate-700 accent-blue-500"
+        value={shown}
+        onChange={(e) => {
+          const v = parseFloat(e.target.value)
+          setScrub(v)
+          onSeek(v) // seek live so you hear/see the new position immediately
+        }}
+        onPointerUp={() => setScrub(null)}
+        onPointerCancel={() => setScrub(null)}
+        className="seek-range h-1.5 flex-1 cursor-pointer appearance-none rounded-full"
         style={{
           background: `linear-gradient(to right, rgb(59 130 246) 0%, rgb(59 130 246) ${pct}%, rgb(51 65 85) ${pct}%, rgb(51 65 85) 100%)`
         }}

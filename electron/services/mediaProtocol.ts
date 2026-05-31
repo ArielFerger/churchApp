@@ -1,7 +1,7 @@
-import { protocol, net } from 'electron'
-import { pathToFileURL } from 'url'
+import { protocol } from 'electron'
 import log from 'electron-log'
 import { mediaScanner } from './mediaScanner'
+import { serveFileWithRange } from './rangeFile'
 
 export const MEDIA_SCHEME = 'media'
 
@@ -40,8 +40,8 @@ export function registerMediaProtocolHandler(): void {
         log.warn('media://: unknown id', id)
         return new Response('Not found', { status: 404 })
       }
-      const fileUrl = pathToFileURL(item.filePath).toString()
-      return net.fetch(fileUrl, { bypassCustomProtocolHandlers: true })
+      // Serve with real byte-range support so <video> scrubbing/fast-forward works.
+      return serveFileWithRange(item.filePath, request)
     } catch (err) {
       log.error('media protocol error', err)
       return new Response('Internal error', { status: 500 })

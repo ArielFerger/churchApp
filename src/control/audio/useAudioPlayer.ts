@@ -24,6 +24,14 @@ export function useAudioPlayer(): void {
     return api.onAudioUpdated(setLibrary)
   }, [setLibrary])
 
+  // Auto-advance: when a track ends naturally, play the next queued track.
+  useEffect(() => {
+    return audioEngine.onEnded(() => {
+      const next = useAudioStore.getState().consumeQueue()
+      if (next) void audioEngine.play(next, 0)
+    })
+  }, [])
+
   // Engine → store. Also throttled persistence to disk.
   useEffect(() => {
     const unsub = audioEngine.subscribe((snap) => {

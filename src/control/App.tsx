@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { HashRouter, Routes, Route, NavLink } from 'react-router-dom'
+import { MonitorPlay } from 'lucide-react'
 import Live from './pages/Live'
 import Songs from './pages/Songs'
 import Bible from './pages/Bible'
@@ -7,6 +8,7 @@ import Media from './pages/Media'
 import Audio from './pages/Audio'
 import Settings from './pages/Settings'
 import LiveIndicator from './components/LiveIndicator'
+import QuickActions from './components/QuickActions'
 import MiniPlayer from './components/audio/MiniPlayer'
 import { useProjectionBridge } from './hooks/useProjectionBridge'
 import { useAudioPlayer } from './audio/useAudioPlayer'
@@ -54,7 +56,19 @@ export default function App() {
               </NavLink>
             ))}
           </nav>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <QuickActions />
+            <span className="h-5 w-px bg-slate-700" />
+            <button
+              type="button"
+              onClick={() => void window.electronAPI?.showProjection()}
+              onDoubleClick={() => void window.electronAPI?.showProjection({ reload: true })}
+              className="inline-flex items-center gap-1.5 rounded-md bg-slate-800 px-2.5 py-1.5 text-xs text-slate-200 transition-colors hover:bg-slate-700"
+              title="Mostrar / recuperar la ventana de proyección (doble clic: recargar)"
+            >
+              <MonitorPlay className="h-3.5 w-3.5" />
+              Proyección
+            </button>
             <LiveIndicator />
           </div>
         </header>

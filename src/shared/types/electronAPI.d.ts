@@ -1,6 +1,6 @@
-import type { ProjectionCommand, AppSettings, DisplayInfo } from './ipc'
+import type { ProjectionCommand, AppSettings, DisplayInfo, MediaPlaybackState } from './ipc'
 import type { MediaItem } from './media'
-import type { Song } from './song'
+import type { Song, Album } from './song'
 import type { BibleBook } from './bible'
 import type { AudioTrack } from './audio'
 
@@ -47,10 +47,16 @@ export interface ControlElectronAPI {
   getMedia: () => Promise<MediaItem[]>
   onMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
   onProjectionState: (callback: (cmd: ProjectionCommand) => void) => () => void
+  onMediaPlayback: (callback: (state: MediaPlaybackState) => void) => () => void
+  showProjection: (opts?: { reload?: boolean }) => Promise<boolean>
   getSongs: () => Promise<Song[]>
   saveSong: (song: Partial<Song> & { title: string }) => Promise<Song>
   deleteSong: (id: string) => Promise<void>
   onSongsUpdated: (callback: (songs: Song[]) => void) => () => void
+  getAlbums: () => Promise<Album[]>
+  saveAlbum: (album: Partial<Album> & { name: string }) => Promise<Album>
+  deleteAlbum: (id: string) => Promise<void>
+  onAlbumsUpdated: (callback: (albums: Album[]) => void) => () => void
   getBibleVersions: () => Promise<BibleVersionSummary[]>
   getBibleBooks: (version: string) => Promise<BibleBook[]>
   lookupVerse: (req: BibleLookupRequest) => Promise<BibleLookupResult | null>
@@ -65,6 +71,7 @@ export interface ProjectionElectronAPI {
   onCommand: (callback: (cmd: ProjectionCommand) => void) => () => void
   getMedia: () => Promise<MediaItem[]>
   onMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
+  emitPlaybackState: (state: MediaPlaybackState) => void
 }
 
 declare global {

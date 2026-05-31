@@ -14,7 +14,11 @@ const DEFAULTS: AppSettings = {
   projectionDisplayId: null,
   mediaFolder: null,
   audioFolder: null,
-  songsFolder: null
+  songsFolder: null,
+  videoFadeIn: true,
+  videoFadeOut: false,
+  videoFadeInSec: 1,
+  videoFadeOutSec: 2.5
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({

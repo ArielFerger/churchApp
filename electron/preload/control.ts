@@ -1,8 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '../../src/shared/constants'
-import type { ProjectionCommand, AppSettings, DisplayInfo } from '../../src/shared/types/ipc'
+import type {
+  ProjectionCommand,
+  AppSettings,
+  DisplayInfo,
+  MediaPlaybackState
+} from '../../src/shared/types/ipc'
 import type { MediaItem } from '../../src/shared/types/media'
-import type { Song } from '../../src/shared/types/song'
+import type { Song, Album } from '../../src/shared/types/song'
 import type { BibleBook } from '../../src/shared/types/bible'
 import type { AudioTrack } from '../../src/shared/types/audio'
 
@@ -36,6 +41,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.PROJECTION_STATE, handler)
   },
 
+  onMediaPlayback: (callback: (state: MediaPlaybackState) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, state: MediaPlaybackState) => callback(state)
+    ipcRenderer.on(IPC_CHANNELS.MEDIA_PLAYBACK_STATE, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.MEDIA_PLAYBACK_STATE, handler)
+  },
+
+  showProjection: (opts?: { reload?: boolean }): Promise<boolean> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SHOW_PROJECTION, opts),
+
   getSongs: (): Promise<Song[]> => ipcRenderer.invoke(IPC_CHANNELS.GET_SONGS),
 
   saveSong: (song: Partial<Song> & { title: string }): Promise<Song> =>
@@ -47,6 +61,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: Electron.IpcRendererEvent, songs: Song[]) => callback(songs)
     ipcRenderer.on(IPC_CHANNELS.SONGS_UPDATED, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.SONGS_UPDATED, handler)
+  },
+
+  getAlbums: (): Promise<Album[]> => ipcRenderer.invoke(IPC_CHANNELS.GET_ALBUMS),
+
+  saveAlbum: (album: Partial<Album> & { name: string }): Promise<Album> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SAVE_ALBUM, album),
+
+  deleteAlbum: (id: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ALBUM, id),
+
+  onAlbumsUpdated: (callback: (albums: Album[]) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, albums: Album[]) => callback(albums)
+    ipcRenderer.on(IPC_CHANNELS.ALBUMS_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.ALBUMS_UPDATED, handler)
   },
 
   getBibleVersions: () => ipcRenderer.invoke(IPC_CHANNELS.GET_BIBLE_VERSIONS),

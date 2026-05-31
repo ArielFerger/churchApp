@@ -29,12 +29,21 @@ export class AudioEngine {
   private fadingOut = false
   private tickHandle: number | null = null
   private listeners = new Set<Listener>()
+  private endedListeners = new Set<() => void>()
 
   subscribe(fn: Listener): () => void {
     this.listeners.add(fn)
     fn(this.snapshot())
     return () => {
       this.listeners.delete(fn)
+    }
+  }
+
+  /** Fires when a track reaches its natural end (not on manual stop/pause). */
+  onEnded(fn: () => void): () => void {
+    this.endedListeners.add(fn)
+    return () => {
+      this.endedListeners.delete(fn)
     }
   }
 
@@ -98,6 +107,8 @@ export class AudioEngine {
         this.fadingOut = false
         this.stopTicking()
         this.emit()
+        // Notify listeners so the queue can auto-advance. Skip when looping.
+        if (!howl.loop()) this.endedListeners.forEach((l) => l())
       },
       onloaderror: (_id, err) => {
         console.error('Howl load error', err)
@@ -185,6 +196,7 @@ export class AudioEngine {
       this.howl = null
     }
     this.listeners.clear()
+    this.endedListeners.clear()
   }
 }
 

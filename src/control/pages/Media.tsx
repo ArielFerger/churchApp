@@ -1,7 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Film, Image as ImageIcon, FolderOpen, Sparkles, Eye, Wallpaper, X } from 'lucide-react'
+import {
+  Film,
+  Image as ImageIcon,
+  FolderOpen,
+  Sparkles,
+  Eye,
+  Wallpaper,
+  X,
+  Play,
+  Pause,
+  Repeat,
+  SkipBack,
+  Volume2,
+  VolumeX
+} from 'lucide-react'
 import { useLibraryStore } from '@/shared/store/libraryStore'
 import { useSettingsStore } from '@/shared/store/settingsStore'
+import { useMediaPlaybackStore } from '@/shared/store/mediaPlaybackStore'
 import type { MediaItem, MediaType } from '@/shared/types/media'
 import type { ProjectionCommand } from '@/shared/types/ipc'
 
@@ -116,6 +131,8 @@ export default function Media() {
             </ul>
           )}
         </div>
+
+        <VideoTransport media={media} />
       </div>
 
       <aside className="w-72 border-l border-slate-700 p-4">
@@ -201,8 +218,11 @@ interface SelectionPanelProps {
 }
 
 function SelectionPanel({ item, onClear }: SelectionPanelProps) {
+  const [loop, setLoop] = useState(false)
+  const settings = useSettingsStore((s) => s.settings)
   if (!item) return null
   const src = `media://${item.id}`
+  const isVideo = item.type === 'video'
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between">
@@ -218,7 +238,7 @@ function SelectionPanel({ item, onClear }: SelectionPanelProps) {
       </div>
 
       <div className="mt-2 overflow-hidden rounded-md border border-slate-700 bg-black">
-        {item.type === 'video' ? (
+        {isVideo ? (
           <video src={src} className="aspect-video w-full" controls muted playsInline />
         ) : (
           <img src={src} alt={item.fileName} className="aspect-video w-full object-contain" />
@@ -232,10 +252,34 @@ function SelectionPanel({ item, onClear }: SelectionPanelProps) {
         {item.filePath}
       </p>
 
+      {isVideo && (
+        <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs text-slate-300">
+          <input
+            type="checkbox"
+            checked={loop}
+            onChange={(e) => setLoop(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-0"
+          />
+          <Repeat className="h-3.5 w-3.5 text-slate-500" />
+          Repetir en loop
+        </label>
+      )}
+
       <div className="mt-4 space-y-2">
         <button
           type="button"
-          onClick={() => send({ type: 'showMedia', mediaId: item.id, mode: item.type })}
+          onClick={() =>
+            send({
+              type: 'showMedia',
+              mediaId: item.id,
+              mode: item.type,
+              loop: isVideo && loop,
+              fadeIn: isVideo ? (settings?.videoFadeIn ?? true) : false,
+              fadeOut: isVideo ? (settings?.videoFadeOut ?? false) : false,
+              fadeInSec: settings?.videoFadeInSec ?? 1,
+              fadeOutSec: settings?.videoFadeOutSec ?? 2.5
+            })
+          }
           className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500"
         >
           <Eye className="h-4 w-4" />
@@ -259,4 +303,107 @@ function SelectionPanel({ item, onClear }: SelectionPanelProps) {
       </div>
     </div>
   )
+}
+
+/**
+ * Transport bar for the video currently playing on the projector. Appears only
+ * when a video is live; lets the operator scrub, pause/resume, and restart.
+ */
+function VideoTransport({ media }: { media: MediaItem[] }) {
+  const { mediaId, position, duration, playing, volume, setVolume } = useMediaPlaybackStore()
+  // Local scrub state so dragging the slider feels smooth (not fighting telemetry).
+  const [scrub, setScrub] = useState<number | null>(null)
+
+  if (!mediaId) return null
+  const item = media.find((m) => m.id === mediaId)
+  if (!item || item.type !== 'video') return null
+
+  const setVideoVolume = (v: number) => {
+    setVolume(v)
+    send({ type: 'setMediaVolume', volume: v })
+  }
+
+  const shown = scrub ?? position
+  const pct = duration > 0 ? Math.min(100, (shown / duration) * 100) : 0
+
+  return (
+    <div className="flex items-center gap-3 border-t border-slate-700 bg-slate-900/80 px-4 py-2.5">
+      <Film className="h-4 w-4 shrink-0 text-purple-300" />
+      <span className="max-w-[180px] truncate text-xs text-slate-300" title={item.fileName}>
+        {item.fileName}
+      </span>
+
+      <button
+        type="button"
+        onClick={() => send({ type: 'seekMedia', position: 0 })}
+        className="rounded p-1.5 text-slate-300 hover:bg-slate-800 hover:text-white"
+        title="Reiniciar"
+      >
+        <SkipBack className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        onClick={() => send({ type: 'setMediaPlaying', playing: !playing })}
+        className="rounded-full bg-white p-2 text-slate-900 hover:bg-slate-200"
+        title={playing ? 'Pausar' : 'Reproducir'}
+      >
+        {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 pl-0.5" />}
+      </button>
+
+      <span className="w-10 text-right font-mono text-[10px] text-slate-500">
+        {formatTime(shown)}
+      </span>
+      <input
+        type="range"
+        min={0}
+        max={Math.max(duration, 1)}
+        step="0.1"
+        value={shown}
+        onChange={(e) => {
+          const pos = parseFloat(e.target.value)
+          setScrub(pos)
+          send({ type: 'seekMedia', position: pos }) // live scrub on the projector
+        }}
+        onPointerUp={() => setScrub(null)}
+        onPointerCancel={() => setScrub(null)}
+        className="seek-range h-1.5 flex-1 cursor-pointer appearance-none rounded-full"
+        style={{
+          background: `linear-gradient(to right, rgb(168 85 247) 0%, rgb(168 85 247) ${pct}%, rgb(51 65 85) ${pct}%, rgb(51 65 85) 100%)`
+        }}
+      />
+      <span className="w-10 font-mono text-[10px] text-slate-500">{formatTime(duration)}</span>
+
+      {/* Video output volume */}
+      <div className="flex shrink-0 items-center gap-1.5 border-l border-slate-700 pl-3">
+        <button
+          type="button"
+          onClick={() => setVideoVolume(volume > 0 ? 0 : 1)}
+          className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+          title={volume > 0 ? 'Silenciar' : 'Activar sonido'}
+        >
+          {volume > 0 ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+        </button>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.02}
+          value={volume}
+          onChange={(e) => setVideoVolume(parseFloat(e.target.value))}
+          className="seek-range h-1.5 w-24 cursor-pointer appearance-none rounded-full"
+          style={{
+            background: `linear-gradient(to right, rgb(168 85 247) 0%, rgb(168 85 247) ${volume * 100}%, rgb(51 65 85) ${volume * 100}%, rgb(51 65 85) 100%)`
+          }}
+          title={`Volumen del video: ${Math.round(volume * 100)}%`}
+        />
+      </div>
+    </div>
+  )
+}
+
+function formatTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0:00'
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
 }

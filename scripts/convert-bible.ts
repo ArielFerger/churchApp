@@ -19,10 +19,10 @@
  *   data/bibles/rva2015.json
  */
 
-import { mkdir, writeFile } from 'fs/promises'
+import { mkdir, writeFile, readFile, rm } from 'fs/promises'
 import { dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
-import { BIBLE_BOOKS, type BookMeta } from '../src/shared/utils/bibleBooks.js'
+import { BIBLE_BOOKS, findBook, type BookMeta } from '../src/shared/utils/bibleBooks.js'
 import type { Bible, BibleBook, BibleChapter, BibleVerse } from '../src/shared/types/bible.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -402,6 +402,88 @@ function toInt(v: unknown): number | undefined {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RVR1960 — local file (data/bibles/RVR1960-Spanish.json)
+//
+// Source shape: { "Nombre Libro": { "<cap>": { "<vers>": "texto" } }, lang: "" }
+// keyed by Spanish book name. We map each name to our OSIS id and reshape.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RVR1960_LOCAL = resolve(outDir, 'RVR1960-Spanish.json')
+
+/** Aliases for names the generic book lookup doesn't already resolve. */
+const RVR1960_NAME_ALIASES: Record<string, string> = {
+  's. mateo': 'MAT',
+  's. marcos': 'MRK',
+  's. lucas': 'LUK',
+  's.juan': 'JHN',
+  'cantares': 'SNG'
+}
+
+function resolveRvr1960Book(name: string): BookMeta | null {
+  const direct = findBook(name)
+  if (direct) return direct
+  const aliasId = RVR1960_NAME_ALIASES[name.toLowerCase().trim()]
+  if (aliasId) {
+    const meta = BIBLE_BOOKS.find((b) => b.id === aliasId)
+    if (meta) return meta
+  }
+  return null
+}
+
+type Rvr1960Source = Record<string, unknown>
+
+async function buildRvr1960(): Promise<Bible> {
+  console.log('• RVR1960 — converting local data/bibles/RVR1960-Spanish.json')
+  const raw = await readFile(RVR1960_LOCAL, 'utf-8')
+  const parsed = JSON.parse(raw) as Rvr1960Source
+
+  // Index source books by OSIS id.
+  const byId = new Map<string, { number: number; verses: BibleVerse[] }[]>()
+  let unmapped: string[] = []
+
+  for (const [bookName, bookData] of Object.entries(parsed)) {
+    if (bookName === 'lang' || typeof bookData !== 'object' || bookData === null) continue
+    const meta = resolveRvr1960Book(bookName)
+    if (!meta) {
+      unmapped.push(bookName)
+      continue
+    }
+    const chapters: { number: number; verses: BibleVerse[] }[] = []
+    for (const [chapKey, chapData] of Object.entries(bookData as Record<string, unknown>)) {
+      const chapNum = parseInt(chapKey, 10)
+      if (!Number.isFinite(chapNum) || typeof chapData !== 'object' || chapData === null) continue
+      const verses: BibleVerse[] = []
+      for (const [vKey, vText] of Object.entries(chapData as Record<string, unknown>)) {
+        const vNum = parseInt(vKey, 10)
+        if (!Number.isFinite(vNum) || typeof vText !== 'string') continue
+        const text = vText.replace(/\s+/g, ' ').trim()
+        if (text) verses.push({ number: vNum, text })
+      }
+      verses.sort((a, b) => a.number - b.number)
+      if (verses.length > 0) chapters.push({ number: chapNum, verses })
+    }
+    chapters.sort((a, b) => a.number - b.number)
+    byId.set(meta.id, chapters)
+  }
+
+  if (unmapped.length > 0) {
+    console.log(`  ⚠ libros sin mapear: ${unmapped.join(', ')}`)
+  }
+
+  // Emit in canonical order.
+  const books: BibleBook[] = BIBLE_BOOKS.map((meta) => ({
+    id: meta.id,
+    name: meta.name,
+    chapters: (byId.get(meta.id) ?? []) as BibleChapter[]
+  }))
+
+  return {
+    metadata: { version: 'RVR1960', language: 'es', name: 'Reina-Valera 1960' },
+    books
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -431,6 +513,15 @@ async function main(): Promise<void> {
   if (want('rva2015')) {
     const bible = await buildRva2015()
     await writeBible(bible, 'rva2015.json')
+  }
+
+  if (want('rvr1960')) {
+    const bible = await buildRvr1960()
+    await writeBible(bible, 'rvr1960.json')
+    // Remove the raw source so the bibleService loader (which reads every
+    // *.json in the folder) doesn't try to parse the un-normalized file.
+    await rm(RVR1960_LOCAL, { force: true })
+    console.log('  · removed raw RVR1960-Spanish.json (converted)')
   }
 
   console.log('Done.')

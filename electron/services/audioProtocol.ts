@@ -2,6 +2,7 @@ import { protocol, net } from 'electron'
 import { pathToFileURL } from 'url'
 import log from 'electron-log'
 import { audioScanner } from './audioScanner'
+import { serveFileWithRange } from './rangeFile'
 
 export const AUDIO_SCHEME = 'audio'
 
@@ -53,9 +54,8 @@ export function registerAudioProtocolHandler(): void {
         log.warn('audio://: unknown id', id)
         return new Response('Not found', { status: 404 })
       }
-      return net.fetch(pathToFileURL(track.filePath).toString(), {
-        bypassCustomProtocolHandlers: true
-      })
+      // Real byte-range support so Howler's html5 audio can fast-forward/seek.
+      return serveFileWithRange(track.filePath, request)
     } catch (err) {
       log.error('audio protocol error', err)
       return new Response('Internal error', { status: 500 })

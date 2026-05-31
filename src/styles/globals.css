@@ -12,3 +12,31 @@
     font-family: 'Inter', system-ui, sans-serif;
   }
 }
+
+/* Seek sliders (audio + video transport): a clearly grabbable thumb. Without
+   an explicit thumb under `appearance-none`, Chromium renders no handle, which
+   makes the bar feel un-scrubbable. */
+.seek-range {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.seek-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: 2px solid rgba(15, 23, 42, 0.8);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  margin-top: 0; /* track is centered via flex */
+}
+.seek-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: 2px solid rgba(15, 23, 42, 0.8);
+  cursor: pointer;
+}

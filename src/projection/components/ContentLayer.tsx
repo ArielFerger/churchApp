@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import MediaSlide from './MediaSlide'
+import MediaSlide, { type PlaybackInfo } from './MediaSlide'
 import type { ProjectionCommand, SlideContent } from '@/shared/types/ipc'
 import type { MediaItem } from '@/shared/types/media'
 
@@ -9,14 +9,37 @@ interface Props {
   preloads: MediaItem[]
   /** Resolved media item for the currently-displayed showMedia, if any. */
   currentMediaItem: MediaItem | null
+  /** Imperative seek signal for the active content video. */
+  mediaSeek: { position: number; nonce: number } | null
+  /** Desired play state for the active content video. */
+  mediaPlaying: boolean
+  /** Volume (0..1) for the active content video. */
+  mediaVolume: number
+  /** Receives video timing to push up to control. */
+  onMediaPlayback: (info: PlaybackInfo) => void
 }
 
 /**
- * Layer 2: text slides, bible verses, media items. Uses AnimatePresence for
- * cross-fades between content kinds. Preloaded media stays mounted (hidden)
- * underneath so the next showMedia avoids any fetch delay.
+ * Layer 2: text slides, bible verses, media items.
+ *
+ * Media (showMedia) lives in its own AnimatePresence WITHOUT `mode="wait"`, so
+ * switching from one video to another cross-fades — the incoming clip is already
+ * playing (audio fading in) while the outgoing one fades out. Text/verses use a
+ * separate `mode="wait"` presence to avoid overlapping glyphs mid-transition.
  */
-export default function ContentLayer({ current, preloads, currentMediaItem }: Props) {
+export default function ContentLayer({
+  current,
+  preloads,
+  currentMediaItem,
+  mediaSeek,
+  mediaPlaying,
+  mediaVolume,
+  onMediaPlayback
+}: Props) {
+  const mediaCmd = current?.type === 'showMedia' ? current : null
+  const textCmd =
+    current?.type === 'showSlide' || current?.type === 'showBibleVerse' ? current : null
+
   return (
     <div className="absolute inset-0 z-20 flex items-center justify-center">
       {/* Hidden preload pool — keeps decoded frames warm */}
@@ -26,53 +49,70 @@ export default function ContentLayer({ current, preloads, currentMediaItem }: Pr
         ))}
       </div>
 
-      <AnimatePresence mode="wait">{renderContent(current, currentMediaItem)}</AnimatePresence>
+      {/* Media layer — crossfades between clips */}
+      <AnimatePresence>
+        {mediaCmd && currentMediaItem && (
+          <motion.div
+            key={`media-${currentMediaItem.id}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.6, ease: 'easeInOut' }}
+            className="absolute inset-0"
+          >
+            <MediaSlide
+              item={currentMediaItem}
+              active
+              fit="contain"
+              loop={mediaCmd.loop ?? false}
+              muted={currentMediaItem.type !== 'video' ? true : false}
+              fadeAudio={mediaCmd.fadeIn ?? true}
+              fadeOut={mediaCmd.fadeOut ?? false}
+              fadeInSec={mediaCmd.fadeInSec ?? 1}
+              fadeOutSec={mediaCmd.fadeOutSec ?? 2.5}
+              volume={mediaVolume}
+              playing={mediaPlaying}
+              seekSignal={mediaSeek}
+              onPlayback={onMediaPlayback}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Text / verse layer */}
+      <AnimatePresence mode="wait">
+        {textCmd && (
+          <FadeBlock key={textKey(textCmd)}>
+            {textCmd.type === 'showSlide' ? (
+              <SlideBlock content={textCmd.content} />
+            ) : (
+              <VerseBlock
+                reference={textCmd.reference}
+                text={textCmd.text}
+                version={textCmd.version}
+              />
+            )}
+          </FadeBlock>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
 
-function renderContent(cmd: ProjectionCommand | null, mediaItem: MediaItem | null) {
-  if (!cmd) return null
-
-  switch (cmd.type) {
-    case 'showSlide':
-      return (
-        <FadeBlock key={`slide-${slideKey(cmd.content)}`}>
-          <SlideBlock content={cmd.content} />
-        </FadeBlock>
-      )
-    case 'showBibleVerse':
-      return (
-        <FadeBlock key={`verse-${cmd.reference}-${cmd.version}`}>
-          <VerseBlock reference={cmd.reference} text={cmd.text} version={cmd.version} />
-        </FadeBlock>
-      )
-    case 'showMedia':
-      if (!mediaItem) return null
-      return (
-        <FadeBlock key={`media-${mediaItem.id}`} pad={false}>
-          <div className="h-screen w-screen">
-            <MediaSlide item={mediaItem} active fit="contain" />
-          </div>
-        </FadeBlock>
-      )
-    default:
-      return null
-  }
+function textKey(cmd: ProjectionCommand): string {
+  if (cmd.type === 'showSlide') return `slide-${cmd.content.lines.join('|')}`
+  if (cmd.type === 'showBibleVerse') return `verse-${cmd.reference}-${cmd.version}`
+  return 'text'
 }
 
-function slideKey(content: SlideContent): string {
-  return content.lines.join('|')
-}
-
-function FadeBlock({ children, pad = true }: { children: React.ReactNode; pad?: boolean }) {
+function FadeBlock({ children }: { children: React.ReactNode }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className={pad ? 'px-16 text-center' : 'absolute inset-0'}
+      className="px-16 text-center"
     >
       {children}
     </motion.div>
@@ -81,7 +121,6 @@ function FadeBlock({ children, pad = true }: { children: React.ReactNode; pad?: 
 
 function SlideBlock({ content }: { content: SlideContent }) {
   // Auto-shrink for crowded slides: 6 lines → 6xl, 8 → 5xl, more → 4xl.
-  // Long single lines still wrap (break-words) so nothing overflows.
   const visibleLines = content.lines.filter((l) => l !== undefined)
   const sizeClass =
     visibleLines.length <= 4
@@ -101,7 +140,7 @@ function SlideBlock({ content }: { content: SlideContent }) {
             className={`font-display ${sizeClass} break-words font-semibold text-white`}
             style={{ textShadow: '0 4px 24px rgba(0,0,0,0.9), 0 2px 4px rgba(0,0,0,0.6)' }}
           >
-            {line || ' '}
+            {line || ' '}
           </p>
         ))}
       </div>
@@ -111,9 +150,7 @@ function SlideBlock({ content }: { content: SlideContent }) {
           {content.songTitle && (
             <span style={{ textShadow: '0 2px 12px rgba(0,0,0,0.85)' }}>{content.songTitle}</span>
           )}
-          {content.songTitle && content.sectionLabel && (
-            <span className="text-slate-500">·</span>
-          )}
+          {content.songTitle && content.sectionLabel && <span className="text-slate-500">·</span>}
           {content.sectionLabel && (
             <span
               className="rounded-full bg-black/30 px-3 py-0.5 text-base text-slate-200 backdrop-blur-sm"
