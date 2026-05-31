@@ -1,6 +1,6 @@
 {
   "name": "church-projector",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "App de proyección para iglesia — letras, versículos, media y audio",
   "type": "module",
   "main": "out/main/index.js",
@@ -19,9 +19,9 @@
     "convert-bibles": "tsx scripts/convert-bible.ts",
     "build:icons": "tsx scripts/build-icons.ts",
     "package": "electron-builder --dir",
-    "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && electron-builder --win",
-    "dist:linux": "npm run build && electron-builder --linux",
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --publish never",
     "make:win": "npm run dist:win",
     "make:linux": "npm run dist:linux"
   },
