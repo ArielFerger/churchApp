@@ -15,6 +15,7 @@ const DEFAULTS: AppSettings = {
   mediaFolder: null,
   audioFolder: null,
   songsFolder: null,
+  defaultBibleVersion: null,
   videoFadeIn: true,
   videoFadeOut: false,
   videoFadeInSec: 1,
