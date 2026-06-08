@@ -5,9 +5,15 @@ on:
     tags:
       - 'v*'
 
+# The default GITHUB_TOKEN is read-only on this repo; creating a Release and
+# uploading installer assets needs write access to repository contents.
+permissions:
+  contents: write
+
 jobs:
   release:
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
@@ -27,6 +33,10 @@ jobs:
         run: npm run make:linux
       - uses: softprops/action-gh-release@v2
         with:
-          files: release/**/*
+          # Only the installers — not the unpacked app dirs under release/.
+          files: |
+            release/*.exe
+            release/*.AppImage
+            release/*.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

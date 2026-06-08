@@ -55,6 +55,8 @@ export interface AppSettings {
   mediaFolder: string | null
   audioFolder: string | null
   songsFolder: string | null
+  /** Bible version (code, e.g. "RVR1909") the Bible page opens with. */
+  defaultBibleVersion: string | null
   /** Fade video audio in (low→high) when a clip starts. */
   videoFadeIn: boolean
   /** Fade video audio out (high→low) as a clip ends. */

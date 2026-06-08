@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, BookOpen, Eye } from 'lucide-react'
+import { Search, BookOpen, Eye, Star, History, X, Keyboard } from 'lucide-react'
 import { BIBLE_BOOKS, bookById, type BookMeta } from '@/shared/utils/bibleBooks'
 import { parseReference } from '@/shared/utils/bibleParser'
+import { useSettingsStore } from '@/shared/store/settingsStore'
+import {
+  useBibleHistoryStore,
+  historyKey,
+  type BibleHistoryEntry
+} from '@/shared/store/bibleHistoryStore'
+import QuickRefPalette, { type QuickRef } from '@/control/components/bible/QuickRefPalette'
 import type { ProjectionCommand } from '@/shared/types/ipc'
 import type {
   BibleLookupResult,
@@ -21,16 +28,42 @@ export default function Bible() {
   const [searchHits, setSearchHits] = useState<BibleLookupResult[] | null>(null)
   const [verses, setVerses] = useState<{ number: number; text: string }[]>([])
   const [chosenVerse, setChosenVerse] = useState<number | null>(null)
+  // Verse number to scroll into view once the chapter has loaded (set when we
+  // navigate programmatically from the quick palette or the history chips).
+  const [pendingScroll, setPendingScroll] = useState<number | null>(null)
+  // First character that opened the keyboard palette; null while it is closed.
+  const [paletteSeed, setPaletteSeed] = useState<string | null>(null)
 
-  // Load available versions on mount.
+  const settings = useSettingsStore((s) => s.settings)
+  const settingsLoaded = useSettingsStore((s) => s.loaded)
+  const loadSettings = useSettingsStore((s) => s.load)
+  const updateSettings = useSettingsStore((s) => s.update)
+  const defaultVersion = settings?.defaultBibleVersion ?? null
+
+  const history = useBibleHistoryStore((s) => s.entries)
+  const addHistory = useBibleHistoryStore((s) => s.add)
+  const removeHistory = useBibleHistoryStore((s) => s.remove)
+  const clearHistory = useBibleHistoryStore((s) => s.clear)
+
+  // Load available versions on mount; make sure settings are loaded too so the
+  // saved default version is known before we pick the initial one.
   useEffect(() => {
     const api = window.electronAPI
     if (!api) return
-    void api.getBibleVersions().then((vs) => {
-      setVersions(vs)
-      if (vs.length > 0 && !selectedVersion) setSelectedVersion(vs[0].version)
-    })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    void api.getBibleVersions().then(setVersions)
+  }, [])
+
+  useEffect(() => {
+    if (!settingsLoaded) void loadSettings()
+  }, [settingsLoaded, loadSettings])
+
+  // Pick the initial version once versions and saved settings are available:
+  // the saved default if present, otherwise the first one.
+  useEffect(() => {
+    if (selectedVersion || versions.length === 0 || !settingsLoaded) return
+    const preferred = defaultVersion && versions.find((v) => v.version === defaultVersion)
+    setSelectedVersion(preferred ? preferred.version : versions[0].version)
+  }, [versions, defaultVersion, selectedVersion, settingsLoaded])
 
   // When version/book/chapter changes, refresh the verses panel.
   useEffect(() => {
@@ -48,7 +81,66 @@ export default function Bible() {
       .then((res) => setVerses(res?.verses ?? []))
   }, [selectedVersion, selectedBookId, selectedChapter])
 
+  // Scroll the freshly navigated verse into view once its chapter has loaded.
+  useEffect(() => {
+    if (pendingScroll == null) return
+    if (!verses.some((v) => v.number === pendingScroll)) return
+    document.getElementById(`bible-verse-${pendingScroll}`)?.scrollIntoView({ block: 'center' })
+    setPendingScroll(null)
+  }, [pendingScroll, verses])
+
+  // Type anywhere on the Bible tab (no input focused) to open the quick picker.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if (paletteSeed !== null) return // palette owns the keyboard while open
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (e.key.length === 1 && /[\p{L}\d]/u.test(e.key)) {
+        e.preventDefault()
+        setPaletteSeed(e.key)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [paletteSeed])
+
   const book = useMemo<BookMeta | null>(() => bookById(selectedBookId) ?? null, [selectedBookId])
+
+  function record(entry: Omit<BibleHistoryEntry, 'ts'>): void {
+    addHistory(entry)
+  }
+
+  /** Navigate to a reference and select its verse (used by palette + history). */
+  async function openReference(
+    ref: { version: string; bookId: string; chapter: number; verse: number; endVerse?: number },
+    fallback?: { bookName: string; text: string }
+  ): Promise<void> {
+    setSelectedVersion(ref.version)
+    setSelectedBookId(ref.bookId)
+    setSelectedChapter(ref.chapter)
+    setChosenVerse(ref.verse)
+    setPendingScroll(ref.verse)
+    setSearchHits(null)
+
+    const api = window.electronAPI
+    const res = api ? await api.lookupVerse(ref) : null
+    record({
+      bookId: ref.bookId,
+      bookName: res?.bookName ?? fallback?.bookName ?? bookById(ref.bookId)?.name ?? ref.bookId,
+      chapter: ref.chapter,
+      verse: ref.verse,
+      endVerse: ref.endVerse,
+      version: ref.version,
+      text: res?.text ?? fallback?.text ?? ''
+    })
+  }
+
+  function setDefaultVersion(version: string): void {
+    const next = defaultVersion === version ? null : version
+    void updateSettings({ defaultBibleVersion: next })
+    if (next) setSelectedVersion(next)
+  }
 
   async function runSearch(raw: string): Promise<void> {
     setSearch(raw)
@@ -87,6 +179,15 @@ export default function Bible() {
       text: result.text,
       version: result.version.version
     })
+    record({
+      bookId: result.bookId,
+      bookName: result.bookName,
+      chapter: result.chapter,
+      verse: result.verse,
+      endVerse: result.endVerse,
+      version: result.version.version,
+      text: result.text
+    })
   }
 
   function projectChapterVerse(n: number): void {
@@ -100,6 +201,20 @@ export default function Bible() {
       text: verse.text,
       version: selectedVersion
     })
+    record({
+      bookId: book.id,
+      bookName: book.name,
+      chapter: selectedChapter,
+      verse: n,
+      version: selectedVersion,
+      text: verse.text
+    })
+  }
+
+  function onPaletteComplete(ref: QuickRef): void {
+    setPaletteSeed(null)
+    if (!selectedVersion) return
+    void openReference({ ...ref, version: selectedVersion })
   }
 
   if (versions.length === 0) {
@@ -119,6 +234,15 @@ export default function Bible() {
 
   return (
     <div className="flex h-full flex-col">
+      {paletteSeed !== null && selectedVersion && (
+        <QuickRefPalette
+          versionLabel={selectedVersion}
+          initialQuery={paletteSeed}
+          onClose={() => setPaletteSeed(null)}
+          onComplete={onPaletteComplete}
+        />
+      )}
+
       {/* Search bar */}
       <div className="flex items-center gap-3 border-b border-slate-700 px-4 py-2">
         <div className="relative max-w-md flex-1">
@@ -131,27 +255,116 @@ export default function Bible() {
             className="w-full rounded-md border border-slate-700 bg-slate-900 py-1.5 pl-8 pr-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
           />
         </div>
+        <button
+          type="button"
+          onClick={() => setPaletteSeed('')}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-700"
+          title="Búsqueda rápida por teclado — o empezá a escribir el nombre del libro"
+        >
+          <Keyboard className="h-3.5 w-3.5" />
+          Escribí para buscar
+        </button>
         <div className="flex items-center gap-1">
           {versions.map((v) => {
             const isActive = v.version === selectedVersion
+            const isDefault = v.version === defaultVersion
             return (
-              <button
+              <div
                 key={v.version}
-                type="button"
-                onClick={() => setSelectedVersion(v.version)}
-                className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
-                  isActive
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                className={`flex items-center overflow-hidden rounded ${
+                  isActive ? 'ring-1 ring-blue-500' : ''
                 }`}
-                title={v.name}
               >
-                {v.version}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedVersion(v.version)}
+                  className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+                    isActive
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                  title={v.name}
+                >
+                  {v.version}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDefaultVersion(v.version)}
+                  className={`px-1.5 py-1 transition-colors ${
+                    isActive ? 'bg-blue-600' : 'bg-slate-800 hover:bg-slate-700'
+                  }`}
+                  title={
+                    isDefault
+                      ? 'Versión predeterminada — clic para quitar'
+                      : 'Fijar como versión predeterminada'
+                  }
+                >
+                  <Star
+                    className={`h-3 w-3 ${
+                      isDefault ? 'fill-yellow-400 text-yellow-400' : 'text-slate-500'
+                    }`}
+                  />
+                </button>
+              </div>
             )
           })}
         </div>
       </div>
+
+      {/* Recent verses */}
+      {history.length > 0 && (
+        <div className="flex items-center gap-2 border-b border-slate-700 bg-slate-800/20 px-4 py-2">
+          <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-slate-500">
+            <History className="h-3.5 w-3.5" />
+            Recientes
+          </span>
+          <div className="flex flex-1 gap-1.5 overflow-x-auto">
+            {history.map((e) => (
+              <div
+                key={historyKey(e)}
+                className="group flex shrink-0 items-center rounded-full border border-slate-700 bg-slate-900/60 hover:border-slate-500"
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    void openReference(
+                      {
+                        version: e.version,
+                        bookId: e.bookId,
+                        chapter: e.chapter,
+                        verse: e.verse,
+                        endVerse: e.endVerse
+                      },
+                      { bookName: e.bookName, text: e.text }
+                    )
+                  }
+                  className="py-0.5 pl-2.5 pr-1.5 text-xs text-slate-300 group-hover:text-white"
+                  title={`${e.version} · ${new Date(e.ts).toLocaleString()}`}
+                >
+                  {e.bookName} {e.chapter}:{e.verse}
+                  {e.endVerse ? `-${e.endVerse}` : ''}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeHistory(historyKey(e))}
+                  className="pr-1.5 text-slate-600 hover:text-red-400"
+                  title="Quitar del historial"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => clearHistory()}
+            className="shrink-0 rounded px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-700 hover:text-red-400"
+            title="Limpiar todo el historial"
+          >
+            Limpiar
+          </button>
+        </div>
+      )}
 
       {/* Search results */}
       {searchHits && searchHits.length > 0 && (
@@ -239,7 +452,7 @@ export default function Bible() {
                 {verses.map((v) => {
                   const isActive = v.number === chosenVerse
                   return (
-                    <li key={v.number}>
+                    <li key={v.number} id={`bible-verse-${v.number}`}>
                       <button
                         type="button"
                         onClick={() => projectChapterVerse(v.number)}

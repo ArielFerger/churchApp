@@ -1,10 +1,13 @@
 {
   "name": "church-projector",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "App de proyección para iglesia — letras, versículos, media y audio",
   "type": "module",
   "main": "out/main/index.js",
-  "author": "ArielFerger",
+  "author": {
+    "name": "ArielFerger",
+    "email": "arielferger@users.noreply.github.com"
+  },
   "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev",
@@ -16,9 +19,9 @@
     "convert-bibles": "tsx scripts/convert-bible.ts",
     "build:icons": "tsx scripts/build-icons.ts",
     "package": "electron-builder --dir",
-    "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && electron-builder --win",
-    "dist:linux": "npm run build && electron-builder --linux",
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --publish never",
     "make:win": "npm run dist:win",
     "make:linux": "npm run dist:linux"
   },
@@ -46,7 +49,7 @@
     "@typescript-eslint/parser": "^8.32.1",
     "@vitejs/plugin-react": "^4.5.0",
     "autoprefixer": "^10.4.21",
-    "electron": "^36.3.1",
+    "electron": "^36.9.5",
     "electron-builder": "^26.0.12",
     "electron-vite": "^3.1.0",
     "eslint": "^9.27.0",
