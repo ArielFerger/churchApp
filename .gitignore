@@ -9,10 +9,16 @@
 node_modules/
 .pnpm-store/
 
+# Other package managers (project standardizes on npm)
+pnpm-lock.yaml
+pnpm-workspace.yaml
+yarn.lock
+
 # Build outputs
 dist/
 out/
 dist-electron/
+*.tsbuildinfo
 
 # Logs
 *.log
