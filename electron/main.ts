@@ -9,7 +9,7 @@ import { registerSongsHandlers } from './ipc/songs'
 import { registerBibleHandlers } from './ipc/bible'
 import { registerAudioHandlers } from './ipc/audio'
 import { getSettings } from './services/settingsService'
-import { mediaScanner } from './services/mediaScanner'
+import { mediaScanner, liveMediaScanner } from './services/mediaScanner'
 import { songsService } from './services/songsService'
 import { bibleService } from './services/bibleService'
 import { audioScanner } from './services/audioScanner'
@@ -64,6 +64,11 @@ app.whenReady().then(async () => {
         log.error('mediaScanner.setFolder failed', err)
       })
     }
+    if (next.liveLoopFolder !== prev.liveLoopFolder) {
+      void liveMediaScanner.setFolder(next.liveLoopFolder).catch((err) => {
+        log.error('liveMediaScanner.setFolder failed', err)
+      })
+    }
     if (next.audioFolder !== prev.audioFolder) {
       void audioScanner.setFolder(next.audioFolder).catch((err) => {
         log.error('audioScanner.setFolder failed', err)
@@ -75,6 +80,11 @@ app.whenReady().then(async () => {
   if (settings.mediaFolder) {
     void mediaScanner.setFolder(settings.mediaFolder).catch((err) => {
       log.error('mediaScanner initial scan failed', err)
+    })
+  }
+  if (settings.liveLoopFolder) {
+    void liveMediaScanner.setFolder(settings.liveLoopFolder).catch((err) => {
+      log.error('liveMediaScanner initial scan failed', err)
     })
   }
   if (settings.audioFolder) {
@@ -96,6 +106,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   void mediaScanner.dispose()
+  void liveMediaScanner.dispose()
   void audioScanner.dispose()
   void songsService.dispose()
 })

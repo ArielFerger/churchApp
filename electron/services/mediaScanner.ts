@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { extname, basename, resolve } from 'path'
+import { extname, basename, dirname, relative, resolve, sep } from 'path'
 import { statSync } from 'fs'
 import chokidar, { type FSWatcher } from 'chokidar'
 import log from 'electron-log'
@@ -22,7 +22,14 @@ export function mediaIdFor(filePath: string): string {
   return createHash('sha1').update(resolve(filePath)).digest('hex').slice(0, 16)
 }
 
-function toItem(filePath: string): MediaItem | null {
+/** Subcarpeta relativa a la raíz escaneada, normalizada con "/" ('' = raíz). */
+function folderFor(filePath: string, root: string): string {
+  const rel = relative(root, dirname(resolve(filePath)))
+  if (!rel || rel.startsWith('..')) return ''
+  return rel.split(sep).join('/')
+}
+
+function toItem(filePath: string, root: string): MediaItem | null {
   const type = classify(filePath)
   if (!type) return null
   let addedAt = new Date().toISOString()
@@ -36,6 +43,7 @@ function toItem(filePath: string): MediaItem | null {
     filePath: resolve(filePath),
     fileName: basename(filePath),
     type,
+    folder: folderFor(filePath, root),
     addedAt
   }
 }
@@ -96,7 +104,8 @@ export class MediaScanner {
   }
 
   private add(file: string): void {
-    const item = toItem(file)
+    if (!this.currentFolder) return
+    const item = toItem(file, resolve(this.currentFolder))
     if (!item) return
     this.items.set(item.id, item)
     this.emit()
@@ -122,5 +131,8 @@ export class MediaScanner {
   }
 }
 
-// Module-level singleton — only one scanner per app process.
+// Module-level singletons — one per watched root.
+// `mediaScanner` indexes la carpeta general de media; `liveMediaScanner` la
+// carpeta exclusiva de videos de loop para "En Vivo" (si está configurada).
 export const mediaScanner = new MediaScanner()
+export const liveMediaScanner = new MediaScanner()

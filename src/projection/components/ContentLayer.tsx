@@ -17,6 +17,8 @@ interface Props {
   mediaVolume: number
   /** Receives video timing to push up to control. */
   onMediaPlayback: (info: PlaybackInfo) => void
+  /** Fired once when the active (non-loop) video ends — drives the queue. */
+  onMediaEnded: () => void
 }
 
 /**
@@ -34,7 +36,8 @@ export default function ContentLayer({
   mediaSeek,
   mediaPlaying,
   mediaVolume,
-  onMediaPlayback
+  onMediaPlayback,
+  onMediaEnded
 }: Props) {
   const mediaCmd = current?.type === 'showMedia' ? current : null
   const textCmd =
@@ -74,6 +77,7 @@ export default function ContentLayer({
               playing={mediaPlaying}
               seekSignal={mediaSeek}
               onPlayback={onMediaPlayback}
+              onEnded={onMediaEnded}
             />
           </motion.div>
         )}

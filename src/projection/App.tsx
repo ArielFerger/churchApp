@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import BackgroundLayer from './components/BackgroundLayer'
 import ContentLayer from './components/ContentLayer'
 import OverlayLayer from './components/OverlayLayer'
@@ -102,23 +102,33 @@ function dedupe(arr: string[]): string[] {
 
 export default function ProjectionApp() {
   const [state, dispatch] = useReducer(reducer, initialState)
-  const [mediaById, setMediaById] = useState<Map<string, MediaItem>>(new Map())
+  // Two indexes: general media folder + dedicated "En Vivo" loop folder.
+  const [generalMedia, setGeneralMedia] = useState<Map<string, MediaItem>>(new Map())
+  const [liveMedia, setLiveMedia] = useState<Map<string, MediaItem>>(new Map())
   const lastEmit = useRef(0)
 
   useEffect(() => {
     const api = window.projectionAPI
     if (!api) return
 
-    // Hydrate the media index on startup + on every scanner change.
-    void api.getMedia().then((items) => setMediaById(toMap(items)))
-    const unsubMedia = api.onMediaUpdated((items) => setMediaById(toMap(items)))
+    // Hydrate the media indexes on startup + on every scanner change.
+    void api.getMedia().then((items) => setGeneralMedia(toMap(items)))
+    void api.getLiveMedia?.().then((items) => setLiveMedia(toMap(items)))
+    const unsubMedia = api.onMediaUpdated((items) => setGeneralMedia(toMap(items)))
+    const unsubLive = api.onLiveMediaUpdated?.((items) => setLiveMedia(toMap(items)))
     const unsubCmd = api.onCommand(dispatch)
 
     return () => {
       unsubMedia()
+      unsubLive?.()
       unsubCmd()
     }
   }, [])
+
+  const mediaById = useMemo(
+    () => new Map([...generalMedia, ...liveMedia]),
+    [generalMedia, liveMedia]
+  )
 
   const backgroundItems: MediaItem[] = state.backgroundSlideshow
     ? state.backgroundSlideshow.mediaIds
@@ -162,6 +172,18 @@ export default function ProjectionApp() {
     })
   }
 
+  // End-of-video: emit immediately (bypasses the throttle) so the control
+  // window can advance its play queue without missing the event.
+  const handleEnded = (): void => {
+    window.projectionAPI?.emitPlaybackState({
+      mediaId: currentMediaItem?.id ?? null,
+      position: 0,
+      duration: 0,
+      playing: false,
+      ended: true
+    })
+  }
+
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-black" style={{ cursor: 'none' }}>
       <BackgroundLayer items={backgroundItems} intervalSec={backgroundIntervalSec} />
@@ -173,6 +195,7 @@ export default function ProjectionApp() {
         mediaPlaying={state.mediaPlaying}
         mediaVolume={state.mediaVolume}
         onMediaPlayback={handlePlayback}
+        onMediaEnded={handleEnded}
       />
       <OverlayLayer isBlackout={state.isBlackout} showLogo={state.showLogo} />
     </div>

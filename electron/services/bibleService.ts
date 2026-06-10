@@ -40,6 +40,7 @@ export interface VerseLookupResult {
  */
 export class BibleService {
   private bibles = new Map<string, Bible>()
+  private statsCache = new Map<string, Record<string, number[]>>()
   private ready = false
 
   async init(): Promise<void> {
@@ -112,6 +113,31 @@ export class BibleService {
   async getBooks(version: string): Promise<BibleBook[]> {
     await this.init()
     return this.bibles.get(version)?.books ?? []
+  }
+
+  /**
+   * Lightweight shape of a version: for each bookId, an array where index i
+   * holds the verse count of chapter i+1. Lets the UI validate references
+   * without shipping the whole Bible text over IPC.
+   */
+  async getBookStats(version: string): Promise<Record<string, number[]>> {
+    await this.init()
+    const cached = this.statsCache.get(version)
+    if (cached) return cached
+    const bible = this.bibles.get(version)
+    if (!bible) return {}
+    const stats: Record<string, number[]> = {}
+    for (const book of bible.books) {
+      const counts: number[] = []
+      for (const chapter of book.chapters) {
+        // Usar el número de versículo más alto (no length) por si hay huecos.
+        const max = chapter.verses.reduce((m, v) => Math.max(m, v.number), 0)
+        counts[chapter.number - 1] = max
+      }
+      stats[book.id] = counts
+    }
+    this.statsCache.set(version, stats)
+    return stats
   }
 
   private dataDir(): string {

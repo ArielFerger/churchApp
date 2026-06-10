@@ -2,7 +2,7 @@ import type { ProjectionCommand, AppSettings, DisplayInfo, MediaPlaybackState } 
 import type { MediaItem } from './media'
 import type { Song, Album } from './song'
 import type { BibleBook } from './bible'
-import type { AudioTrack } from './audio'
+import type { AudioTrack, AudioPlaylist } from './audio'
 
 export interface AudioPersistedState {
   lastTrackId: string | null
@@ -36,6 +36,10 @@ export interface BibleLookupResult {
   verses: { number: number; text: string }[]
 }
 
+/** Por cada bookId, array donde el índice i = cantidad de versículos del capítulo i+1. */
+export type BibleBookStats = Record<string, number[]>
+
+
 export interface ControlElectronAPI {
   sendProjectionCommand: (cmd: ProjectionCommand) => void
   getDisplays: () => Promise<DisplayInfo[]>
@@ -46,6 +50,8 @@ export interface ControlElectronAPI {
   ) => Promise<Electron.OpenDialogReturnValue>
   getMedia: () => Promise<MediaItem[]>
   onMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
+  getLiveMedia: () => Promise<MediaItem[]>
+  onLiveMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
   onProjectionState: (callback: (cmd: ProjectionCommand) => void) => () => void
   onMediaPlayback: (callback: (state: MediaPlaybackState) => void) => () => void
   showProjection: (opts?: { reload?: boolean }) => Promise<boolean>
@@ -59,11 +65,19 @@ export interface ControlElectronAPI {
   onAlbumsUpdated: (callback: (albums: Album[]) => void) => () => void
   getBibleVersions: () => Promise<BibleVersionSummary[]>
   getBibleBooks: (version: string) => Promise<BibleBook[]>
+  getBibleBookStats: (version: string) => Promise<BibleBookStats>
   lookupVerse: (req: BibleLookupRequest) => Promise<BibleLookupResult | null>
   getAudio: () => Promise<AudioTrack[]>
   onAudioUpdated: (callback: (items: AudioTrack[]) => void) => () => void
   getAudioState: () => Promise<AudioPersistedState>
   setAudioState: (partial: Partial<AudioPersistedState>) => Promise<AudioPersistedState>
+  getAudioPlaylists: () => Promise<AudioPlaylist[]>
+  saveAudioPlaylist: (input: {
+    id?: string
+    name: string
+    trackIds?: string[]
+  }) => Promise<AudioPlaylist[]>
+  deleteAudioPlaylist: (id: string) => Promise<AudioPlaylist[]>
   onShortcut: (callback: (key: string) => void) => () => void
 }
 
@@ -71,6 +85,8 @@ export interface ProjectionElectronAPI {
   onCommand: (callback: (cmd: ProjectionCommand) => void) => () => void
   getMedia: () => Promise<MediaItem[]>
   onMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
+  getLiveMedia: () => Promise<MediaItem[]>
+  onLiveMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
   emitPlaybackState: (state: MediaPlaybackState) => void
 }
 
