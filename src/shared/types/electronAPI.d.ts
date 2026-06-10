@@ -3,6 +3,7 @@ import type { MediaItem } from './media'
 import type { Song, Album } from './song'
 import type { BibleBook } from './bible'
 import type { AudioTrack, AudioPlaylist } from './audio'
+import type { BibleFont } from './fonts'
 
 export interface AudioPersistedState {
   lastTrackId: string | null
@@ -52,6 +53,8 @@ export interface ControlElectronAPI {
   onMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
   getLiveMedia: () => Promise<MediaItem[]>
   onLiveMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
+  getBibleMedia: () => Promise<MediaItem[]>
+  onBibleMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
   onProjectionState: (callback: (cmd: ProjectionCommand) => void) => () => void
   onMediaPlayback: (callback: (state: MediaPlaybackState) => void) => () => void
   showProjection: (opts?: { reload?: boolean }) => Promise<boolean>
@@ -66,6 +69,10 @@ export interface ControlElectronAPI {
   getBibleVersions: () => Promise<BibleVersionSummary[]>
   getBibleBooks: (version: string) => Promise<BibleBook[]>
   getBibleBookStats: (version: string) => Promise<BibleBookStats>
+  getBibleFonts: () => Promise<BibleFont[]>
+  addBibleFonts: (filePaths: string[]) => Promise<BibleFont[]>
+  deleteBibleFont: (id: string) => Promise<BibleFont[]>
+  onBibleFontsUpdated: (callback: (fonts: BibleFont[]) => void) => () => void
   lookupVerse: (req: BibleLookupRequest) => Promise<BibleLookupResult | null>
   getAudio: () => Promise<AudioTrack[]>
   onAudioUpdated: (callback: (items: AudioTrack[]) => void) => () => void
@@ -83,10 +90,16 @@ export interface ControlElectronAPI {
 
 export interface ProjectionElectronAPI {
   onCommand: (callback: (cmd: ProjectionCommand) => void) => () => void
+  getSettings: () => Promise<AppSettings>
+  onSettingsUpdated: (callback: (settings: AppSettings) => void) => () => void
+  getBibleFonts: () => Promise<BibleFont[]>
+  onBibleFontsUpdated: (callback: (fonts: BibleFont[]) => void) => () => void
   getMedia: () => Promise<MediaItem[]>
   onMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
   getLiveMedia: () => Promise<MediaItem[]>
   onLiveMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
+  getBibleMedia: () => Promise<MediaItem[]>
+  onBibleMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
   emitPlaybackState: (state: MediaPlaybackState) => void
 }
 

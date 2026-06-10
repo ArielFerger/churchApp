@@ -133,6 +133,8 @@ export class MediaScanner {
 
 // Module-level singletons — one per watched root.
 // `mediaScanner` indexes la carpeta general de media; `liveMediaScanner` la
-// carpeta exclusiva de videos de loop para "En Vivo" (si está configurada).
+// carpeta exclusiva de videos de loop para "En Vivo"; `bibleMediaScanner` la
+// carpeta exclusiva de fondos de versículos (si están configuradas).
 export const mediaScanner = new MediaScanner()
 export const liveMediaScanner = new MediaScanner()
+export const bibleMediaScanner = new MediaScanner()

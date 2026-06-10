@@ -19,7 +19,10 @@ export const useMediaPlaybackStore = create<MediaPlaybackStore>((set) => ({
   position: 0,
   duration: 0,
   playing: false,
+  ended: false,
   volume: 1,
-  set: (s) => set(s),
+  // Normalizar `ended` en cada update: como `set` hace merge superficial, un
+  // tick sin la clave dejaría el `ended:true` anterior pegado para siempre.
+  set: (s) => set({ ...s, ended: s.ended ?? false }),
   setVolume: (v) => set({ volume: Math.max(0, Math.min(1, v)) })
 }))

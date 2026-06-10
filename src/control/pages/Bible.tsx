@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, BookOpen, Eye, Star, History, X, Keyboard, AlertCircle } from 'lucide-react'
+import {
+  Search,
+  BookOpen,
+  Eye,
+  Star,
+  History,
+  X,
+  Keyboard,
+  AlertCircle,
+  Palette
+} from 'lucide-react'
 import { BIBLE_BOOKS, bookById, findBook, type BookMeta } from '@/shared/utils/bibleBooks'
 import { parseReference } from '@/shared/utils/bibleParser'
 import { useSettingsStore } from '@/shared/store/settingsStore'
@@ -9,6 +19,7 @@ import {
   type BibleHistoryEntry
 } from '@/shared/store/bibleHistoryStore'
 import QuickRefPalette, { type QuickRef } from '@/control/components/bible/QuickRefPalette'
+import AppearancePanel from '@/control/components/bible/AppearancePanel'
 import type { ProjectionCommand } from '@/shared/types/ipc'
 import type {
   BibleBookStats,
@@ -38,6 +49,8 @@ export default function Bible() {
   const [pendingScroll, setPendingScroll] = useState<number | null>(null)
   // First character that opened the keyboard palette; null while it is closed.
   const [paletteSeed, setPaletteSeed] = useState<string | null>(null)
+  // Panel de apariencia de versículos (fuente, tamaño, fondo…).
+  const [showAppearance, setShowAppearance] = useState(false)
 
   const settings = useSettingsStore((s) => s.settings)
   const settingsLoaded = useSettingsStore((s) => s.loaded)
@@ -110,6 +123,7 @@ export default function Bible() {
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       if (paletteSeed !== null) return // palette owns the keyboard while open
+      if (showAppearance) return // el panel de apariencia tiene prioridad
       if (e.metaKey || e.ctrlKey || e.altKey) return
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
@@ -120,7 +134,7 @@ export default function Bible() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [paletteSeed])
+  }, [paletteSeed, showAppearance])
 
   const book = useMemo<BookMeta | null>(() => bookById(selectedBookId) ?? null, [selectedBookId])
 
@@ -292,6 +306,13 @@ export default function Bible() {
         />
       )}
 
+      {showAppearance && (
+        <AppearancePanel
+          versionLabel={selectedVersion ?? ''}
+          onClose={() => setShowAppearance(false)}
+        />
+      )}
+
       {/* Search bar */}
       <div className="flex items-center gap-3 border-b border-slate-700 px-4 py-2">
         <div className="relative max-w-md flex-1">
@@ -312,6 +333,15 @@ export default function Bible() {
         >
           <Keyboard className="h-3.5 w-3.5" />
           Escribí para buscar
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowAppearance(true)}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-700"
+          title="Fuente, tamaño, color y fondo de los versículos proyectados"
+        >
+          <Palette className="h-3.5 w-3.5" />
+          Apariencia
         </button>
         <div className="flex items-center gap-1">
           {versions.map((v) => {
