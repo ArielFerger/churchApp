@@ -33,6 +33,8 @@ interface Props {
   seekSignal?: { position: number; nonce: number } | null
   /** Called ~4×/sec while playing, plus on play/pause/seek, with current timing. */
   onPlayback?: (info: PlaybackInfo) => void
+  /** Called once when a non-loop video finishes (drives the play queue). */
+  onEnded?: () => void
 }
 
 const FADE_STEPS = 30
@@ -61,7 +63,8 @@ export default function MediaSlide({
   volume = 1,
   playing = true,
   seekSignal = null,
-  onPlayback
+  onPlayback,
+  onEnded
 }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const fadeHandle = useRef<number | null>(null)
@@ -185,6 +188,7 @@ export default function MediaSlide({
         onDurationChange={onPlayback ? report : undefined}
         onPlay={onPlayback ? report : undefined}
         onPause={onPlayback ? report : undefined}
+        onEnded={active && !loop ? onEnded : undefined}
       />
     )
   }

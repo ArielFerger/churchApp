@@ -41,6 +41,8 @@ export interface MediaPlaybackState {
   position: number
   duration: number
   playing: boolean
+  /** True exactly once when a (non-loop) video reaches its end — drives the queue. */
+  ended?: boolean
 }
 
 export interface DisplayInfo {
@@ -55,6 +57,8 @@ export interface AppSettings {
   mediaFolder: string | null
   audioFolder: string | null
   songsFolder: string | null
+  /** Carpeta exclusiva para los videos de loop de "En Vivo" (null = usa mediaFolder). */
+  liveLoopFolder: string | null
   /** Bible version (code, e.g. "RVR1909") the Bible page opens with. */
   defaultBibleVersion: string | null
   /** Fade video audio in (low→high) when a clip starts. */

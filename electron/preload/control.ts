@@ -9,7 +9,7 @@ import type {
 import type { MediaItem } from '../../src/shared/types/media'
 import type { Song, Album } from '../../src/shared/types/song'
 import type { BibleBook } from '../../src/shared/types/bible'
-import type { AudioTrack } from '../../src/shared/types/audio'
+import type { AudioTrack, AudioPlaylist } from '../../src/shared/types/audio'
 
 contextBridge.exposeInMainWorld('electronAPI', {
   sendProjectionCommand: (cmd: ProjectionCommand) =>
@@ -33,6 +33,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: Electron.IpcRendererEvent, items: MediaItem[]) => callback(items)
     ipcRenderer.on(IPC_CHANNELS.MEDIA_UPDATED, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.MEDIA_UPDATED, handler)
+  },
+
+  getLiveMedia: (): Promise<MediaItem[]> => ipcRenderer.invoke(IPC_CHANNELS.GET_LIVE_MEDIA),
+
+  onLiveMediaUpdated: (callback: (items: MediaItem[]) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, items: MediaItem[]) => callback(items)
+    ipcRenderer.on(IPC_CHANNELS.LIVE_MEDIA_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.LIVE_MEDIA_UPDATED, handler)
   },
 
   onProjectionState: (callback: (cmd: ProjectionCommand) => void) => {
@@ -81,6 +89,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getBibleBooks: (version: string): Promise<BibleBook[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.GET_BIBLE_BOOKS, version),
 
+  getBibleBookStats: (version: string): Promise<Record<string, number[]>> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_BIBLE_BOOK_STATS, version),
+
   lookupVerse: (req: {
     version: string
     bookId: string
@@ -101,6 +112,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   setAudioState: (partial: { lastTrackId?: string | null; position?: number; volume?: number }) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_AUDIO_STATE, partial),
+
+  getAudioPlaylists: (): Promise<AudioPlaylist[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_AUDIO_PLAYLISTS),
+
+  saveAudioPlaylist: (input: {
+    id?: string
+    name: string
+    trackIds?: string[]
+  }): Promise<AudioPlaylist[]> => ipcRenderer.invoke(IPC_CHANNELS.SAVE_AUDIO_PLAYLIST, input),
+
+  deleteAudioPlaylist: (id: string): Promise<AudioPlaylist[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DELETE_AUDIO_PLAYLIST, id),
 
   onShortcut: (callback: (key: string) => void) => {
     const handler = (_: Electron.IpcRendererEvent, key: string) => callback(key)

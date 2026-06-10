@@ -18,6 +18,14 @@ contextBridge.exposeInMainWorld('projectionAPI', {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.MEDIA_UPDATED, handler)
   },
 
+  getLiveMedia: (): Promise<MediaItem[]> => ipcRenderer.invoke(IPC_CHANNELS.GET_LIVE_MEDIA),
+
+  onLiveMediaUpdated: (callback: (items: MediaItem[]) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, items: MediaItem[]) => callback(items)
+    ipcRenderer.on(IPC_CHANNELS.LIVE_MEDIA_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.LIVE_MEDIA_UPDATED, handler)
+  },
+
   /** Report current video playback state up to the control window. */
   emitPlaybackState: (state: MediaPlaybackState) =>
     ipcRenderer.send(IPC_CHANNELS.MEDIA_PLAYBACK_STATE, state)

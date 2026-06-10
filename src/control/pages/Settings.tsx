@@ -3,12 +3,20 @@ import { Monitor, RefreshCw, Folder, FolderOpen, X, Volume2, TrendingUp, Trendin
 import { useSettingsStore } from '@/shared/store/settingsStore'
 import type { AppSettings } from '@/shared/types/ipc'
 
-type FolderKey = Extract<keyof AppSettings, 'mediaFolder' | 'audioFolder' | 'songsFolder'>
+type FolderKey = Extract<
+  keyof AppSettings,
+  'mediaFolder' | 'audioFolder' | 'songsFolder' | 'liveLoopFolder'
+>
 
-const folderRows: { key: FolderKey; label: string; phase: string }[] = [
-  { key: 'mediaFolder', label: 'Imágenes / videos / GIFs', phase: 'Fase 2' },
-  { key: 'audioFolder', label: 'Música', phase: 'Fase 5' },
-  { key: 'songsFolder', label: 'Canciones', phase: 'Fase 3' }
+const folderRows: { key: FolderKey; label: string; hint?: string }[] = [
+  { key: 'mediaFolder', label: 'Imágenes / videos / GIFs' },
+  {
+    key: 'liveLoopFolder',
+    label: 'Videos de loop (En Vivo)',
+    hint: 'Carpeta aparte para los fondos en loop de "En Vivo". Admite subcarpetas. Si no se configura, se usa la carpeta de media.'
+  },
+  { key: 'audioFolder', label: 'Música' },
+  { key: 'songsFolder', label: 'Canciones' }
 ]
 
 export default function Settings() {
@@ -153,12 +161,10 @@ export default function Settings() {
                 >
                   <FolderOpen className="h-4 w-4 shrink-0 text-slate-500" />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-slate-200">{row.label}</span>
-                      <span className="rounded bg-slate-700 px-1.5 py-0.5 text-[10px] text-slate-400">
-                        {row.phase}
-                      </span>
-                    </div>
+                    <span className="text-sm font-medium text-slate-200">{row.label}</span>
+                    {row.hint && (
+                      <p className="mt-0.5 text-xs leading-snug text-slate-500">{row.hint}</p>
+                    )}
                     <p className="mt-0.5 truncate font-mono text-xs text-slate-500">
                       {value ?? 'no configurada'}
                     </p>
@@ -226,9 +232,11 @@ function ToggleRow({
             checked ? 'bg-blue-600' : 'bg-slate-600'
           }`}
         >
+          {/* left-0.5 ancla el knob: sin left explícito hereda la posición
+              centrada del botón y queda descolocado / se sale del riel. */}
           <span
-            className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
-              checked ? 'translate-x-4' : 'translate-x-0.5'
+            className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
+              checked ? 'translate-x-4' : 'translate-x-0'
             }`}
           />
         </button>

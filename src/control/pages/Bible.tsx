@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, BookOpen, Eye, Star, History, X, Keyboard } from 'lucide-react'
-import { BIBLE_BOOKS, bookById, type BookMeta } from '@/shared/utils/bibleBooks'
+import { Search, BookOpen, Eye, Star, History, X, Keyboard, AlertCircle } from 'lucide-react'
+import { BIBLE_BOOKS, bookById, findBook, type BookMeta } from '@/shared/utils/bibleBooks'
 import { parseReference } from '@/shared/utils/bibleParser'
 import { useSettingsStore } from '@/shared/store/settingsStore'
 import {
@@ -11,6 +11,7 @@ import {
 import QuickRefPalette, { type QuickRef } from '@/control/components/bible/QuickRefPalette'
 import type { ProjectionCommand } from '@/shared/types/ipc'
 import type {
+  BibleBookStats,
   BibleLookupResult,
   BibleVersionSummary
 } from '@/shared/types/electronAPI'
@@ -26,6 +27,10 @@ export default function Bible() {
   const [selectedChapter, setSelectedChapter] = useState<number>(3)
   const [search, setSearch] = useState('')
   const [searchHits, setSearchHits] = useState<BibleLookupResult[] | null>(null)
+  // Aviso de referencia inválida (capítulo o versículo inexistente).
+  const [searchNotice, setSearchNotice] = useState<string | null>(null)
+  // Versículos por capítulo de la versión activa, para validar referencias.
+  const [bookStats, setBookStats] = useState<BibleBookStats | null>(null)
   const [verses, setVerses] = useState<{ number: number; text: string }[]>([])
   const [chosenVerse, setChosenVerse] = useState<number | null>(null)
   // Verse number to scroll into view once the chapter has loaded (set when we
@@ -56,6 +61,18 @@ export default function Bible() {
   useEffect(() => {
     if (!settingsLoaded) void loadSettings()
   }, [settingsLoaded, loadSettings])
+
+  // Límites reales (capítulos/versículos) de la versión activa.
+  useEffect(() => {
+    if (!selectedVersion) return
+    let alive = true
+    void window.electronAPI?.getBibleBookStats(selectedVersion).then((s) => {
+      if (alive) setBookStats(s)
+    })
+    return () => {
+      alive = false
+    }
+  }, [selectedVersion])
 
   // Pick the initial version once versions and saved settings are available:
   // the saved default if present, otherwise the first one.
@@ -142,11 +159,40 @@ export default function Bible() {
     if (next) setSelectedVersion(next)
   }
 
+  /**
+   * Si la referencia menciona un libro válido pero un capítulo/versículo que
+   * no existe, devuelve un mensaje explicando el rango disponible.
+   */
+  function invalidRefNotice(raw: string): string | null {
+    const m =
+      /^(?<book>(?:[1-3]\s*)?[A-Za-zÁÉÍÓÚÜÑáéíóúüñ.\s]+?)\s+(?<chapter>\d{1,3})(?::(?<verse>\d{1,3}))?/u.exec(
+        raw.trim()
+      )
+    if (!m || !m.groups) return null
+    const book = findBook(m.groups.book.replace(/\s+/g, ''))
+    if (!book) return null
+    const chapter = parseInt(m.groups.chapter, 10)
+    const maxChapter = bookStats?.[book.id]?.length ?? book.chapters
+    if (chapter < 1 || chapter > maxChapter) {
+      return `${book.name} tiene ${maxChapter} capítulos — el capítulo ${chapter} no existe.`
+    }
+    if (m.groups.verse) {
+      const verse = parseInt(m.groups.verse, 10)
+      const maxVerse = bookStats?.[book.id]?.[chapter - 1]
+      if (maxVerse && (verse < 1 || verse > maxVerse)) {
+        return `${book.name} ${chapter} tiene ${maxVerse} versículos — el versículo ${verse} no existe.`
+      }
+    }
+    return null
+  }
+
   async function runSearch(raw: string): Promise<void> {
     setSearch(raw)
     const parsed = parseReference(raw)
     if (!parsed || !selectedVersion) {
       setSearchHits(null)
+      // parseReference rechaza capítulos fuera de rango: avisar por qué.
+      setSearchNotice(raw.trim() ? invalidRefNotice(raw) : null)
       return
     }
     // Query the selected version + every other available version too, so the
@@ -164,7 +210,10 @@ export default function Bible() {
         })
       )
     )
-    setSearchHits(results.filter((r): r is BibleLookupResult => r !== null))
+    const hits = results.filter((r): r is BibleLookupResult => r !== null)
+    setSearchHits(hits)
+    // Referencia bien formada pero sin resultados → el versículo no existe.
+    setSearchNotice(hits.length === 0 ? (invalidRefNotice(raw) ?? 'Esa referencia no existe en las versiones cargadas.') : null)
     // Also focus the picker on the parsed location.
     setSelectedBookId(parsed.book.id)
     setSelectedChapter(parsed.chapter)
@@ -269,9 +318,11 @@ export default function Bible() {
             const isActive = v.version === selectedVersion
             const isDefault = v.version === defaultVersion
             return (
+              // items-stretch: ambos segmentos de la píldora con la misma altura
+              // (con items-center el botón de la estrella quedaba más bajo).
               <div
                 key={v.version}
-                className={`flex items-center overflow-hidden rounded ${
+                className={`flex items-stretch overflow-hidden rounded ${
                   isActive ? 'ring-1 ring-blue-500' : ''
                 }`}
               >
@@ -290,7 +341,7 @@ export default function Bible() {
                 <button
                   type="button"
                   onClick={() => setDefaultVersion(v.version)}
-                  className={`px-1.5 py-1 transition-colors ${
+                  className={`flex items-center px-1.5 transition-colors ${
                     isActive ? 'bg-blue-600' : 'bg-slate-800 hover:bg-slate-700'
                   }`}
                   title={
@@ -300,7 +351,7 @@ export default function Bible() {
                   }
                 >
                   <Star
-                    className={`h-3 w-3 ${
+                    className={`h-3.5 w-3.5 ${
                       isDefault ? 'fill-yellow-400 text-yellow-400' : 'text-slate-500'
                     }`}
                   />
@@ -310,6 +361,14 @@ export default function Bible() {
           })}
         </div>
       </div>
+
+      {/* Aviso de referencia inválida (capítulo/versículo inexistente) */}
+      {searchNotice && (
+        <div className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-300">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+          {searchNotice}
+        </div>
+      )}
 
       {/* Recent verses */}
       {history.length > 0 && (
@@ -417,7 +476,11 @@ export default function Bible() {
             </p>
             <div className="grid grid-cols-5 gap-1">
               {book &&
-                Array.from({ length: book.chapters }, (_, i) => i + 1).map((c) => {
+                Array.from(
+                  // Capítulos reales de la versión cargada (la metadata como respaldo).
+                  { length: bookStats?.[book.id]?.length ?? book.chapters },
+                  (_, i) => i + 1
+                ).map((c) => {
                   const isActive = c === selectedChapter
                   return (
                     <button

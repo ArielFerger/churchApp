@@ -9,6 +9,13 @@ interface LibraryState {
   setMedia: (items: MediaItem[]) => void
   subscribeMedia: () => () => void
 
+  /** Items de la carpeta exclusiva de loops "En Vivo" (vacío si no está configurada). */
+  liveMedia: MediaItem[]
+  liveMediaLoaded: boolean
+  loadLiveMedia: () => Promise<void>
+  setLiveMedia: (items: MediaItem[]) => void
+  subscribeLiveMedia: () => () => void
+
   songs: Song[]
   songsLoaded: boolean
   loadSongs: () => Promise<void>
@@ -46,6 +53,28 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     const api = window.electronAPI
     if (!api) return () => {}
     return api.onMediaUpdated((items) => get().setMedia(items))
+  },
+
+  // ─── Live loop media (carpeta aparte para "En Vivo") ───────────────────
+  liveMedia: [],
+  liveMediaLoaded: false,
+
+  loadLiveMedia: async () => {
+    const api = window.electronAPI
+    if (!api) {
+      set({ liveMedia: [], liveMediaLoaded: true })
+      return
+    }
+    const items = await api.getLiveMedia()
+    set({ liveMedia: items, liveMediaLoaded: true })
+  },
+
+  setLiveMedia: (items) => set({ liveMedia: items, liveMediaLoaded: true }),
+
+  subscribeLiveMedia: () => {
+    const api = window.electronAPI
+    if (!api) return () => {}
+    return api.onLiveMediaUpdated((items) => get().setLiveMedia(items))
   },
 
   // ─── Songs ─────────────────────────────────────────────────────────────

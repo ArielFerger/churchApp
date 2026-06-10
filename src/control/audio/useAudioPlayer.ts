@@ -24,11 +24,25 @@ export function useAudioPlayer(): void {
     return api.onAudioUpdated(setLibrary)
   }, [setLibrary])
 
-  // Auto-advance: when a track ends naturally, play the next queued track.
+  // Auto-advance: when a track ends naturally, play the next queued track,
+  // or the next one in the active playlist context (stopping at its end).
   useEffect(() => {
     return audioEngine.onEnded(() => {
-      const next = useAudioStore.getState().consumeQueue()
-      if (next) void audioEngine.play(next, 0)
+      const s = useAudioStore.getState()
+      const next = s.consumeQueue()
+      if (next) {
+        void audioEngine.play(next, 0)
+        return
+      }
+      if (s.playContextIds) {
+        const order = s.playContextIds
+          .map((id) => s.library.find((t) => t.id === id))
+          .filter((t): t is NonNullable<typeof t> => Boolean(t))
+        const idx = order.findIndex((t) => t.id === s.currentTrackId)
+        if (idx !== -1 && idx + 1 < order.length) {
+          void audioEngine.play(order[idx + 1], 0)
+        }
+      }
     })
   }, [])
 

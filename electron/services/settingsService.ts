@@ -6,6 +6,7 @@ const defaults: AppSettings = {
   mediaFolder: null,
   audioFolder: null,
   songsFolder: null,
+  liveLoopFolder: null,
   defaultBibleVersion: null,
   videoFadeIn: true,
   videoFadeOut: false,
@@ -23,12 +24,13 @@ const store = new Store<Schema>({
 })
 
 export function getSettings(): AppSettings {
-  return store.get('settings')
+  // Merge sobre defaults: settings guardados por versiones viejas pueden no
+  // tener las claves nuevas (p. ej. liveLoopFolder).
+  return { ...defaults, ...store.get('settings') }
 }
 
 export function updateSettings(partial: Partial<AppSettings>): AppSettings {
-  const current = store.get('settings')
-  const next = { ...current, ...partial }
+  const next = { ...getSettings(), ...partial }
   store.set('settings', next)
   return next
 }

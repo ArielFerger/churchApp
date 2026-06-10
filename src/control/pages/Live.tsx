@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Eye,
   Wallpaper,
@@ -7,11 +7,21 @@ import {
   Repeat,
   Images,
   Play,
-  Square
+  Square,
+  Folder,
+  ChevronRight,
+  Home
 } from 'lucide-react'
 import { useLiveStore } from '@/shared/store/liveStore'
 import { useLibraryStore } from '@/shared/store/libraryStore'
 import { useLiveControlsStore } from '@/shared/store/liveControlsStore'
+import { useSettingsStore } from '@/shared/store/settingsStore'
+import {
+  itemsInFolder,
+  childFolders,
+  countInFolder,
+  breadcrumbSegments
+} from '@/shared/utils/mediaFolders'
 import type { ProjectionCommand } from '@/shared/types/ipc'
 import type { MediaItem } from '@/shared/types/media'
 
@@ -21,7 +31,17 @@ function send(cmd: ProjectionCommand) {
 
 export default function Live() {
   const { lastCommand } = useLiveStore()
-  const { media, mediaLoaded, loadMedia, subscribeMedia } = useLibraryStore()
+  const {
+    media,
+    mediaLoaded,
+    loadMedia,
+    subscribeMedia,
+    liveMedia,
+    liveMediaLoaded,
+    loadLiveMedia,
+    subscribeLiveMedia
+  } = useLibraryStore()
+  const { settings, loaded: settingsLoaded, load: loadSettings } = useSettingsStore()
   const {
     testSlideText,
     setTestSlideText,
@@ -37,21 +57,54 @@ export default function Live() {
     setSlideshowActive
   } = useLiveControlsStore()
 
+  // Carpeta actual dentro del picker de fondo ('' = raíz).
+  const [bgPath, setBgPath] = useState('')
+
   useEffect(() => {
     void loadMedia()
-    const unsub = subscribeMedia()
-    return unsub
-  }, [loadMedia, subscribeMedia])
+    void loadLiveMedia()
+    const unsubMedia = subscribeMedia()
+    const unsubLive = subscribeLiveMedia()
+    return () => {
+      unsubMedia()
+      unsubLive()
+    }
+  }, [loadMedia, subscribeMedia, loadLiveMedia, subscribeLiveMedia])
+
+  useEffect(() => {
+    if (!settingsLoaded) void loadSettings()
+  }, [settingsLoaded, loadSettings])
+
+  // Fuente del fondo en loop: la carpeta dedicada (si está configurada en
+  // Ajustes) o, como antes, la carpeta general de media.
+  const hasLiveFolder = Boolean(settings?.liveLoopFolder)
+  const bgSource = hasLiveFolder ? liveMedia : media
+  const bgSourceLoaded = hasLiveFolder ? liveMediaLoaded : mediaLoaded
+
+  // Si cambia la fuente o la carpeta actual ya no existe, volver a la raíz.
+  useEffect(() => {
+    setBgPath('')
+  }, [hasLiveFolder])
+  useEffect(() => {
+    if (
+      bgPath &&
+      itemsInFolder(bgSource, bgPath).length === 0 &&
+      childFolders(bgSource, bgPath).length === 0
+    ) {
+      setBgPath('')
+    }
+  }, [bgSource, bgPath])
 
   // Videos first (most useful as looping backgrounds), then images/gifs.
   const bgCandidates = useMemo(
     () =>
-      [...media].sort((a, b) => {
+      itemsInFolder(bgSource, bgPath).sort((a, b) => {
         const rank = (m: MediaItem) => (m.type === 'video' ? 0 : 1)
         return rank(a) - rank(b)
       }),
-    [media]
+    [bgSource, bgPath]
   )
+  const bgFolders = useMemo(() => childFolders(bgSource, bgPath), [bgSource, bgPath])
 
   // Images / gifs available for the slideshow.
   const slideshowCandidates = useMemo(
@@ -155,16 +208,85 @@ export default function Live() {
           </div>
           <p className="mt-1 text-xs text-slate-500">
             Un video o imagen fijo. Los videos se repiten en loop detrás del contenido.
+            {hasLiveFolder ? (
+              <>
+                {' '}
+                Fuente:{' '}
+                <span className="font-mono text-slate-400">{settings?.liveLoopFolder}</span>
+              </>
+            ) : (
+              <> Fuente: carpeta de media (podés asignar una carpeta aparte en Ajustes).</>
+            )}
           </p>
 
-          {!mediaLoaded ? (
+          {/* Breadcrumb de subcarpetas */}
+          {(bgPath || bgFolders.length > 0) && (
+            <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setBgPath('')}
+                className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 ${
+                  bgPath
+                    ? 'text-slate-400 hover:bg-slate-700 hover:text-white'
+                    : 'font-medium text-slate-200'
+                }`}
+                title="Raíz"
+              >
+                <Home className="h-3 w-3" />
+                Raíz
+              </button>
+              {breadcrumbSegments(bgPath).map((seg, i, arr) => (
+                <span key={seg.path} className="flex items-center gap-1">
+                  <ChevronRight className="h-3 w-3 text-slate-600" />
+                  {i === arr.length - 1 ? (
+                    <span className="px-1 font-medium text-slate-200">{seg.name}</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setBgPath(seg.path)}
+                      className="rounded px-1 py-0.5 text-slate-400 hover:bg-slate-700 hover:text-white"
+                    >
+                      {seg.name}
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {!bgSourceLoaded ? (
             <p className="mt-3 text-xs text-slate-500">Cargando media…</p>
-          ) : bgCandidates.length === 0 ? (
+          ) : bgCandidates.length === 0 && bgFolders.length === 0 ? (
             <p className="mt-3 text-xs text-slate-500">
-              No hay media. Configurá la carpeta en Ajustes.
+              {hasLiveFolder
+                ? 'No hay videos en la carpeta de loops. Agregá archivos o cambiala en Ajustes.'
+                : 'No hay media. Configurá la carpeta en Ajustes.'}
             </p>
           ) : (
             <ul className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
+              {bgFolders.map((name) => {
+                const folderPath = bgPath ? `${bgPath}/${name}` : name
+                return (
+                  <li key={`folder-${name}`}>
+                    <button
+                      type="button"
+                      onClick={() => setBgPath(folderPath)}
+                      className="group relative block w-full overflow-hidden rounded-md border border-slate-700 bg-slate-800/60 text-left transition-colors hover:border-amber-500/60"
+                      title={`Abrir carpeta "${name}"`}
+                    >
+                      <div className="flex aspect-video flex-col items-center justify-center gap-1">
+                        <Folder className="h-7 w-7 text-amber-400/80 transition-transform group-hover:scale-110" />
+                        <span className="max-w-full truncate px-1 text-[10px] text-slate-300">
+                          {name}
+                        </span>
+                      </div>
+                      <span className="absolute right-1 top-1 rounded bg-amber-500/20 px-1 text-[9px] font-medium text-amber-300">
+                        {countInFolder(bgSource, folderPath)}
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
               {bgCandidates.map((item) => (
                 <li key={item.id}>
                   <button
