@@ -9,7 +9,7 @@ import { registerSongsHandlers } from './ipc/songs'
 import { registerBibleHandlers } from './ipc/bible'
 import { registerAudioHandlers } from './ipc/audio'
 import { getSettings } from './services/settingsService'
-import { mediaScanner, liveMediaScanner } from './services/mediaScanner'
+import { mediaScanner, liveMediaScanner, bibleMediaScanner } from './services/mediaScanner'
 import { songsService } from './services/songsService'
 import { bibleService } from './services/bibleService'
 import { audioScanner } from './services/audioScanner'
@@ -21,6 +21,12 @@ import {
   registerAudioSchemeAsPrivileged,
   registerAudioProtocolHandler
 } from './services/audioProtocol'
+import {
+  registerFontSchemeAsPrivileged,
+  registerFontProtocolHandler
+} from './services/fontProtocol'
+import { registerFontsHandlers } from './ipc/fonts'
+import { IPC_CHANNELS } from '../src/shared/constants'
 import log from 'electron-log'
 
 log.initialize()
@@ -28,6 +34,7 @@ log.initialize()
 // MUST run before app is ready.
 registerMediaSchemeAsPrivileged()
 registerAudioSchemeAsPrivileged()
+registerFontSchemeAsPrivileged()
 
 let controlWindow: BrowserWindow | null = null
 let projectionWindow: BrowserWindow | null = null
@@ -35,6 +42,7 @@ let projectionWindow: BrowserWindow | null = null
 app.whenReady().then(async () => {
   registerMediaProtocolHandler()
   registerAudioProtocolHandler()
+  registerFontProtocolHandler()
 
   const settings = getSettings()
 
@@ -49,8 +57,13 @@ app.whenReady().then(async () => {
   registerBibleHandlers()
   void bibleService.init()
   registerAudioHandlers(controlWindow)
+  registerFontsHandlers(controlWindow, projectionWindow)
 
   registerSettingsHandlers((next, prev) => {
+    // La proyección refleja en vivo los cambios de apariencia de versículos.
+    if (projectionWindow && !projectionWindow.isDestroyed()) {
+      projectionWindow.webContents.send(IPC_CHANNELS.SETTINGS_UPDATED, next)
+    }
     if (
       next.projectionDisplayId !== prev.projectionDisplayId &&
       next.projectionDisplayId !== null
@@ -69,6 +82,11 @@ app.whenReady().then(async () => {
         log.error('liveMediaScanner.setFolder failed', err)
       })
     }
+    if (next.bibleBackgroundsFolder !== prev.bibleBackgroundsFolder) {
+      void bibleMediaScanner.setFolder(next.bibleBackgroundsFolder).catch((err) => {
+        log.error('bibleMediaScanner.setFolder failed', err)
+      })
+    }
     if (next.audioFolder !== prev.audioFolder) {
       void audioScanner.setFolder(next.audioFolder).catch((err) => {
         log.error('audioScanner.setFolder failed', err)
@@ -85,6 +103,11 @@ app.whenReady().then(async () => {
   if (settings.liveLoopFolder) {
     void liveMediaScanner.setFolder(settings.liveLoopFolder).catch((err) => {
       log.error('liveMediaScanner initial scan failed', err)
+    })
+  }
+  if (settings.bibleBackgroundsFolder) {
+    void bibleMediaScanner.setFolder(settings.bibleBackgroundsFolder).catch((err) => {
+      log.error('bibleMediaScanner initial scan failed', err)
     })
   }
   if (settings.audioFolder) {
@@ -107,6 +130,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   void mediaScanner.dispose()
   void liveMediaScanner.dispose()
+  void bibleMediaScanner.dispose()
   void audioScanner.dispose()
   void songsService.dispose()
 })

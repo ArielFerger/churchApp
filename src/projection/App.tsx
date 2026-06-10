@@ -2,9 +2,11 @@ import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import BackgroundLayer from './components/BackgroundLayer'
 import ContentLayer from './components/ContentLayer'
 import OverlayLayer from './components/OverlayLayer'
+import { syncFontFaces } from '@/shared/utils/fontLoader'
 import type { PlaybackInfo } from './components/MediaSlide'
-import type { ProjectionCommand } from '@/shared/types/ipc'
+import type { ProjectionCommand, AppSettings } from '@/shared/types/ipc'
 import type { MediaItem } from '@/shared/types/media'
+import type { BibleFont } from '@/shared/types/fonts'
 
 interface ProjectionState {
   backgroundMediaId: string | null
@@ -112,9 +114,13 @@ function dedupe(arr: string[]): string[] {
 
 export default function ProjectionApp() {
   const [state, dispatch] = useReducer(reducer, initialState)
-  // Two indexes: general media folder + dedicated "En Vivo" loop folder.
+  // Three indexes: general media + "En Vivo" loops + Bible verse backgrounds.
   const [generalMedia, setGeneralMedia] = useState<Map<string, MediaItem>>(new Map())
   const [liveMedia, setLiveMedia] = useState<Map<string, MediaItem>>(new Map())
+  const [bibleMedia, setBibleMedia] = useState<Map<string, MediaItem>>(new Map())
+  // Apariencia de versículos: settings + fuentes subidas, actualizados en vivo.
+  const [settings, setSettings] = useState<AppSettings | null>(null)
+  const [fonts, setFonts] = useState<BibleFont[]>([])
   const lastEmit = useRef(0)
 
   useEffect(() => {
@@ -124,20 +130,34 @@ export default function ProjectionApp() {
     // Hydrate the media indexes on startup + on every scanner change.
     void api.getMedia().then((items) => setGeneralMedia(toMap(items)))
     void api.getLiveMedia?.().then((items) => setLiveMedia(toMap(items)))
+    void api.getBibleMedia?.().then((items) => setBibleMedia(toMap(items)))
     const unsubMedia = api.onMediaUpdated((items) => setGeneralMedia(toMap(items)))
     const unsubLive = api.onLiveMediaUpdated?.((items) => setLiveMedia(toMap(items)))
+    const unsubBibleMedia = api.onBibleMediaUpdated?.((items) => setBibleMedia(toMap(items)))
     const unsubCmd = api.onCommand(dispatch)
+    void api.getSettings?.().then(setSettings)
+    const unsubSettings = api.onSettingsUpdated?.(setSettings)
+    void api.getBibleFonts?.().then(setFonts)
+    const unsubFonts = api.onBibleFontsUpdated?.(setFonts)
 
     return () => {
       unsubMedia()
       unsubLive?.()
+      unsubBibleMedia?.()
       unsubCmd()
+      unsubSettings?.()
+      unsubFonts?.()
     }
   }, [])
 
+  // Registrar las fuentes subidas como FontFace (appfont://).
+  useEffect(() => {
+    syncFontFaces(fonts)
+  }, [fonts])
+
   const mediaById = useMemo(
-    () => new Map([...generalMedia, ...liveMedia]),
-    [generalMedia, liveMedia]
+    () => new Map([...generalMedia, ...liveMedia, ...bibleMedia]),
+    [generalMedia, liveMedia, bibleMedia]
   )
 
   const backgroundItems: MediaItem[] = state.backgroundSlideshow
@@ -152,6 +172,15 @@ export default function ProjectionApp() {
 
   const currentMediaItem =
     state.content?.type === 'showMedia' ? (mediaById.get(state.content.mediaId) ?? null) : null
+
+  // Apariencia de versículos: fondo elegido + familia de la fuente subida.
+  const bibleDisplay = settings?.bibleDisplay ?? null
+  const bibleBackgroundItem = bibleDisplay?.backgroundId
+    ? (mediaById.get(bibleDisplay.backgroundId) ?? null)
+    : null
+  const bibleFontFamily = bibleDisplay?.fontId
+    ? (fonts.find((f) => f.id === bibleDisplay.fontId)?.family ?? null)
+    : null
 
   // When there's no live video, tell control to hide the scrubber.
   const liveVideoId = currentMediaItem?.type === 'video' ? currentMediaItem.id : null
@@ -208,6 +237,9 @@ export default function ProjectionApp() {
         mediaVolume={state.mediaVolume}
         onMediaPlayback={handlePlayback}
         onMediaEnded={handleEnded}
+        bibleDisplay={bibleDisplay}
+        bibleFontFamily={bibleFontFamily}
+        bibleBackgroundItem={bibleBackgroundItem}
       />
       <OverlayLayer isBlackout={state.isBlackout} showLogo={state.showLogo} />
     </div>

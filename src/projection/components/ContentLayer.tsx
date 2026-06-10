@@ -1,6 +1,10 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import MediaSlide, { type PlaybackInfo } from './MediaSlide'
-import type { ProjectionCommand, SlideContent } from '@/shared/types/ipc'
+import type {
+  ProjectionCommand,
+  SlideContent,
+  BibleDisplaySettings
+} from '@/shared/types/ipc'
 import type { MediaItem } from '@/shared/types/media'
 
 interface Props {
@@ -21,6 +25,12 @@ interface Props {
   onMediaPlayback: (info: PlaybackInfo) => void
   /** Fired once when the active (non-loop) video ends — drives the queue. Passes its duration. */
   onMediaEnded: (durationSec: number) => void
+  /** Apariencia de versículos (fuente, tamaño, color, sombra, dim). */
+  bibleDisplay: BibleDisplaySettings | null
+  /** Familia CSS de la fuente subida elegida (null = fuente por defecto). */
+  bibleFontFamily: string | null
+  /** Fondo elegido para los versículos, ya resuelto a un MediaItem. */
+  bibleBackgroundItem: MediaItem | null
 }
 
 /**
@@ -40,11 +50,15 @@ export default function ContentLayer({
   mediaPlaying,
   mediaVolume,
   onMediaPlayback,
-  onMediaEnded
+  onMediaEnded,
+  bibleDisplay,
+  bibleFontFamily,
+  bibleBackgroundItem
 }: Props) {
   const mediaCmd = current?.type === 'showMedia' ? current : null
   const textCmd =
     current?.type === 'showSlide' || current?.type === 'showBibleVerse' ? current : null
+  const isVerse = textCmd?.type === 'showBibleVerse'
 
   return (
     <div className="absolute inset-0 z-20 flex items-center justify-center">
@@ -54,6 +68,27 @@ export default function ContentLayer({
           <MediaSlide key={`preload-${item.id}`} item={item} active={false} />
         ))}
       </div>
+
+      {/* Fondo de versículos: se monta mientras haya un versículo en pantalla
+          (clave fija para que cambiar de versículo no lo re-fadee). */}
+      <AnimatePresence>
+        {isVerse && bibleBackgroundItem && (
+          <motion.div
+            key="bible-bg"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.6, ease: 'easeInOut' }}
+            className="absolute inset-0"
+          >
+            <MediaSlide item={bibleBackgroundItem} active loop muted fit="cover" />
+            <div
+              className="absolute inset-0"
+              style={{ backgroundColor: `rgba(0,0,0,${bibleDisplay?.backgroundDim ?? 0.35})` }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Media layer — crossfades between clips */}
       <AnimatePresence>
@@ -98,6 +133,8 @@ export default function ContentLayer({
                 reference={textCmd.reference}
                 text={textCmd.text}
                 version={textCmd.version}
+                display={bibleDisplay}
+                fontFamily={bibleFontFamily}
               />
             )}
           </FadeBlock>
@@ -120,7 +157,9 @@ function FadeBlock({ children }: { children: React.ReactNode }) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className="px-16 text-center"
+      // relative z-10: el texto debe pintarse SOBRE el fondo de versículos
+      // (absoluto) — sin esto, el fondo lo tapa por orden de pintado CSS.
+      className="relative z-10 px-16 text-center"
     >
       {children}
     </motion.div>
@@ -176,22 +215,47 @@ function SlideBlock({ content }: { content: SlideContent }) {
 function VerseBlock({
   reference,
   text,
-  version
+  version,
+  display,
+  fontFamily
 }: {
   reference: string
   text: string
   version: string
+  display: BibleDisplaySettings | null
+  fontFamily: string | null
 }) {
+  // Tamaños base (los actuales): texto 48px, referencia 24px — escalados por
+  // el porcentaje configurado. La referencia hereda el color al 75%.
+  const pct = (display?.fontSizePct ?? 100) / 100
+  const color = display?.textColor ?? '#ffffff'
+  const family = fontFamily ? `"${fontFamily}", Inter, system-ui, sans-serif` : undefined
+  const shadow = (display?.textShadow ?? true) ? '0 4px 16px rgba(0,0,0,0.85)' : 'none'
   return (
     <div className="space-y-8">
       <p
-        className="font-display text-5xl leading-snug text-white"
-        style={{ textShadow: '0 4px 16px rgba(0,0,0,0.85)' }}
+        className="font-display leading-snug"
+        style={{
+          fontSize: `${48 * pct}px`,
+          color,
+          fontFamily: family,
+          fontWeight: display?.bold ? 700 : undefined,
+          textShadow: shadow
+        }}
       >
         {text}
       </p>
-      <p className="text-2xl font-medium text-slate-300">
-        {reference} <span className="text-slate-500">· {version}</span>
+      <p
+        className="font-medium"
+        style={{
+          fontSize: `${Math.max(16, 24 * pct)}px`,
+          color,
+          opacity: 0.75,
+          fontFamily: family,
+          textShadow: shadow === 'none' ? undefined : '0 2px 8px rgba(0,0,0,0.7)'
+        }}
+      >
+        {reference} <span style={{ opacity: 0.7 }}>· {version}</span>
       </p>
     </div>
   )

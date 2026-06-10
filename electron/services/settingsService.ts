@@ -1,5 +1,5 @@
 import Store from 'electron-store'
-import type { AppSettings } from '../../src/shared/types/ipc'
+import { DEFAULT_BIBLE_DISPLAY, type AppSettings } from '../../src/shared/types/ipc'
 
 const defaults: AppSettings = {
   projectionDisplayId: null,
@@ -7,7 +7,9 @@ const defaults: AppSettings = {
   audioFolder: null,
   songsFolder: null,
   liveLoopFolder: null,
+  bibleBackgroundsFolder: null,
   defaultBibleVersion: null,
+  bibleDisplay: DEFAULT_BIBLE_DISPLAY,
   videoFadeIn: true,
   videoFadeOut: false,
   videoFadeInSec: 1,
@@ -25,8 +27,14 @@ const store = new Store<Schema>({
 
 export function getSettings(): AppSettings {
   // Merge sobre defaults: settings guardados por versiones viejas pueden no
-  // tener las claves nuevas (p. ej. liveLoopFolder).
-  return { ...defaults, ...store.get('settings') }
+  // tener las claves nuevas (p. ej. liveLoopFolder). bibleDisplay se mergea
+  // un nivel más adentro para que claves nuevas reciban su default.
+  const saved = store.get('settings')
+  return {
+    ...defaults,
+    ...saved,
+    bibleDisplay: { ...defaults.bibleDisplay, ...saved?.bibleDisplay }
+  }
 }
 
 export function updateSettings(partial: Partial<AppSettings>): AppSettings {

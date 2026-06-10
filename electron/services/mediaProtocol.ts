@@ -1,6 +1,6 @@
 import { protocol } from 'electron'
 import log from 'electron-log'
-import { mediaScanner, liveMediaScanner } from './mediaScanner'
+import { mediaScanner, liveMediaScanner, bibleMediaScanner } from './mediaScanner'
 import { serveFileWithRange } from './rangeFile'
 
 export const MEDIA_SCHEME = 'media'
@@ -35,8 +35,9 @@ export function registerMediaProtocolHandler(): void {
     try {
       const url = new URL(request.url)
       const id = url.hostname || url.pathname.replace(/^\/+/, '')
-      // Buscar en ambos índices: carpeta general y carpeta de loop "En Vivo".
-      const item = mediaScanner.getById(id) ?? liveMediaScanner.getById(id)
+      // Buscar en los tres índices: media general, loops "En Vivo" y fondos de Biblia.
+      const item =
+        mediaScanner.getById(id) ?? liveMediaScanner.getById(id) ?? bibleMediaScanner.getById(id)
       if (!item) {
         log.warn('media://: unknown id', id)
         return new Response('Not found', { status: 404 })

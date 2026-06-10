@@ -16,6 +16,13 @@ interface LibraryState {
   setLiveMedia: (items: MediaItem[]) => void
   subscribeLiveMedia: () => () => void
 
+  /** Items de la carpeta exclusiva de fondos de versículos (vacío si no está configurada). */
+  bibleMedia: MediaItem[]
+  bibleMediaLoaded: boolean
+  loadBibleMedia: () => Promise<void>
+  setBibleMedia: (items: MediaItem[]) => void
+  subscribeBibleMedia: () => () => void
+
   songs: Song[]
   songsLoaded: boolean
   loadSongs: () => Promise<void>
@@ -75,6 +82,28 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     const api = window.electronAPI
     if (!api) return () => {}
     return api.onLiveMediaUpdated((items) => get().setLiveMedia(items))
+  },
+
+  // ─── Bible backgrounds media (carpeta aparte para fondos de versículos) ─
+  bibleMedia: [],
+  bibleMediaLoaded: false,
+
+  loadBibleMedia: async () => {
+    const api = window.electronAPI
+    if (!api) {
+      set({ bibleMedia: [], bibleMediaLoaded: true })
+      return
+    }
+    const items = await api.getBibleMedia()
+    set({ bibleMedia: items, bibleMediaLoaded: true })
+  },
+
+  setBibleMedia: (items) => set({ bibleMedia: items, bibleMediaLoaded: true }),
+
+  subscribeBibleMedia: () => {
+    const api = window.electronAPI
+    if (!api) return () => {}
+    return api.onBibleMediaUpdated((items) => get().setBibleMedia(items))
   },
 
   // ─── Songs ─────────────────────────────────────────────────────────────

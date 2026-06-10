@@ -5,7 +5,7 @@ import type { AppSettings } from '@/shared/types/ipc'
 
 type FolderKey = Extract<
   keyof AppSettings,
-  'mediaFolder' | 'audioFolder' | 'songsFolder' | 'liveLoopFolder'
+  'mediaFolder' | 'audioFolder' | 'songsFolder' | 'liveLoopFolder' | 'bibleBackgroundsFolder'
 >
 
 const folderRows: { key: FolderKey; label: string; hint?: string }[] = [
@@ -14,6 +14,11 @@ const folderRows: { key: FolderKey; label: string; hint?: string }[] = [
     key: 'liveLoopFolder',
     label: 'Videos de loop (En Vivo)',
     hint: 'Carpeta aparte para los fondos en loop de "En Vivo". Admite subcarpetas. Si no se configura, se usa la carpeta de media.'
+  },
+  {
+    key: 'bibleBackgroundsFolder',
+    label: 'Fondos de Biblia',
+    hint: 'Carpeta aparte para los fondos de los versículos proyectados. Admite subcarpetas. Si no se configura, se usa la carpeta de media.'
   },
   { key: 'audioFolder', label: 'Música' },
   { key: 'songsFolder', label: 'Canciones' }

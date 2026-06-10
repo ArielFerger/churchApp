@@ -10,6 +10,7 @@ import type { MediaItem } from '../../src/shared/types/media'
 import type { Song, Album } from '../../src/shared/types/song'
 import type { BibleBook } from '../../src/shared/types/bible'
 import type { AudioTrack, AudioPlaylist } from '../../src/shared/types/audio'
+import type { BibleFont } from '../../src/shared/types/fonts'
 
 contextBridge.exposeInMainWorld('electronAPI', {
   sendProjectionCommand: (cmd: ProjectionCommand) =>
@@ -41,6 +42,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: Electron.IpcRendererEvent, items: MediaItem[]) => callback(items)
     ipcRenderer.on(IPC_CHANNELS.LIVE_MEDIA_UPDATED, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.LIVE_MEDIA_UPDATED, handler)
+  },
+
+  getBibleMedia: (): Promise<MediaItem[]> => ipcRenderer.invoke(IPC_CHANNELS.GET_BIBLE_MEDIA),
+
+  onBibleMediaUpdated: (callback: (items: MediaItem[]) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, items: MediaItem[]) => callback(items)
+    ipcRenderer.on(IPC_CHANNELS.BIBLE_MEDIA_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.BIBLE_MEDIA_UPDATED, handler)
   },
 
   onProjectionState: (callback: (cmd: ProjectionCommand) => void) => {
@@ -91,6 +100,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   getBibleBookStats: (version: string): Promise<Record<string, number[]>> =>
     ipcRenderer.invoke(IPC_CHANNELS.GET_BIBLE_BOOK_STATS, version),
+
+  getBibleFonts: (): Promise<BibleFont[]> => ipcRenderer.invoke(IPC_CHANNELS.GET_BIBLE_FONTS),
+
+  addBibleFonts: (filePaths: string[]): Promise<BibleFont[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_BIBLE_FONTS, filePaths),
+
+  deleteBibleFont: (id: string): Promise<BibleFont[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DELETE_BIBLE_FONT, id),
+
+  onBibleFontsUpdated: (callback: (fonts: BibleFont[]) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, fonts: BibleFont[]) => callback(fonts)
+    ipcRenderer.on(IPC_CHANNELS.BIBLE_FONTS_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.BIBLE_FONTS_UPDATED, handler)
+  },
 
   lookupVerse: (req: {
     version: string

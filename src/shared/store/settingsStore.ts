@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AppSettings, DisplayInfo } from '../types/ipc'
+import { DEFAULT_BIBLE_DISPLAY, type AppSettings, type DisplayInfo } from '../types/ipc'
 
 interface SettingsState {
   settings: AppSettings | null
@@ -16,7 +16,9 @@ const DEFAULTS: AppSettings = {
   audioFolder: null,
   songsFolder: null,
   liveLoopFolder: null,
+  bibleBackgroundsFolder: null,
   defaultBibleVersion: null,
+  bibleDisplay: DEFAULT_BIBLE_DISPLAY,
   videoFadeIn: true,
   videoFadeOut: false,
   videoFadeInSec: 1,
