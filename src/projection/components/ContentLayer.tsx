@@ -11,14 +11,16 @@ interface Props {
   currentMediaItem: MediaItem | null
   /** Imperative seek signal for the active content video. */
   mediaSeek: { position: number; nonce: number } | null
+  /** Imperative replay signal: restart the content video from 0. */
+  mediaReplay: { nonce: number } | null
   /** Desired play state for the active content video. */
   mediaPlaying: boolean
   /** Volume (0..1) for the active content video. */
   mediaVolume: number
   /** Receives video timing to push up to control. */
   onMediaPlayback: (info: PlaybackInfo) => void
-  /** Fired once when the active (non-loop) video ends — drives the queue. */
-  onMediaEnded: () => void
+  /** Fired once when the active (non-loop) video ends — drives the queue. Passes its duration. */
+  onMediaEnded: (durationSec: number) => void
 }
 
 /**
@@ -34,6 +36,7 @@ export default function ContentLayer({
   preloads,
   currentMediaItem,
   mediaSeek,
+  mediaReplay,
   mediaPlaying,
   mediaVolume,
   onMediaPlayback,
@@ -76,6 +79,7 @@ export default function ContentLayer({
               volume={mediaVolume}
               playing={mediaPlaying}
               seekSignal={mediaSeek}
+              replaySignal={mediaReplay}
               onPlayback={onMediaPlayback}
               onEnded={onMediaEnded}
             />

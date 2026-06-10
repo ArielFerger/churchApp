@@ -24,6 +24,8 @@ export type ProjectionCommand =
       fadeOutSec?: number
     }
   | { type: 'preloadMedia'; mediaId: string }
+  /** Reinicia el video de contenido actual y lo reproduce desde el principio. */
+  | { type: 'replayMedia' }
   | { type: 'setBackground'; mediaId: string | null; loop?: boolean }
   | { type: 'setBackgroundSlideshow'; mediaIds: string[]; intervalSec: number }
   | { type: 'seekMedia'; position: number }

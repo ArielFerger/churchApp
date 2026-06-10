@@ -31,10 +31,12 @@ interface Props {
   playing?: boolean
   /** Imperative seek: bump `nonce` to jump to `position` (seconds). */
   seekSignal?: { position: number; nonce: number } | null
+  /** Imperative replay: bump `nonce` to restart from 0 and play. */
+  replaySignal?: { nonce: number } | null
   /** Called ~4×/sec while playing, plus on play/pause/seek, with current timing. */
   onPlayback?: (info: PlaybackInfo) => void
-  /** Called once when a non-loop video finishes (drives the play queue). */
-  onEnded?: () => void
+  /** Called once when a non-loop video finishes (drives the play queue). Passes its duration. */
+  onEnded?: (durationSec: number) => void
 }
 
 const FADE_STEPS = 30
@@ -63,6 +65,7 @@ export default function MediaSlide({
   volume = 1,
   playing = true,
   seekSignal = null,
+  replaySignal = null,
   onPlayback,
   onEnded
 }: Props) {
@@ -143,6 +146,17 @@ export default function MediaSlide({
     v.currentTime = Math.max(0, seekSignal.position)
   }, [seekSignal, active])
 
+  // Imperative replay: restart from 0 and play (used after the clip ends).
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v || !active || !replaySignal) return
+    v.currentTime = 0
+    if (fadeAudio && !muted) rampVolume(v)
+    const p = v.play()
+    if (p) p.catch(() => undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replaySignal, active])
+
   const objectFit = fit === 'cover' ? 'object-cover' : 'object-contain'
 
   if (item.type === 'video') {
@@ -188,7 +202,11 @@ export default function MediaSlide({
         onDurationChange={onPlayback ? report : undefined}
         onPlay={onPlayback ? report : undefined}
         onPause={onPlayback ? report : undefined}
-        onEnded={active && !loop ? onEnded : undefined}
+        onEnded={
+          active && !loop && onEnded
+            ? () => onEnded(videoRef.current?.duration ?? 0)
+            : undefined
+        }
       />
     )
   }

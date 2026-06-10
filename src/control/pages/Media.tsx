@@ -6,11 +6,11 @@ import {
   FolderOpen,
   Sparkles,
   Eye,
-  Wallpaper,
   X,
   Play,
   Pause,
   Repeat,
+  RotateCcw,
   SkipBack,
   SkipForward,
   Volume2,
@@ -21,6 +21,7 @@ import {
   ChevronUp,
   ChevronDown,
   Home,
+  Clock,
   Square
 } from 'lucide-react'
 import { useLibraryStore } from '@/shared/store/libraryStore'
@@ -277,6 +278,8 @@ interface MediaCardProps {
 
 function MediaCard({ item, isSelected, onSelect }: MediaCardProps) {
   const src = `media://${item.id}`
+  // Duración leída del propio <video> una vez cargada la metadata.
+  const [duration, setDuration] = useState<number | null>(null)
   return (
     <li>
       <button
@@ -288,7 +291,7 @@ function MediaCard({ item, isSelected, onSelect }: MediaCardProps) {
             : 'border-slate-700 hover:border-slate-500'
         }`}
       >
-        <div className="aspect-video bg-black">
+        <div className="relative aspect-video bg-black">
           {item.type === 'video' ? (
             <video
               src={src}
@@ -296,6 +299,7 @@ function MediaCard({ item, isSelected, onSelect }: MediaCardProps) {
               preload="metadata"
               muted
               playsInline
+              onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
             />
           ) : (
             <img
@@ -304,6 +308,11 @@ function MediaCard({ item, isSelected, onSelect }: MediaCardProps) {
               className="h-full w-full object-cover"
               loading="lazy"
             />
+          )}
+          {item.type === 'video' && duration !== null && (
+            <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] font-medium text-white">
+              {formatDuration(duration)}
+            </span>
           )}
         </div>
         <div className="flex items-center justify-between gap-2 px-2 py-1.5">
@@ -337,6 +346,7 @@ interface SelectionPanelProps {
 
 function SelectionPanel({ item, onClear }: SelectionPanelProps) {
   const [loop, setLoop] = useState(false)
+  const [duration, setDuration] = useState<number | null>(null)
   const settings = useSettingsStore((s) => s.settings)
   const queueIds = useVideoQueueStore((s) => s.ids)
   const addToQueue = useVideoQueueStore((s) => s.add)
@@ -361,7 +371,14 @@ function SelectionPanel({ item, onClear }: SelectionPanelProps) {
 
       <div className="mt-2 overflow-hidden rounded-md border border-slate-700 bg-black">
         {isVideo ? (
-          <video src={src} className="aspect-video w-full" controls muted playsInline />
+          <video
+            src={src}
+            className="aspect-video w-full"
+            controls
+            muted
+            playsInline
+            onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+          />
         ) : (
           <img src={src} alt={item.fileName} className="aspect-video w-full object-contain" />
         )}
@@ -370,6 +387,12 @@ function SelectionPanel({ item, onClear }: SelectionPanelProps) {
       <p className="mt-3 truncate text-xs text-slate-400" title={item.fileName}>
         {item.fileName}
       </p>
+      {isVideo && duration !== null && (
+        <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-300">
+          <Clock className="h-3.5 w-3.5 text-slate-500" />
+          Duración: <span className="font-medium">{formatDuration(duration)}</span>
+        </p>
+      )}
       <p className="mt-0.5 truncate font-mono text-[10px] text-slate-600" title={item.filePath}>
         {item.filePath}
       </p>
@@ -427,21 +450,6 @@ function SelectionPanel({ item, onClear }: SelectionPanelProps) {
               En cola (#{queuePos + 1}) — quitar
             </button>
           ))}
-        <button
-          type="button"
-          onClick={() => send({ type: 'setBackground', mediaId: item.id })}
-          className="flex w-full items-center justify-center gap-2 rounded-md bg-slate-700 px-3 py-2 text-sm text-slate-100 hover:bg-slate-600"
-        >
-          <Wallpaper className="h-4 w-4" />
-          Usar como fondo
-        </button>
-        <button
-          type="button"
-          onClick={() => send({ type: 'setBackground', mediaId: null })}
-          className="flex w-full items-center justify-center gap-2 rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-400 hover:bg-slate-800"
-        >
-          Quitar fondo
-        </button>
       </div>
     </div>
   )
@@ -606,7 +614,8 @@ function QueuePanel({ media }: { media: MediaItem[] }) {
  * when a video is live; lets the operator scrub, pause/resume, and restart.
  */
 function VideoTransport({ media }: { media: MediaItem[] }) {
-  const { mediaId, position, duration, playing, volume, setVolume } = useMediaPlaybackStore()
+  const { mediaId, position, duration, playing, ended, volume, setVolume } =
+    useMediaPlaybackStore()
   // Local scrub state so dragging the slider feels smooth (not fighting telemetry).
   const [scrub, setScrub] = useState<number | null>(null)
 
@@ -637,14 +646,27 @@ function VideoTransport({ media }: { media: MediaItem[] }) {
       >
         <SkipBack className="h-4 w-4" />
       </button>
-      <button
-        type="button"
-        onClick={() => send({ type: 'setMediaPlaying', playing: !playing })}
-        className="rounded-full bg-white p-2 text-slate-900 hover:bg-slate-200"
-        title={playing ? 'Pausar' : 'Reproducir'}
-      >
-        {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 pl-0.5" />}
-      </button>
+      {ended ? (
+        // El clip terminó: el botón principal lo reproduce de nuevo desde el inicio.
+        <button
+          type="button"
+          onClick={() => send({ type: 'replayMedia' })}
+          className="flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-400"
+          title="Reproducir de nuevo"
+        >
+          <RotateCcw className="h-4 w-4" />
+          De nuevo
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => send({ type: 'setMediaPlaying', playing: !playing })}
+          className="rounded-full bg-white p-2 text-slate-900 hover:bg-slate-200"
+          title={playing ? 'Pausar' : 'Reproducir'}
+        >
+          {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 pl-0.5" />}
+        </button>
+      )}
 
       <span className="w-10 text-right font-mono text-[10px] text-slate-500">
         {formatTime(shown)}
@@ -702,4 +724,20 @@ function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = Math.floor(seconds % 60)
   return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+/**
+ * Duración legible en horas/minutos/segundos. Adaptativo: muestra las horas
+ * solo si las hay. Ej: "45s", "4m 12s", "1h 05m 12s".
+ */
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0s'
+  const total = Math.round(seconds)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  if (h > 0) return `${h}h ${pad(m)}m ${pad(s)}s`
+  if (m > 0) return `${m}m ${pad(s)}s`
+  return `${s}s`
 }

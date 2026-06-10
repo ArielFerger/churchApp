@@ -17,6 +17,8 @@ interface ProjectionState {
   preloadIds: string[]
   /** Imperative seek signal for the active content video. */
   mediaSeek: { position: number; nonce: number } | null
+  /** Imperative replay signal: bump to restart the content video from 0. */
+  mediaReplay: { nonce: number } | null
   /** Desired play state for the active content video. */
   mediaPlaying: boolean
   /** Volume (0..1) for the active content video. */
@@ -31,6 +33,7 @@ const initialState: ProjectionState = {
   showLogo: false,
   preloadIds: [],
   mediaSeek: null,
+  mediaReplay: null,
   mediaPlaying: true,
   mediaVolume: 1
 }
@@ -77,11 +80,18 @@ function reducer(state: ProjectionState, cmd: ProjectionCommand): ProjectionStat
         isBlackout: false,
         showLogo: false,
         mediaSeek: null,
+        mediaReplay: null,
         mediaPlaying: true,
         preloadIds: dedupe([...state.preloadIds, cmd.mediaId])
       }
     case 'preloadMedia':
       return { ...state, preloadIds: dedupe([...state.preloadIds, cmd.mediaId]) }
+    case 'replayMedia':
+      return {
+        ...state,
+        mediaReplay: { nonce: (state.mediaReplay?.nonce ?? 0) + 1 },
+        mediaPlaying: true
+      }
     case 'seekMedia':
       return {
         ...state,
@@ -173,12 +183,13 @@ export default function ProjectionApp() {
   }
 
   // End-of-video: emit immediately (bypasses the throttle) so the control
-  // window can advance its play queue without missing the event.
-  const handleEnded = (): void => {
+  // window can advance its play queue / show the replay button. Keep the real
+  // duration so the transport bar doesn't collapse to 0:00.
+  const handleEnded = (durationSec: number): void => {
     window.projectionAPI?.emitPlaybackState({
       mediaId: currentMediaItem?.id ?? null,
-      position: 0,
-      duration: 0,
+      position: durationSec,
+      duration: durationSec,
       playing: false,
       ended: true
     })
@@ -192,6 +203,7 @@ export default function ProjectionApp() {
         preloads={preloads}
         currentMediaItem={currentMediaItem}
         mediaSeek={state.mediaSeek}
+        mediaReplay={state.mediaReplay}
         mediaPlaying={state.mediaPlaying}
         mediaVolume={state.mediaVolume}
         onMediaPlayback={handlePlayback}
