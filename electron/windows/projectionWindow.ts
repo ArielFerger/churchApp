@@ -45,7 +45,11 @@ export function createProjectionWindow(savedDisplayId: number | null): BrowserWi
       nodeIntegration: false,
       sandbox: false,
       // Allow videos to autoplay WITH sound when projected (no click needed).
-      autoplayPolicy: 'no-user-gesture-required'
+      autoplayPolicy: 'no-user-gesture-required',
+      // La proyección es la salida: si Chromium la considera tapada (monitor
+      // único, otra app encima) estrangula sus timers y llega a pausar el
+      // video en pantalla. Acá nunca se estrangula.
+      backgroundThrottling: false
     }
   })
 

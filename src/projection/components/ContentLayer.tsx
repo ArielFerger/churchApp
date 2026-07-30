@@ -19,6 +19,8 @@ interface Props {
   mediaReplay: { nonce: number } | null
   /** Desired play state for the active content video. */
   mediaPlaying: boolean
+  /** Sube con cada orden de play/pausa para poder re-aplicar el mismo valor. */
+  mediaPlayNonce: number
   /** Volume (0..1) for the active content video. */
   mediaVolume: number
   /** Receives video timing to push up to control. */
@@ -48,6 +50,7 @@ export default function ContentLayer({
   mediaSeek,
   mediaReplay,
   mediaPlaying,
+  mediaPlayNonce,
   mediaVolume,
   onMediaPlayback,
   onMediaEnded,
@@ -113,6 +116,7 @@ export default function ContentLayer({
               fadeOutSec={mediaCmd.fadeOutSec ?? 2.5}
               volume={mediaVolume}
               playing={mediaPlaying}
+              playNonce={mediaPlayNonce}
               seekSignal={mediaSeek}
               replaySignal={mediaReplay}
               onPlayback={onMediaPlayback}

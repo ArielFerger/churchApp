@@ -23,6 +23,13 @@ interface ProjectionState {
   mediaReplay: { nonce: number } | null
   /** Desired play state for the active content video. */
   mediaPlaying: boolean
+  /**
+   * Se incrementa con CADA orden de play/pausa, aunque repita el valor previo.
+   * Sin esto, si el `<video>` se pausa por su cuenta (Chromium suspende media
+   * en ventanas tapadas) el estado de React sigue en `true` y volver a apretar
+   * Reproducir no cambia nada: el operador se queda sin forma de reanudar.
+   */
+  mediaPlayNonce: number
   /** Volume (0..1) for the active content video. */
   mediaVolume: number
 }
@@ -37,6 +44,7 @@ const initialState: ProjectionState = {
   mediaSeek: null,
   mediaReplay: null,
   mediaPlaying: true,
+  mediaPlayNonce: 0,
   mediaVolume: 1
 }
 
@@ -100,7 +108,7 @@ function reducer(state: ProjectionState, cmd: ProjectionCommand): ProjectionStat
         mediaSeek: { position: cmd.position, nonce: (state.mediaSeek?.nonce ?? 0) + 1 }
       }
     case 'setMediaPlaying':
-      return { ...state, mediaPlaying: cmd.playing }
+      return { ...state, mediaPlaying: cmd.playing, mediaPlayNonce: state.mediaPlayNonce + 1 }
     case 'setMediaVolume':
       return { ...state, mediaVolume: Math.max(0, Math.min(1, cmd.volume)) }
     default:
@@ -122,6 +130,7 @@ export default function ProjectionApp() {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [fonts, setFonts] = useState<BibleFont[]>([])
   const lastEmit = useRef(0)
+  const lastPlaying = useRef<boolean | null>(null)
 
   useEffect(() => {
     const api = window.projectionAPI
@@ -185,6 +194,7 @@ export default function ProjectionApp() {
   // When there's no live video, tell control to hide the scrubber.
   const liveVideoId = currentMediaItem?.type === 'video' ? currentMediaItem.id : null
   useEffect(() => {
+    lastPlaying.current = null // el próximo clip arranca de cero
     if (!liveVideoId) {
       window.projectionAPI?.emitPlaybackState({
         mediaId: null,
@@ -201,8 +211,13 @@ export default function ProjectionApp() {
 
   const handlePlayback = (info: PlaybackInfo): void => {
     const now = Date.now()
-    if (now - lastEmit.current < 240) return // throttle to ~4/sec
+    // El throttle es para los `timeupdate`. Un cambio de play/pausa tiene que
+    // salir sí o sí: si se lo traga, el botón de la barra de control queda
+    // mostrando el estado contrario y hay que tocarlo dos veces para destrabarlo.
+    const playingChanged = lastPlaying.current !== info.playing
+    if (!playingChanged && now - lastEmit.current < 240) return // throttle to ~4/sec
     lastEmit.current = now
+    lastPlaying.current = info.playing
     window.projectionAPI?.emitPlaybackState({
       mediaId: currentMediaItem?.id ?? null,
       position: info.position,
@@ -215,6 +230,7 @@ export default function ProjectionApp() {
   // window can advance its play queue / show the replay button. Keep the real
   // duration so the transport bar doesn't collapse to 0:00.
   const handleEnded = (durationSec: number): void => {
+    lastPlaying.current = false
     window.projectionAPI?.emitPlaybackState({
       mediaId: currentMediaItem?.id ?? null,
       position: durationSec,
@@ -234,6 +250,7 @@ export default function ProjectionApp() {
         mediaSeek={state.mediaSeek}
         mediaReplay={state.mediaReplay}
         mediaPlaying={state.mediaPlaying}
+        mediaPlayNonce={state.mediaPlayNonce}
         mediaVolume={state.mediaVolume}
         onMediaPlayback={handlePlayback}
         onMediaEnded={handleEnded}

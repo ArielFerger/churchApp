@@ -29,6 +29,12 @@ interface Props {
   volume?: number
   /** Desired play state while active. Lets the operator pause/resume from control. */
   playing?: boolean
+  /**
+   * Sube con cada orden de play/pausa. Está en las deps del efecto para que
+   * repetir la misma orden vuelva a aplicarse sobre el elemento: si el
+   * `<video>` se pausó por su cuenta, apretar Reproducir tiene que levantarlo.
+   */
+  playNonce?: number
   /** Imperative seek: bump `nonce` to jump to `position` (seconds). */
   seekSignal?: { position: number; nonce: number } | null
   /** Imperative replay: bump `nonce` to restart from 0 and play. */
@@ -64,6 +70,7 @@ export default function MediaSlide({
   fadeOutSec = 2.5,
   volume = 1,
   playing = true,
+  playNonce = 0,
   seekSignal = null,
   replaySignal = null,
   onPlayback,
@@ -127,7 +134,8 @@ export default function MediaSlide({
     if (fadeHandle.current === null) v.volume = volume
   }, [volume, active])
 
-  // Respond to play/pause toggles while active.
+  // Respond to play/pause toggles while active. `playNonce` está en las deps a
+  // propósito: reenviar la misma orden tiene que re-aplicarse igual.
   useEffect(() => {
     const v = videoRef.current
     if (!v || !active) return
@@ -137,7 +145,7 @@ export default function MediaSlide({
     } else {
       v.pause()
     }
-  }, [playing, active])
+  }, [playing, playNonce, active])
 
   // Imperative seek.
   useEffect(() => {
