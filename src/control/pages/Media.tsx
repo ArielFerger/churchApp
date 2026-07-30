@@ -22,23 +22,38 @@ import {
   ChevronDown,
   Home,
   Clock,
-  Square
+  Square,
+  Search,
+  Star,
+  Tag,
+  CalendarCheck
 } from 'lucide-react'
 import { useLibraryStore } from '@/shared/store/libraryStore'
 import { useSettingsStore } from '@/shared/store/settingsStore'
 import { useMediaPlaybackStore } from '@/shared/store/mediaPlaybackStore'
 import { useVideoQueueStore } from '@/shared/store/videoQueueStore'
+import { useMediaMetaStore } from '@/shared/store/mediaMetaStore'
 import { playQueueVideo } from '@/control/hooks/useProjectionBridge'
 import {
   itemsInFolder,
   childFolders,
   countInFolder,
-  breadcrumbSegments
+  breadcrumbSegments,
+  searchMedia
 } from '@/shared/utils/mediaFolders'
-import type { MediaItem, MediaType } from '@/shared/types/media'
+import { todayItems } from '@/shared/utils/mediaMeta'
+import {
+  MEDIA_CATEGORIES,
+  categoryInfo,
+  type MediaCategory,
+  type MediaItem,
+  type MediaType
+} from '@/shared/types/media'
 import type { ProjectionCommand } from '@/shared/types/ipc'
 
 type Filter = 'all' | MediaType
+/** Filtro de categoría: todas, una en concreto, o solo las que no tienen. */
+type CategoryFilter = 'all' | MediaCategory | 'none'
 
 const filterOptions: { value: Filter; label: string; icon: typeof ImageIcon }[] = [
   { value: 'all', label: 'Todos', icon: Sparkles },
@@ -47,6 +62,10 @@ const filterOptions: { value: Filter; label: string; icon: typeof ImageIcon }[] 
   { value: 'gif', label: 'GIFs', icon: Sparkles }
 ]
 
+function typeLabel(filter: Filter): string {
+  return filterOptions.find((o) => o.value === filter)?.label.toLowerCase() ?? 'todos'
+}
+
 function send(cmd: ProjectionCommand) {
   window.electronAPI?.sendProjectionCommand(cmd)
 }
@@ -54,7 +73,12 @@ function send(cmd: ProjectionCommand) {
 export default function Media() {
   const { media, mediaLoaded, loadMedia, subscribeMedia } = useLibraryStore()
   const { settings, loaded: settingsLoaded, load: loadSettings } = useSettingsStore()
+  const meta = useMediaMetaStore((s) => s.meta)
+  const loadMeta = useMediaMetaStore((s) => s.load)
+  const subscribeMeta = useMediaMetaStore((s) => s.subscribe)
   const [filter, setFilter] = useState<Filter>('all')
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all')
+  const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   // Carpeta actual dentro de la carpeta de media ('' = raíz).
   const [path, setPath] = useState('')
@@ -64,6 +88,12 @@ export default function Media() {
     const unsub = subscribeMedia()
     return unsub
   }, [loadMedia, subscribeMedia])
+
+  useEffect(() => {
+    void loadMeta()
+  }, [loadMeta])
+
+  useEffect(() => subscribeMeta(), [subscribeMeta])
 
   useEffect(() => {
     if (!settingsLoaded) void loadSettings()
@@ -81,12 +111,37 @@ export default function Media() {
     }
   }, [media, path])
 
-  const byType = useMemo(
-    () => (filter === 'all' ? media : media.filter((m) => m.type === filter)),
-    [media, filter]
+  const searching = query.trim().length > 0
+
+  const visible = useMemo(() => {
+    const byType = filter === 'all' ? media : media.filter((m) => m.type === filter)
+    if (categoryFilter === 'all') return byType
+    return byType.filter((m) => {
+      const category = meta.categories[m.id]
+      return categoryFilter === 'none' ? !category : category === categoryFilter
+    })
+  }, [media, filter, categoryFilter, meta.categories])
+
+  // Buscando: resultados planos de toda la librería. Si no, la carpeta abierta.
+  const folders = useMemo(
+    () => (searching ? [] : childFolders(visible, path)),
+    [searching, visible, path]
   )
-  const folders = useMemo(() => childFolders(byType, path), [byType, path])
-  const filtered = useMemo(() => itemsInFolder(byType, path), [byType, path])
+  const filtered = useMemo(
+    () => (searching ? searchMedia(visible, query) : itemsInFolder(visible, path)),
+    [searching, visible, query, path]
+  )
+
+  // "Para hoy" ignora los filtros a propósito: es la lista del servicio y tiene
+  // que estar completa aunque el operador esté filtrando por tipo o categoría.
+  const forToday = useMemo(() => todayItems(media, meta), [media, meta])
+  const categoryCounts = useCategoryCounts(media, meta.categories)
+  // Si el archivo seleccionado se borra del disco, el panel vuelve al vacío en
+  // vez de quedar en blanco (SelectionPanel devolvía null con item === null).
+  const selectedItem = useMemo(
+    () => (selectedId ? (media.find((m) => m.id === selectedId) ?? null) : null),
+    [media, selectedId]
+  )
 
   if (!settings?.mediaFolder) {
     return (
@@ -136,19 +191,41 @@ export default function Media() {
               </button>
             )
           })}
-          <span className="ml-auto text-xs text-slate-500">
+
+          <SearchBox value={query} onChange={setQuery} />
+
+          <span className="shrink-0 text-xs text-slate-500">
             {filtered.length} {filtered.length === 1 ? 'item' : 'items'} ·{' '}
             <span className="font-mono">{settings.mediaFolder}</span>
           </span>
         </div>
 
-        {/* Breadcrumb de carpetas */}
-        <FolderBreadcrumb path={path} onNavigate={setPath} />
+        <CategoryFilterBar
+          value={categoryFilter}
+          onChange={setCategoryFilter}
+          counts={categoryCounts}
+        />
+
+        <TodayStrip items={forToday} selectedId={selectedId} onSelect={setSelectedId} />
+
+        {/* Breadcrumb de carpetas — sin sentido mientras se busca en todo */}
+        {!searching && <FolderBreadcrumb path={path} onNavigate={setPath} />}
 
         <div className="flex-1 overflow-y-auto p-4">
+          {searching && (
+            <p className="mb-3 text-xs text-slate-500">
+              {filtered.length === 0
+                ? 'Sin resultados'
+                : `${filtered.length} ${filtered.length === 1 ? 'resultado' : 'resultados'}`}{' '}
+              para <span className="font-medium text-slate-300">“{query.trim()}”</span> en toda la
+              carpeta de media.
+            </p>
+          )}
           {folders.length === 0 && filtered.length === 0 ? (
             <p className="mt-12 text-center text-sm text-slate-500">
-              No hay archivos {filter !== 'all' ? `del tipo "${filter}"` : ''} en esta carpeta.
+              {searching
+                ? 'Ningún archivo coincide con la búsqueda.'
+                : `No hay archivos ${filter !== 'all' ? `del tipo "${typeLabel(filter)}"` : ''} en esta carpeta.`}
             </p>
           ) : (
             <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -158,7 +235,7 @@ export default function Media() {
                   <FolderCard
                     key={`folder-${name}`}
                     name={name}
-                    count={countInFolder(byType, folderPath)}
+                    count={countInFolder(visible, folderPath)}
                     onOpen={() => setPath(folderPath)}
                   />
                 )
@@ -169,6 +246,9 @@ export default function Media() {
                   item={item}
                   isSelected={item.id === selectedId}
                   onSelect={() => setSelectedId(item.id)}
+                  category={meta.categories[item.id] ?? null}
+                  isToday={meta.today.ids.includes(item.id)}
+                  showFolder={searching}
                 />
               ))}
             </ul>
@@ -179,9 +259,11 @@ export default function Media() {
       </div>
 
       <aside className="flex w-72 flex-col overflow-y-auto border-l border-slate-700 p-4">
-        {selectedId ? (
+        {selectedItem ? (
           <SelectionPanel
-            item={media.find((m) => m.id === selectedId) ?? null}
+            // key: resetea el checkbox de loop y la duración al cambiar de item
+            key={selectedItem.id}
+            item={selectedItem}
             onClear={() => setSelectedId(null)}
           />
         ) : (
@@ -192,6 +274,167 @@ export default function Media() {
         <QueuePanel media={media} />
       </aside>
     </div>
+  )
+}
+
+/** Cuántos items hay por categoría (y cuántos sin categorizar). */
+function useCategoryCounts(
+  media: MediaItem[],
+  categories: Record<string, MediaCategory>
+): Record<CategoryFilter, number> {
+  return useMemo(() => {
+    const counts = { all: media.length, none: 0 } as Record<CategoryFilter, number>
+    for (const c of MEDIA_CATEGORIES) counts[c.value] = 0
+    for (const item of media) {
+      const category = categories[item.id]
+      if (category) counts[category] += 1
+      else counts.none += 1
+    }
+    return counts
+  }, [media, categories])
+}
+
+function SearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="relative ml-2 min-w-0 flex-1">
+      <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+      <input
+        type="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onChange('')
+        }}
+        placeholder="Buscar por nombre o carpeta…"
+        aria-label="Buscar archivos de media"
+        className="w-full rounded-md border border-slate-700 bg-slate-900 py-1 pl-7 pr-7 text-xs text-slate-100 placeholder:text-slate-600 focus:border-blue-500 focus:outline-none"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-500 hover:bg-slate-700 hover:text-slate-200"
+          title="Limpiar búsqueda"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+function CategoryFilterBar({
+  value,
+  onChange,
+  counts
+}: {
+  value: CategoryFilter
+  onChange: (v: CategoryFilter) => void
+  counts: Record<CategoryFilter, number>
+}) {
+  const options: { value: CategoryFilter; label: string; activeClass: string }[] = [
+    { value: 'all', label: 'Todas', activeClass: 'bg-slate-600 text-white' },
+    ...MEDIA_CATEGORIES.map((c) => ({
+      value: c.value as CategoryFilter,
+      label: c.label,
+      activeClass: c.activeClass
+    })),
+    { value: 'none', label: 'Sin categoría', activeClass: 'bg-slate-600 text-white' }
+  ]
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-700/60 bg-slate-800/20 px-4 py-1.5">
+      <span className="inline-flex items-center gap-1 pr-1 text-[11px] uppercase tracking-wider text-slate-500">
+        <Tag className="h-3 w-3" />
+        Categoría
+      </span>
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          className={`rounded-full px-2.5 py-0.5 text-[11px] transition-colors ${
+            value === opt.value
+              ? opt.activeClass
+              : 'text-slate-400 hover:bg-slate-700 hover:text-slate-100'
+          }`}
+        >
+          {opt.label}
+          <span className="ml-1 opacity-60">{counts[opt.value] ?? 0}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Fila fija arriba con los archivos marcados para el servicio de hoy. Es una
+ * selección momentánea: se vacía sola cuando cambia el día.
+ */
+function TodayStrip({
+  items,
+  selectedId,
+  onSelect
+}: {
+  items: MediaItem[]
+  selectedId: string | null
+  onSelect: (id: string) => void
+}) {
+  const toggleToday = useMediaMetaStore((s) => s.toggleToday)
+  const clearToday = useMediaMetaStore((s) => s.clearToday)
+  if (items.length === 0) return null
+  return (
+    <section className="border-b border-amber-500/20 bg-amber-500/[0.06] px-4 py-2">
+      <div className="flex items-center justify-between">
+        <h2 className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-300">
+          <CalendarCheck className="h-3.5 w-3.5" />
+          Para hoy
+          <span className="rounded-full bg-amber-500/20 px-1.5 text-[10px]">{items.length}</span>
+        </h2>
+        <button
+          type="button"
+          onClick={() => void clearToday()}
+          className="rounded px-1.5 py-0.5 text-[11px] text-slate-500 hover:bg-slate-700 hover:text-red-400"
+          title="Sacar todos los archivos de la lista de hoy"
+        >
+          Vaciar
+        </button>
+      </div>
+      <ul className="mt-2 flex gap-2 overflow-x-auto pb-1">
+        {items.map((item) => (
+          <li key={item.id} className="shrink-0">
+            <div
+              className={`group relative w-32 overflow-hidden rounded-md border bg-black ${
+                item.id === selectedId
+                  ? 'border-blue-500 ring-2 ring-blue-500/40'
+                  : 'border-amber-500/30 hover:border-amber-400/70'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => onSelect(item.id)}
+                className="block w-full text-left"
+                title={item.fileName}
+              >
+                <div className="aspect-video">
+                  <Thumb item={item} />
+                </div>
+                <span className="block truncate px-1.5 py-1 text-[10px] text-slate-300">
+                  {item.fileName}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void toggleToday(item.id)}
+                className="absolute right-1 top-1 rounded bg-black/70 p-0.5 text-amber-300 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+                title="Sacar de la lista de hoy"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
@@ -270,58 +513,108 @@ function FolderCard({
   )
 }
 
+/** Miniatura sin controles: video mudo con metadata o imagen perezosa. */
+function Thumb({ item, onDuration }: { item: MediaItem; onDuration?: (d: number) => void }) {
+  const src = `media://${item.id}`
+  if (item.type === 'video') {
+    return (
+      <video
+        src={src}
+        className="h-full w-full object-cover"
+        preload="metadata"
+        muted
+        playsInline
+        onLoadedMetadata={(e) => onDuration?.(e.currentTarget.duration)}
+      />
+    )
+  }
+  return (
+    <img src={src} alt={item.fileName} className="h-full w-full object-cover" loading="lazy" />
+  )
+}
+
 interface MediaCardProps {
   item: MediaItem
   isSelected: boolean
   onSelect: () => void
+  category: MediaCategory | null
+  isToday: boolean
+  /** En resultados de búsqueda mostramos la carpeta donde vive el archivo. */
+  showFolder?: boolean
 }
 
-function MediaCard({ item, isSelected, onSelect }: MediaCardProps) {
-  const src = `media://${item.id}`
+function MediaCard({
+  item,
+  isSelected,
+  onSelect,
+  category,
+  isToday,
+  showFolder = false
+}: MediaCardProps) {
+  const toggleToday = useMediaMetaStore((s) => s.toggleToday)
   // Duración leída del propio <video> una vez cargada la metadata.
   const [duration, setDuration] = useState<number | null>(null)
+  const info = category ? categoryInfo(category) : undefined
   return (
     <li>
-      <button
-        type="button"
-        onClick={onSelect}
-        className={`group block w-full overflow-hidden rounded-md border bg-slate-950 text-left transition-colors ${
+      <div
+        className={`group relative overflow-hidden rounded-md border bg-slate-950 transition-colors ${
           isSelected
             ? 'border-blue-500 ring-2 ring-blue-500/40'
-            : 'border-slate-700 hover:border-slate-500'
+            : isToday
+              ? 'border-amber-500/50'
+              : 'border-slate-700 hover:border-slate-500'
         }`}
       >
-        <div className="relative aspect-video bg-black">
-          {item.type === 'video' ? (
-            <video
-              src={src}
-              className="h-full w-full object-cover"
-              preload="metadata"
-              muted
-              playsInline
-              onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-            />
-          ) : (
-            <img
-              src={src}
-              alt={item.fileName}
-              className="h-full w-full object-cover"
-              loading="lazy"
-            />
-          )}
-          {item.type === 'video' && duration !== null && (
-            <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] font-medium text-white">
-              {formatDuration(duration)}
+        <button type="button" onClick={onSelect} className="block w-full text-left">
+          <div className="relative aspect-video bg-black">
+            <Thumb item={item} onDuration={setDuration} />
+            {item.type === 'video' && duration !== null && (
+              <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] font-medium text-white">
+                {formatDuration(duration)}
+              </span>
+            )}
+            {info && (
+              <span
+                className={`absolute bottom-1 left-1 rounded px-1.5 py-0.5 text-[10px] font-medium ${info.badgeClass}`}
+              >
+                {info.label}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs text-slate-300" title={item.fileName}>
+                {item.fileName}
+              </span>
+              {showFolder && (
+                <span
+                  className="block truncate text-[10px] text-slate-600"
+                  title={item.folder || 'raíz'}
+                >
+                  {item.folder || 'raíz'}
+                </span>
+              )}
             </span>
-          )}
-        </div>
-        <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-          <span className="truncate text-xs text-slate-300" title={item.fileName}>
-            {item.fileName}
-          </span>
-          <TypeBadge type={item.type} />
-        </div>
-      </button>
+            <TypeBadge type={item.type} />
+          </div>
+        </button>
+
+        {/* Marcar para hoy — siempre visible si está marcado, si no al hover */}
+        <button
+          type="button"
+          onClick={() => void toggleToday(item.id)}
+          aria-pressed={isToday}
+          className={`absolute right-1 top-1 rounded bg-black/70 p-1 transition-opacity ${
+            isToday
+              ? 'text-amber-300 opacity-100'
+              : 'text-slate-300 opacity-0 hover:text-amber-300 focus:opacity-100 group-hover:opacity-100'
+          }`}
+          title={isToday ? 'Sacar de la lista de hoy' : 'Marcar para hoy'}
+        >
+          <Star className="h-3.5 w-3.5" fill={isToday ? 'currentColor' : 'none'} />
+        </button>
+      </div>
     </li>
   )
 }
@@ -340,7 +633,7 @@ function TypeBadge({ type }: { type: MediaType }) {
 }
 
 interface SelectionPanelProps {
-  item: MediaItem | null
+  item: MediaItem
   onClear: () => void
 }
 
@@ -351,10 +644,14 @@ function SelectionPanel({ item, onClear }: SelectionPanelProps) {
   const queueIds = useVideoQueueStore((s) => s.ids)
   const addToQueue = useVideoQueueStore((s) => s.add)
   const removeFromQueue = useVideoQueueStore((s) => s.remove)
-  if (!item) return null
+  const meta = useMediaMetaStore((s) => s.meta)
+  const setCategory = useMediaMetaStore((s) => s.setCategory)
+  const toggleToday = useMediaMetaStore((s) => s.toggleToday)
   const src = `media://${item.id}`
   const isVideo = item.type === 'video'
   const queuePos = queueIds.indexOf(item.id)
+  const category = meta.categories[item.id] ?? null
+  const isToday = meta.today.ids.includes(item.id)
   return (
     <div className="flex flex-col">
       <div className="flex items-center justify-between">
@@ -396,6 +693,49 @@ function SelectionPanel({ item, onClear }: SelectionPanelProps) {
       <p className="mt-0.5 truncate font-mono text-[10px] text-slate-600" title={item.filePath}>
         {item.filePath}
       </p>
+
+      {/* Categoría del archivo — se guarda al instante */}
+      <div className="mt-3">
+        <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-slate-500">
+          <Tag className="h-3 w-3" />
+          Categoría
+        </p>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {MEDIA_CATEGORIES.map((c) => {
+            const active = category === c.value
+            return (
+              <button
+                key={c.value}
+                type="button"
+                aria-pressed={active}
+                // Volver a tocar la categoría activa la saca.
+                onClick={() => void setCategory(item.id, active ? null : c.value)}
+                className={`rounded-full px-2.5 py-0.5 text-[11px] transition-colors ${
+                  active
+                    ? c.activeClass
+                    : 'border border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200'
+                }`}
+              >
+                {c.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => void toggleToday(item.id)}
+        aria-pressed={isToday}
+        className={`mt-3 flex w-full items-center justify-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+          isToday
+            ? 'bg-amber-500/20 text-amber-200 hover:bg-amber-500/30'
+            : 'border border-slate-700 text-slate-300 hover:bg-slate-800'
+        }`}
+      >
+        <Star className="h-3.5 w-3.5" fill={isToday ? 'currentColor' : 'none'} />
+        {isToday ? 'En la lista de hoy' : 'Marcar para hoy'}
+      </button>
 
       {isVideo && (
         <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs text-slate-300">

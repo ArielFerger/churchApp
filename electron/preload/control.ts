@@ -6,7 +6,7 @@ import type {
   DisplayInfo,
   MediaPlaybackState
 } from '../../src/shared/types/ipc'
-import type { MediaItem } from '../../src/shared/types/media'
+import type { MediaCategory, MediaItem, MediaMeta } from '../../src/shared/types/media'
 import type { Song, Album } from '../../src/shared/types/song'
 import type { BibleBook } from '../../src/shared/types/bible'
 import type { AudioTrack, AudioPlaylist } from '../../src/shared/types/audio'
@@ -50,6 +50,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: Electron.IpcRendererEvent, items: MediaItem[]) => callback(items)
     ipcRenderer.on(IPC_CHANNELS.BIBLE_MEDIA_UPDATED, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.BIBLE_MEDIA_UPDATED, handler)
+  },
+
+  getMediaMeta: (): Promise<MediaMeta> => ipcRenderer.invoke(IPC_CHANNELS.GET_MEDIA_META),
+
+  setMediaCategory: (mediaId: string, category: MediaCategory | null): Promise<MediaMeta> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_MEDIA_CATEGORY, mediaId, category),
+
+  setMediaToday: (mediaId: string, selected: boolean): Promise<MediaMeta> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_MEDIA_TODAY, mediaId, selected),
+
+  clearMediaToday: (): Promise<MediaMeta> => ipcRenderer.invoke(IPC_CHANNELS.CLEAR_MEDIA_TODAY),
+
+  onMediaMetaUpdated: (callback: (meta: MediaMeta) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, meta: MediaMeta) => callback(meta)
+    ipcRenderer.on(IPC_CHANNELS.MEDIA_META_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.MEDIA_META_UPDATED, handler)
   },
 
   onProjectionState: (callback: (cmd: ProjectionCommand) => void) => {

@@ -1,5 +1,5 @@
 import type { ProjectionCommand, AppSettings, DisplayInfo, MediaPlaybackState } from './ipc'
-import type { MediaItem } from './media'
+import type { MediaCategory, MediaItem, MediaMeta } from './media'
 import type { Song, Album } from './song'
 import type { BibleBook } from './bible'
 import type { AudioTrack, AudioPlaylist } from './audio'
@@ -55,6 +55,12 @@ export interface ControlElectronAPI {
   onLiveMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
   getBibleMedia: () => Promise<MediaItem[]>
   onBibleMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
+  /** Categorías + selección "para hoy" del operador (no viven en el disco). */
+  getMediaMeta: () => Promise<MediaMeta>
+  setMediaCategory: (mediaId: string, category: MediaCategory | null) => Promise<MediaMeta>
+  setMediaToday: (mediaId: string, selected: boolean) => Promise<MediaMeta>
+  clearMediaToday: () => Promise<MediaMeta>
+  onMediaMetaUpdated: (callback: (meta: MediaMeta) => void) => () => void
   onProjectionState: (callback: (cmd: ProjectionCommand) => void) => () => void
   onMediaPlayback: (callback: (state: MediaPlaybackState) => void) => () => void
   showProjection: (opts?: { reload?: boolean }) => Promise<boolean>

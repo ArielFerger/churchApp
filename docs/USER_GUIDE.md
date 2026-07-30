@@ -42,6 +42,9 @@ Biblioteca con secciones (verso, coro, puente…). Seleccioná una canción y na
 ## Media 🖼️
 
 - Galería con filtros (Todos / Imágenes / Videos / GIFs) y **carpetas**: entrá con un clic, volvé con el breadcrumb (`Media › Alabanza › Fondos`).
+- **Buscador** (arriba): escribí parte del nombre o de la carpeta y busca en **toda** la carpeta de media, sin importar dónde estés parado. Ignora tildes y mayúsculas (`adoracion` encuentra `Adoración`, `ninos` encuentra `niños`) y podés poner varias palabras: `alabanza azul` trae lo que cumpla las dos. Cada resultado muestra en qué carpeta vive. **Esc** o la ✕ limpian la búsqueda.
+- **Categorías**: en el panel derecho etiquetá cada archivo como *Alabanza*, *Adoración* o *Proyección*. La etiqueta se ve en la tarjeta y se guarda sola. Volver a tocar la categoría activa se la saca. Arriba tenés la barra **Categoría** para filtrar (incluye *Sin categoría*), con el conteo de cada una.
+- **Para hoy** ⭐: marcá con la estrella los archivos del servicio de hoy (desde la tarjeta o desde el panel derecho). Aparecen en una **fila fija arriba**, visible desde cualquier carpeta y sin que los filtros la toquen, así los tenés a mano durante la reunión. Es una selección momentánea: **se vacía sola al cambiar de día**, o a mano con *Vaciar* (eso no borra las categorías).
 - Clic en un item → panel derecho: **Mostrar en proyección** (con loop opcional para videos).
 - **Cola de videos**: en cada video, *Añadir a la cola*. La cola aparece en el panel derecho: reordenala (↑↓), reproducila y avanza sola al terminar cada clip. *Siguiente* salta, *Detener* corta.
 - **Barra de transporte** (abajo, cuando hay un video al aire): pausa, scrub, volumen, reinicio — y al terminar el video, el botón **De nuevo** lo vuelve a reproducir desde el principio.

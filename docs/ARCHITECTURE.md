@@ -68,6 +68,31 @@ All file serving goes through privileged custom schemes registered before `app.w
 
 The Media page builds an ordered queue of videos (`videoQueueStore`). When the projected clip fires `ended`, the projection emits an immediate (un-throttled) playback event with `ended: true`; `useProjectionBridge` in control advances to the next queued video (pre-loaded ahead of time) or clears the projection at the end. Queued clips never loop.
 
+## Media metadata (categories + "para hoy")
+
+The scanners only know what's on disk. What the operator adds on top — a
+category per file and the ephemeral "for today" selection — lives in
+`userData/media-meta.json`, owned by `mediaMetaService` (main) and mirrored in
+`mediaMetaStore` (control renderer, optimistic writes confirmed by main).
+
+- **Categories** (`alabanza` / `adoracion` / `proyeccion`, defined once in
+  `shared/types/media.ts`) are keyed by `mediaId`, which is a hash of the
+  absolute path — moving or renaming a file loses its category and leaves a
+  harmless orphan entry. Orphans are deliberately never pruned: doing it
+  automatically would wipe everything the first time someone points the media
+  folder somewhere else.
+- **"Para hoy"** stores `{ date, ids }`. On read, a `date` that isn't today
+  yields an empty list, so the selection expires by itself between services —
+  including with the app left open across midnight.
+
+The pure rules (rollover, dedupe, sanitising untrusted JSON) live in
+`shared/utils/mediaMeta.ts` so main and renderer share them and they're
+testable without Electron.
+
+Search (`searchMedia` in `shared/utils/mediaFolders.ts`) is renderer-side over
+the already-loaded index: accent-insensitive, multi-term AND, matching both
+file name and folder path across the whole library.
+
 ## Bible verse appearance
 
 `AppSettings.bibleDisplay` holds font id, size %, color, bold, shadow, background media id and background dim. The **Apariencia** panel (Bible tab) edits it with a scaled live preview; the projection re-renders on every settings push. User fonts live in `userData/bible-fonts/` (managed by `fontsService`, CRUD over IPC, broadcast to both windows) and are registered at runtime via the `FontFace` API — no internet needed at projection time.
@@ -83,6 +108,7 @@ Playlists are persisted to `userData/audio-playlists.json`. Playback has a **con
 | File / folder | Contents |
 |---|---|
 | `church-projector-settings.json` (electron-store) | `AppSettings`: display, folders, fades, `bibleDisplay` |
+| `media-meta.json` | Media categories + the "para hoy" selection (see below) |
 | `audio-state.json` | Last track, position, volume (session resume) |
 | `audio-playlists.json` | Music playlists |
 | `bible-fonts/` | Uploaded font files |
