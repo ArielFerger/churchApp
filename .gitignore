@@ -13,6 +13,7 @@ node_modules/
 dist/
 out/
 dist-electron/
+*.tsbuildinfo
 
 # Logs
 *.log

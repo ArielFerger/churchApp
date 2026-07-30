@@ -3,6 +3,13 @@
     "composite": true,
     "module": "ESNext",
     "moduleResolution": "bundler",
+    // El proceso principal corre en Node: sin esto TypeScript resuelve la rama
+    // "default" del package.json de las dependencias (p. ej. music-metadata
+    // expone `parseFile` solo en su build de Node) y marca falsos errores.
+    "customConditions": ["node"],
+    // Los tipos y utils compartidos incluyen código de renderer (Window,
+    // FontFace); DOM va acá para poder chequearlos en el mismo proyecto.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -16,9 +23,14 @@
       "@/shared/*": ["src/shared/*"]
     }
   },
+  // `include` tiene que listar TODO lo que se importa: electron/ importa desde
+  // src/shared, y sin esos globs tsc falla con TS6307.
   "include": [
     "electron/**/*.ts",
     "electron.vite.config.ts",
-    "scripts/**/*.ts"
+    "vitest.config.ts",
+    "scripts/**/*.ts",
+    "src/shared/**/*.ts",
+    "tests/**/*.ts"
   ]
 }
