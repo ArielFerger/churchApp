@@ -94,6 +94,18 @@ Podés agrupar canciones en **álbumes** para el repertorio del servicio (el des
 - Si reproducís desde una playlist, al terminar cada tema sigue el próximo **de esa playlist**; la cola manual siempre tiene prioridad.
 - El **mini reproductor** (abajo, siempre visible): play/pausa, anterior/siguiente, stop con fade, seek y volumen. Al reabrir la app, retoma donde quedaste.
 
+## Descargar 📥
+
+Pegás el enlace de un video, elegís **Video** o **MP3**, y listo. El video cae en tu carpeta de media y el MP3 en la de audio, así que aparecen solos en esas secciones sin mover nada.
+
+- Se bajan **de a una** — cuatro descargas en paralelo por la conexión de la iglesia sólo consiguen que las cuatro vayan lentas. Podés encolar varias.
+- Mientras baja ves el avance, la velocidad y cuánto falta. **Cancelar** corta en el acto y no deja archivos a medias en la biblioteca.
+- Si pegás un enlace de una lista de reproducción, baja **sólo ese video**, no la lista entera (te lo avisa).
+
+La primera vez hace falta instalar dos programas externos: **yt-dlp** (baja) y **ffmpeg** (junta video con audio y arma el MP3). La pantalla tiene un botón que los baja solos (~180 MB). No vienen con la app a propósito: yt-dlp se desactualiza cada pocas semanas cuando YouTube cambia algo, y conviene poder renovarlo sin reinstalar todo. Si ya los tenés, poné la carpeta en *Ajustes → Herramientas de descarga*.
+
+> **Ojo con los derechos.** Bajá sólo lo que puedas usar: material propio, con licencia Creative Commons, o del que tengas permiso. La mayoría de los videos de YouTube tienen derechos de autor y proyectarlos en una reunión sin licencia no está permitido.
+
 ## Atajos útiles
 
 - **Esc** — cierra paneles/palettes.

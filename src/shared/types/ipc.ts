@@ -88,6 +88,11 @@ export interface AppSettings {
   projectionDisplayId: number | null
   mediaFolder: string | null
   audioFolder: string | null
+  /**
+   * Carpeta con yt-dlp y ffmpeg para las descargas de YouTube. `null` = buscar
+   * en las ubicaciones por defecto y en el PATH.
+   */
+  toolsFolder: string | null
   songsFolder: string | null
   /** Carpeta exclusiva para los videos de loop de "En Vivo" (null = usa mediaFolder). */
   liveLoopFolder: string | null

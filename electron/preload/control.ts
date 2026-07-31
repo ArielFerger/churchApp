@@ -11,6 +11,8 @@ import type { Song, Album } from '../../src/shared/types/song'
 import type { BibleBook } from '../../src/shared/types/bible'
 import type { AudioTrack, AudioPlaylist } from '../../src/shared/types/audio'
 import type { BibleFont } from '../../src/shared/types/fonts'
+import type { DownloadJob, DownloadKind } from '../../src/shared/utils/downloads'
+import type { ToolStatus as DownloadTools } from '../services/downloadsService'
 
 contextBridge.exposeInMainWorld('electronAPI', {
   sendProjectionCommand: (cmd: ProjectionCommand) =>
@@ -168,5 +170,37 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: Electron.IpcRendererEvent, key: string) => callback(key)
     ipcRenderer.on(IPC_CHANNELS.SHORTCUT_FIRED, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.SHORTCUT_FIRED, handler)
+  },
+
+  // ─── Descargas de YouTube ───────────────────────────────────────────────
+  getDownloadTools: (): Promise<DownloadTools> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_DOWNLOAD_TOOLS),
+
+  installDownloadTools: (): Promise<DownloadTools> =>
+    ipcRenderer.invoke(IPC_CHANNELS.INSTALL_DOWNLOAD_TOOLS),
+
+  getDownloads: (): Promise<DownloadJob[]> => ipcRenderer.invoke(IPC_CHANNELS.GET_DOWNLOADS),
+
+  enqueueDownload: (url: string, kind: DownloadKind): Promise<DownloadJob> =>
+    ipcRenderer.invoke(IPC_CHANNELS.ENQUEUE_DOWNLOAD, url, kind),
+
+  cancelDownload: (id: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CANCEL_DOWNLOAD, id),
+
+  removeDownload: (id: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.REMOVE_DOWNLOAD, id),
+
+  clearDownloads: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.CLEAR_DOWNLOADS),
+
+  onDownloadsUpdated: (
+    callback: (payload: {
+      jobs?: DownloadJob[]
+      install?: { step: string; ratio: number | null }
+    }) => void
+  ) => {
+    const handler = (_: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) =>
+      callback(payload)
+    ipcRenderer.on(IPC_CHANNELS.DOWNLOADS_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.DOWNLOADS_UPDATED, handler)
   }
 })

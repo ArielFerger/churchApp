@@ -68,6 +68,34 @@ All file serving goes through privileged custom schemes registered before `app.w
 
 The Media page builds an ordered queue of videos (`videoQueueStore`). When the projected clip fires `ended`, the projection emits an immediate (un-throttled) playback event with `ended: true`; `useProjectionBridge` in control advances to the next queued video (pre-loaded ahead of time) or clears the projection at the end. Queued clips never loop.
 
+## Downloads (yt-dlp)
+
+`downloadsService` shells out to two external binaries and owns a **sequential**
+queue — one child process at a time, because saturating a church's uplink with
+parallel downloads just makes all of them slow.
+
+The binaries are deliberately *not* bundled: yt-dlp goes stale within weeks of
+any YouTube change, and ffmpeg is larger than the rest of the app combined.
+They're looked up in `settings.toolsFolder` → `userData/tools` → `<app>/tools`
+→ `<app>/../tools` → `resources/tools` → PATH, and the page offers to fetch
+them from the projects' own GitHub releases.
+
+Everything parsed out of yt-dlp lives in `shared/utils/downloads.ts` as pure
+functions, so the wire format is pinned by tests instead of discovered live:
+
+- `buildArgs` — the flag list. Two of them are load-bearing and non-obvious:
+  `--progress` (yt-dlp emits no progress at all when stdout isn't a TTY, which
+  is always the case under Electron) and the *absence* of `--no-part` (with it,
+  a canceled download leaves a truncated file under its final name, and the
+  media scanner then indexes it as a playable video).
+- `parseProgressLine` / `parseFileLine` — stdout carries progress, ordinary
+  log lines and `--print` output interleaved, so each thing we care about is
+  requested with its own tag prefix and everything else is ignored.
+
+Downloads land straight in the configured media/audio folders, so the existing
+chokidar watchers pick them up and they appear in the library with no extra
+wiring.
+
 ## Songs: one textarea, one parser
 
 A song's canonical form is a single `content` string (`shared/types/song.ts`);

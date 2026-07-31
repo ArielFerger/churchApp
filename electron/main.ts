@@ -26,6 +26,7 @@ import {
   registerFontProtocolHandler
 } from './services/fontProtocol'
 import { registerFontsHandlers } from './ipc/fonts'
+import { registerDownloadsHandlers } from './ipc/downloads'
 import { IPC_CHANNELS } from '../src/shared/constants'
 import log from 'electron-log'
 
@@ -58,6 +59,7 @@ app.whenReady().then(async () => {
   void bibleService.init()
   registerAudioHandlers(controlWindow)
   registerFontsHandlers(controlWindow, projectionWindow)
+  registerDownloadsHandlers(controlWindow)
 
   registerSettingsHandlers((next, prev) => {
     // La proyección refleja en vivo los cambios de apariencia de versículos.

@@ -4,6 +4,14 @@ import type { Song, Album } from './song'
 import type { BibleBook } from './bible'
 import type { AudioTrack, AudioPlaylist } from './audio'
 import type { BibleFont } from './fonts'
+import type { DownloadJob, DownloadKind } from '../utils/downloads'
+
+/** Dónde están (o no) yt-dlp y ffmpeg. */
+export interface DownloadTools {
+  ytDlp: string | null
+  ffmpegDir: string | null
+  searched: string[]
+}
 
 export interface AudioPersistedState {
   lastTrackId: string | null
@@ -92,6 +100,20 @@ export interface ControlElectronAPI {
   }) => Promise<AudioPlaylist[]>
   deleteAudioPlaylist: (id: string) => Promise<AudioPlaylist[]>
   onShortcut: (callback: (key: string) => void) => () => void
+
+  getDownloadTools: () => Promise<DownloadTools>
+  installDownloadTools: () => Promise<DownloadTools>
+  getDownloads: () => Promise<DownloadJob[]>
+  enqueueDownload: (url: string, kind: DownloadKind) => Promise<DownloadJob>
+  cancelDownload: (id: string) => Promise<void>
+  removeDownload: (id: string) => Promise<void>
+  clearDownloads: () => Promise<void>
+  onDownloadsUpdated: (
+    callback: (payload: {
+      jobs?: DownloadJob[]
+      install?: { step: string; ratio: number | null }
+    }) => void
+  ) => () => void
 }
 
 export interface ProjectionElectronAPI {

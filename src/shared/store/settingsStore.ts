@@ -14,6 +14,7 @@ const DEFAULTS: AppSettings = {
   projectionDisplayId: null,
   mediaFolder: null,
   audioFolder: null,
+  toolsFolder: null,
   songsFolder: null,
   liveLoopFolder: null,
   bibleBackgroundsFolder: null,
