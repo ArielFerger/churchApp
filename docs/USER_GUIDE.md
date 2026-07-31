@@ -25,6 +25,18 @@ La app abre **dos ventanas**: la de **Control** (donde trabajás vos) y la de **
 
 Dos modos, con el interruptor arriba a la derecha: **Editar** (cargar la letra) y **Tocar** (dirigir la reunión). Al abrir la sección vas directo a Tocar.
 
+### Traer letras que ya tenés (.txt)
+
+**Un `.txt` ya es una canción.** Arrastrá los archivos a cualquier parte de la pantalla de Canciones (o usá *Importar .txt*) y se cargan de una:
+
+- El **nombre del archivo** pasa a ser el título. Si empieza con número de pista (`01 - Sublime gracia.txt`) el número se saca; si el número es parte del nombre (`40 dias.txt`) se respeta. Los guiones bajos pasan a espacios.
+- Las **líneas en blanco que ya trae el archivo** separan los slides, que es como está escrita cualquier letra. Los huecos de varias líneas cuentan como uno solo.
+- Podés arrastrar **muchos de una** — te avisa cuántos entraron.
+- Si estás parado en un álbum, las importadas caen ahí.
+- Los `.txt` viejos guardados desde el Bloc de notas o Word (con acentos en la codificación de Windows) se leen bien: no hay que convertir nada.
+
+Después, si querés, les agregás acordes y nombres de parte a mano.
+
 ### Escribir la letra (Editar)
 
 Es un solo cuadro de texto:
@@ -32,6 +44,8 @@ Es un solo cuadro de texto:
 - **Una línea en blanco** separa un slide del siguiente.
 - **`# Coro`** al principio de una estrofa le pone nombre a esa parte (`# Verso 1`, `# Puente`, lo que quieras). Se ve en el mazo para que la reconozcas de un vistazo, pero **nunca se proyecta**.
 - **Acordes entre corchetes**, en la posición exacta donde tocan: `que ge[Am]nial, est[A]a canción`. Son sólo para vos: la proyección siempre va sin acordes.
+
+A la pantalla va **sólo la letra**: ni el título de la canción, ni el nombre de la parte, ni los acordes.
 
 Mientras la canción exista, **se guarda sola** — no hace falta apretar Guardar. Las canciones nuevas sí se crean a mano con *Crear canción*, así no quedan borradores vacíos dando vueltas.
 

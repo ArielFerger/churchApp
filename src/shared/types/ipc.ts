@@ -1,8 +1,11 @@
 export type Transition = 'fade' | 'cut'
 
+/**
+ * Lo único que va a la pantalla es la letra. El título de la canción y el
+ * nombre de la parte ("Coro") son ayudas de cabina y se quedan en el control.
+ */
 export interface SlideContent {
   lines: string[]
-  songTitle?: string
 }
 
 export type ProjectionCommand =

@@ -174,6 +174,59 @@ export function parseSongContent(content: string): ContentSlide[] {
   return slides
 }
 
+// ─── Importar canciones desde archivos de texto ──────────────────────────────
+
+/**
+ * Decodifica el contenido crudo de un `.txt`. Se intenta UTF-8 en modo estricto
+ * y, si el archivo no es UTF-8 válido, se cae a windows-1252: los `.txt` de
+ * letras suelen venir de Word o del Bloc de notas viejo y ahí las eñes y las
+ * tildes están en esa codificación. Sin esto "corazón" llega como "corazÃ³n".
+ */
+export function decodeSongFile(bytes: Uint8Array): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    try {
+      return new TextDecoder('windows-1252').decode(bytes)
+    } catch {
+      return new TextDecoder('utf-8').decode(bytes)
+    }
+  }
+}
+
+/**
+ * Deja el texto de un `.txt` listo para el editor: saca el BOM, normaliza los
+ * saltos de línea de Windows y colapsa los huecos de varias líneas en blanco a
+ * uno solo — si no, cada hueco grande generaría slides de más.
+ */
+export function normalizeImportedText(raw: string): string {
+  return raw
+    .replace(/^﻿/, '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((l) => l.replace(/[ \t]+$/, ''))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/**
+ * Nombre de la canción a partir del nombre del archivo: sin extensión, con los
+ * guiones bajos como espacios y sin el número de pista de adelante.
+ *
+ * El número sólo se saca si viene con separador ("01 - Sublime gracia"), para
+ * no arruinar una canción que empiece con un número ("40 días").
+ */
+export function titleFromFileName(fileName: string): string {
+  const base = fileName.replace(/\.[^.]+$/, '')
+  const clean = base
+    .replace(/^\d{1,3}\s*[-–_.)]\s+/, '')
+    .replace(/[_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return clean || base.trim() || 'Sin título'
+}
+
 // ─── Legacy → modern content synthesis ───────────────────────────────────────
 
 /**

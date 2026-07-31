@@ -4,9 +4,12 @@ import { useLiveStore } from '@/shared/store/liveStore'
 import type { Song } from '@/shared/types/song'
 import type { ProjectionCommand } from '@/shared/types/ipc'
 import {
+  decodeSongFile,
+  normalizeImportedText,
   parseSongContent,
   songMatches,
   synthesizeContent,
+  titleFromFileName,
   type ChordLine,
   type ChordWord,
   type ContentSlide
@@ -74,6 +77,11 @@ export default function Songs() {
   const [dirty, setDirty] = useState(false)
   const [saveFlash, setSaveFlash] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+
+  // Importación de .txt
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [importMsg, setImportMsg] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
 
   // Boot
   useEffect(() => {
@@ -233,6 +241,58 @@ export default function Songs() {
     }, 0)
   }
 
+  /**
+   * Importar letras desde archivos `.txt`. Un txt ya es una canción: el nombre
+   * del archivo pasa a ser el título y las líneas en blanco que ya trae el
+   * texto separan los slides, que es como está escrita cualquier letra.
+   */
+  async function importTxtFiles(fileList: FileList | File[]) {
+    const files = [...fileList].filter((f) => /\.txt$/i.test(f.name))
+    if (files.length === 0) {
+      setImportMsg('Sólo se pueden importar archivos .txt')
+      window.setTimeout(() => setImportMsg(null), 2600)
+      return
+    }
+    const albumId =
+      albumFilter !== 'all' && albumFilter !== 'none' ? albumFilter : null
+
+    let first: Song | null = null
+    let ok = 0
+    const vacios: string[] = []
+    for (let i = 0; i < files.length; i++) {
+      setImportMsg(`Importando ${i + 1} de ${files.length}…`)
+      const file = files[i]
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      const content = normalizeImportedText(decodeSongFile(bytes))
+      if (!content) {
+        vacios.push(file.name)
+        continue
+      }
+      const saved = await saveSong({
+        title: titleFromFileName(file.name),
+        content,
+        albumId,
+        tags: [],
+        language: 'es'
+      })
+      if (saved) {
+        ok += 1
+        first ??= saved
+      }
+    }
+
+    const partes = [`${ok} ${ok === 1 ? 'canción importada' : 'canciones importadas'}`]
+    if (vacios.length) partes.push(`${vacios.length} vacío(s) salteado(s)`)
+    setImportMsg(partes.join(' · '))
+    window.setTimeout(() => setImportMsg(null), 3600)
+
+    // Saltar a la primera importada, salvo que haya algo sin guardar en curso.
+    if (first && !dirty) {
+      setCurrentSongId(first.id)
+      setView('perform')
+    }
+  }
+
   async function handleDelete() {
     if (!currentSong) return
     if (!confirm(`¿Eliminar "${currentSong.title}"?`)) return
@@ -277,14 +337,10 @@ export default function Songs() {
       const slide = slides[index]
       if (!slide) return
       setCursor(index)
-      // El nombre de la parte ("Coro") es una ayuda para el operador y no viaja
-      // a la pantalla: la congregación no necesita saber en qué slide vamos.
-      send({
-        type: 'showSlide',
-        content: { lines: slide.plainLines, songTitle }
-      })
+      // A la pantalla va sólo la letra: ni el título ni el nombre de la parte.
+      send({ type: 'showSlide', content: { lines: slide.plainLines } })
     },
-    [slides, songTitle]
+    [slides]
   )
 
   const projectClear = useCallback(() => send({ type: 'clear' }), [])
@@ -343,8 +399,38 @@ export default function Songs() {
   const perform = view === 'perform'
 
   return (
-    <div className="songbook h-full overflow-y-auto">
+    <div
+      className={`songbook h-full overflow-y-auto ${dragging ? 'is-dropping' : ''}`}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes('Files')) return
+        e.preventDefault()
+        setDragging(true)
+      }}
+      onDragLeave={(e) => {
+        // Sólo apagar cuando el puntero sale de verdad de la página, no al
+        // cruzar de un hijo a otro.
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+        setDragging(false)
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.types.includes('Files')) return
+        e.preventDefault()
+        setDragging(false)
+        void importTxtFiles(e.dataTransfer.files)
+      }}
+    >
       <div className="mx-auto max-w-[1500px] px-6 pb-24 pt-5">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".txt,text/plain"
+          multiple
+          hidden
+          onChange={(e) => {
+            if (e.target.files) void importTxtFiles(e.target.files)
+            e.target.value = '' // permite reimportar el mismo archivo
+          }}
+        />
         {/* Header — en Tocar se achica: cada pixel de arriba es un pedacito de
             canción menos que entra en el mazo. */}
         <header
@@ -433,6 +519,14 @@ export default function Songs() {
               <button
                 type="button"
                 className="btn-soft whitespace-nowrap"
+                onClick={() => fileInputRef.current?.click()}
+                title="Cada .txt se convierte en una canción. También podés arrastrarlos acá."
+              >
+                ↓ Importar .txt
+              </button>
+              <button
+                type="button"
+                className="btn-soft whitespace-nowrap"
                 onClick={handleNew}
               >
                 ＋ Nueva canción
@@ -440,6 +534,7 @@ export default function Songs() {
             </div>
           }
         >
+          {importMsg && <p className="import-msg mt-3">{importMsg}</p>}
           <div className="mt-3 flex flex-wrap gap-2">
             {!songsLoaded && (
               <p className="empty-state">Cargando canciones…</p>
@@ -447,7 +542,7 @@ export default function Songs() {
             {songsLoaded && filteredSongs.length === 0 && (
               <p className="empty-state">
                 {songs.length === 0
-                  ? 'No hay canciones todavía.'
+                  ? 'No hay canciones todavía. Arrastrá acá tus .txt con letras, o escribí una.'
                   : 'No hay canciones en este filtro.'}
               </p>
             )}
@@ -1101,6 +1196,17 @@ const songbookCss = `
   border-color: rgba(214, 90, 74, 0.4);
 }
 .songbook .btn-danger:hover { background: rgba(214, 90, 74, 0.12); }
+
+/* Soltar .txt en cualquier parte de la página los importa. */
+.songbook.is-dropping {
+  outline: 2px dashed #f5b342;
+  outline-offset: -10px;
+}
+.songbook .import-msg {
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.82rem;
+  color: #f5b342;
+}
 
 .songbook .save-status {
   align-self: center;

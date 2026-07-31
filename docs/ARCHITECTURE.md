@@ -77,8 +77,19 @@ stored twice:
 - a blank line starts a new slide,
 - `[Am]` markers ride along inside the text and are stripped for projection,
 - a `# Coro` line names the slide for the operator and is dropped from
-  `plainLines` — it is deliberately **not** sent to the projection window, which
-  only ever receives lyrics plus the song title.
+  `plainLines`.
+
+`SlideContent` carries **lyrics and nothing else**. Song title, part name and
+chords are all cabin-side aids; the projection window has no way to render
+them, which is the point — there is no setting to get them back on screen by
+accident.
+
+Importing a `.txt` needs no new format: the file *is* the content. The only
+work is `decodeSongFile` (UTF-8 strict, falling back to windows-1252, because
+lyrics files written in old Notepad/Word are full of `ó` bytes that aren't
+valid UTF-8) and `normalizeImportedText` (BOM, CRLF, runs of blank lines). It
+runs entirely in the renderer off a drop / file input — no main-process dialog
+involved.
 
 Legacy songs (`sections`/`order`, pre-2026-05) are converted on read by
 `synthesizeContent`, which writes their section labels back out as `# label`

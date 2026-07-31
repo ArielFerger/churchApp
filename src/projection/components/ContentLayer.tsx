@@ -196,11 +196,6 @@ function SlideBlock({ content }: { content: SlideContent }) {
         ))}
       </div>
 
-      {content.songTitle && (
-        <div className="mt-12 flex items-center justify-center text-xl font-medium text-slate-300/90">
-          <span style={{ textShadow: '0 2px 12px rgba(0,0,0,0.85)' }}>{content.songTitle}</span>
-        </div>
-      )}
     </div>
   )
 }

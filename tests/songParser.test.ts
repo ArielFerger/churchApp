@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
+  decodeSongFile,
   parseChordLine,
   parseSongContent,
+  normalizeImportedText,
   stripChords,
   synthesizeContent,
+  titleFromFileName,
   flattenSong,
   songMatches
 } from '../src/shared/utils/songParser'
@@ -106,6 +109,78 @@ describe('parseSongContent', () => {
     const slides = parseSongContent('a\n\nb\n\nc')
     expect(slides.map((s) => s.index)).toEqual([0, 1, 2])
     expect(new Set(slides.map((s) => s.key)).size).toBe(3)
+  })
+})
+
+describe('importar .txt', () => {
+  it('un txt cualquiera ya se parte en slides por sus líneas en blanco', () => {
+    const txt = 'Primera estrofa\nsegunda linea\n\nCoro de la cancion'
+    const slides = parseSongContent(normalizeImportedText(txt))
+    expect(slides).toHaveLength(2)
+    expect(slides[1].plainLines).toEqual(['Coro de la cancion'])
+  })
+
+  it('normaliza los saltos de línea de Windows', () => {
+    expect(normalizeImportedText('uno\r\ndos\r\n\r\ntres')).toBe('uno\ndos\n\ntres')
+    expect(parseSongContent(normalizeImportedText('uno\r\n\r\ndos'))).toHaveLength(2)
+  })
+
+  it('varias líneas en blanco seguidas no inventan slides de más', () => {
+    const slides = parseSongContent(normalizeImportedText('uno\n\n\n\n\ndos'))
+    expect(slides).toHaveLength(2)
+  })
+
+  it('saca el BOM, los espacios al final de línea y los bordes', () => {
+    expect(normalizeImportedText('﻿uno   \ndos\t\n\n\n')).toBe('uno\ndos')
+  })
+
+  it('un archivo vacío o sólo espacios queda en string vacío', () => {
+    expect(normalizeImportedText('   \n\n \r\n')).toBe('')
+  })
+
+  describe('titleFromFileName', () => {
+    it('usa el nombre del archivo sin extensión', () => {
+      expect(titleFromFileName('Sublime gracia.txt')).toBe('Sublime gracia')
+    })
+
+    it('los guiones bajos pasan a espacios', () => {
+      expect(titleFromFileName('sublime_gracia.txt')).toBe('sublime gracia')
+    })
+
+    it('saca el número de pista cuando viene con separador', () => {
+      expect(titleFromFileName('01 - Sublime gracia.txt')).toBe('Sublime gracia')
+      expect(titleFromFileName('7. Cristo vive.txt')).toBe('Cristo vive')
+    })
+
+    it('NO saca un número que es parte del nombre', () => {
+      expect(titleFromFileName('40 dias.txt')).toBe('40 dias')
+      expect(titleFromFileName('10000 razones.txt')).toBe('10000 razones')
+    })
+
+    it('un nombre sin extensión también sirve', () => {
+      expect(titleFromFileName('Cristo vive')).toBe('Cristo vive')
+    })
+
+    it('nunca devuelve vacío', () => {
+      expect(titleFromFileName('.txt')).toBe('Sin título')
+    })
+  })
+
+  describe('decodeSongFile', () => {
+    const bytes = (...n: number[]) => new Uint8Array(n)
+
+    it('lee UTF-8', () => {
+      expect(decodeSongFile(new TextEncoder().encode('corazón'))).toBe('corazón')
+    })
+
+    it('cae a windows-1252 cuando el archivo no es UTF-8 válido', () => {
+      // "corazón" tal como lo guarda el Bloc de notas viejo: ó = 0xF3
+      expect(decodeSongFile(bytes(0x63, 0x6f, 0x72, 0x61, 0x7a, 0xf3, 0x6e))).toBe('corazón')
+    })
+
+    it('un archivo vacío no explota', () => {
+      expect(decodeSongFile(bytes())).toBe('')
+    })
   })
 })
 
