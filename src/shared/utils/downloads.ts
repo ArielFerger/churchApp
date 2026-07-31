@@ -7,6 +7,28 @@
 /** Qué se quiere bajar: el video, o sólo el audio pasado a MP3. */
 export type DownloadKind = 'video' | 'audio'
 
+/**
+ * Altura máxima del video. Proyectar a 4K no aporta nada —el proyector rara vez
+ * pasa de 1080p— y multiplica por diez lo que ocupa y lo que tarda.
+ */
+export type VideoQuality = 'best' | '1080' | '720' | '480'
+
+/** Bitrate del MP3. */
+export type AudioBitrate = '320' | '192' | '128'
+
+export const VIDEO_QUALITIES: { id: VideoQuality; label: string; hint: string }[] = [
+  { id: '1080', label: '1080p', hint: 'Full HD — lo que usa casi cualquier proyector' },
+  { id: '720', label: '720p', hint: 'HD, archivos más livianos' },
+  { id: '480', label: '480p', hint: 'Para pantallas chicas o conexiones lentas' },
+  { id: 'best', label: 'Máxima', hint: 'Lo mejor que haya, aunque sea 4K' }
+]
+
+export const AUDIO_BITRATES: { id: AudioBitrate; label: string }[] = [
+  { id: '320', label: '320 kbps' },
+  { id: '192', label: '192 kbps' },
+  { id: '128', label: '128 kbps' }
+]
+
 export type DownloadStage =
   | 'queued'
   | 'downloading'
@@ -26,10 +48,24 @@ export interface DownloadProgress {
   eta: number | null
 }
 
+export interface DownloadOptions {
+  kind: DownloadKind
+  quality: VideoQuality
+  bitrate: AudioBitrate
+}
+
+export const DEFAULT_OPTIONS: DownloadOptions = {
+  kind: 'video',
+  quality: '1080',
+  bitrate: '320'
+}
+
 export interface DownloadJob {
   id: string
   url: string
   kind: DownloadKind
+  quality: VideoQuality
+  bitrate: AudioBitrate
   stage: DownloadStage
   /** Título resuelto por yt-dlp; hasta que responde se muestra la URL. */
   title: string | null
@@ -168,6 +204,8 @@ export function buildArgs(opts: {
   kind: DownloadKind
   destDir: string
   ffmpegDir: string | null
+  quality?: VideoQuality
+  bitrate?: AudioBitrate
 }): string[] {
   const args = [
     opts.url,
@@ -193,18 +231,85 @@ export function buildArgs(opts: {
 
   if (opts.ffmpegDir) args.push('--ffmpeg-location', opts.ffmpegDir)
 
+  // Los valores por defecto son los mismos que DEFAULT_OPTIONS: omitir la
+  // calidad no puede terminar bajando un 4K de tres gigas por descuido.
+  const quality = opts.quality ?? DEFAULT_OPTIONS.quality
+  const bitrate = opts.bitrate ?? DEFAULT_OPTIONS.bitrate
+
   if (opts.kind === 'audio') {
-    args.push('--extract-audio', '--audio-format', 'mp3', '--audio-quality', '0')
+    args.push(
+      '--extract-audio',
+      '--audio-format',
+      'mp3',
+      '--audio-quality',
+      `${bitrate}K`,
+      // Portada y datos dentro del MP3: la sección Audio ya lee esas etiquetas,
+      // así que el tema entra a la biblioteca con su tapa y su título en vez de
+      // aparecer como un archivo pelado.
+      '--embed-thumbnail',
+      '--embed-metadata',
+      // Las miniaturas de YouTube vienen en webp y un MP3 no las puede guardar.
+      '--convert-thumbnails',
+      'jpg'
+    )
   } else {
     // Preferir mp4/m4a: es lo que el <video> de la proyección reproduce sin
     // sorpresas. Si no hay, que baje lo mejor que encuentre y lo convierta.
+    const cap = quality === 'best' ? '' : `[height<=${quality}]`
     args.push(
       '--format',
-      'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/bestvideo+bestaudio/best',
+      `bestvideo${cap}[ext=mp4]+bestaudio[ext=m4a]/best${cap}[ext=mp4]/bestvideo${cap}+bestaudio/best${cap}/best`,
       '--merge-output-format',
-      'mp4'
+      'mp4',
+      // Los capítulos del video quedan como marcadores dentro del mp4.
+      '--embed-chapters',
+      '--embed-metadata'
     )
   }
 
   return args
+}
+
+/**
+ * Argumentos para expandir una lista de reproducción sin bajar nada: devuelve
+ * un JSON por video. `--flat-playlist` evita resolver cada video por separado,
+ * que en una lista larga es la diferencia entre un segundo y varios minutos.
+ */
+export function buildPlaylistArgs(url: string): string[] {
+  return [
+    url,
+    '--flat-playlist',
+    '--dump-json',
+    '--no-warnings',
+    '--ignore-errors',
+    '--yes-playlist'
+  ]
+}
+
+/**
+ * Lee la salida de `buildPlaylistArgs`: un objeto JSON por línea. Los videos
+ * privados o borrados aparecen sin url y se descartan.
+ */
+export function parsePlaylistEntries(
+  stdout: string
+): { url: string; title: string | null }[] {
+  const out: { url: string; title: string | null }[] = []
+  for (const line of stdout.split(/\r?\n/)) {
+    const t = line.trim()
+    if (!t.startsWith('{')) continue
+    try {
+      const j = JSON.parse(t)
+      const url =
+        typeof j.url === 'string' && /^https?:/.test(j.url)
+          ? j.url
+          : typeof j.id === 'string'
+            ? `https://www.youtube.com/watch?v=${j.id}`
+            : null
+      if (!url) continue
+      out.push({ url, title: typeof j.title === 'string' ? j.title : null })
+    } catch {
+      /* línea que no era JSON */
+    }
+  }
+  return out
 }

@@ -98,13 +98,13 @@ Podés agrupar canciones en **álbumes** para el repertorio del servicio (el des
 
 Pegás el enlace de un video, elegís **Video** o **MP3**, y listo. El video cae en tu carpeta de media y el MP3 en la de audio, así que aparecen solos en esas secciones sin mover nada.
 
+- **Resolución**: elegís hasta dónde bajar el video (1080p por defecto). Un 4K no se ve mejor en un proyector y ocupa diez veces más.
+- **Calidad del MP3**: 320, 192 o 128 kbps. El MP3 sale con **tapa y datos adentro**, así que en la sección Audio aparece con su carátula y su título en vez de como un archivo pelado.
 - Se bajan **de a una** — cuatro descargas en paralelo por la conexión de la iglesia sólo consiguen que las cuatro vayan lentas. Podés encolar varias.
 - Mientras baja ves el avance, la velocidad y cuánto falta. **Cancelar** corta en el acto y no deja archivos a medias en la biblioteca.
-- Si pegás un enlace de una lista de reproducción, baja **sólo ese video**, no la lista entera (te lo avisa).
+- **Listas de reproducción**: si pegás el enlace de una lista, por defecto baja sólo ese video. Aparece un botón para **encolar la lista completa**, que la expande y arma un trabajo por video — así ves el avance de cada uno y podés cancelar uno solo sin perder el resto.
 
 La primera vez hace falta instalar dos programas externos: **yt-dlp** (baja) y **ffmpeg** (junta video con audio y arma el MP3). La pantalla tiene un botón que los baja solos (~180 MB). No vienen con la app a propósito: yt-dlp se desactualiza cada pocas semanas cuando YouTube cambia algo, y conviene poder renovarlo sin reinstalar todo. Si ya los tenés, poné la carpeta en *Ajustes → Herramientas de descarga*.
-
-> **Ojo con los derechos.** Bajá sólo lo que puedas usar: material propio, con licencia Creative Commons, o del que tengas permiso. La mayoría de los videos de YouTube tienen derechos de autor y proyectarlos en una reunión sin licencia no está permitido.
 
 ## Atajos útiles
 

@@ -6,10 +6,13 @@ import { app } from 'electron'
 import log from 'electron-log'
 import {
   buildArgs,
+  buildPlaylistArgs,
   parseFileLine,
+  parsePlaylistEntries,
   parseProgressLine,
+  DEFAULT_OPTIONS,
   type DownloadJob,
-  type DownloadKind
+  type DownloadOptions
 } from '../../src/shared/utils/downloads'
 import { getSettings } from './settingsService'
 
@@ -72,7 +75,7 @@ export function resolveTools(): ToolStatus {
 }
 
 /** La carpeta a la que va cada tipo de descarga, según los Ajustes. */
-export function destinationFor(kind: DownloadKind): string | null {
+export function destinationFor(kind: DownloadOptions['kind']): string | null {
   const s = getSettings()
   return kind === 'audio' ? s.audioFolder : s.mediaFolder
 }
@@ -277,6 +280,8 @@ function runJob(job: DownloadJob): Promise<void> {
     const args = buildArgs({
       url: job.url,
       kind: job.kind,
+      quality: job.quality,
+      bitrate: job.bitrate,
       destDir,
       ffmpegDir: tools.ffmpegDir
     })
@@ -356,10 +361,19 @@ async function pump(): Promise<void> {
   const next = jobs.find((j) => j.stage === 'queued')
   if (!next) return
 
-  // Los datos del video son un lujo: si el probe falla, se baja igual.
+  // Los datos del video son un lujo: si el probe falla, se baja igual. Lo que
+  // ya se sabía (el título que trajo la lista) no se pisa con un null.
   try {
     const meta = await probe(next.url)
-    if (jobs.find((j) => j.id === next.id)?.stage === 'queued') patch(next.id, meta)
+    const current = jobs.find((j) => j.id === next.id)
+    if (current?.stage === 'queued') {
+      patch(next.id, {
+        title: meta.title ?? current.title,
+        uploader: meta.uploader ?? current.uploader,
+        durationSec: meta.durationSec ?? current.durationSec,
+        thumbnail: meta.thumbnail ?? current.thumbnail
+      })
+    }
   } catch {
     /* sin metadatos */
   }
@@ -370,14 +384,21 @@ async function pump(): Promise<void> {
   void pump()
 }
 
-export function enqueue(url: string, kind: DownloadKind): DownloadJob {
+export function enqueue(
+  url: string,
+  options: Partial<DownloadOptions> = {},
+  title: string | null = null
+): DownloadJob {
+  const o = { ...DEFAULT_OPTIONS, ...options }
   seq += 1
   const job: DownloadJob = {
     id: `dl-${Date.now()}-${seq}`,
     url,
-    kind,
+    kind: o.kind,
+    quality: o.quality,
+    bitrate: o.bitrate,
     stage: 'queued',
-    title: null,
+    title,
     uploader: null,
     durationSec: null,
     thumbnail: null,
@@ -390,6 +411,30 @@ export function enqueue(url: string, kind: DownloadKind): DownloadJob {
   emit()
   void pump()
   return job
+}
+
+/**
+ * Expande una lista de reproducción y encola un trabajo por video, en vez de
+ * dejar que yt-dlp la baje entera de un saque: así cada video muestra su propio
+ * avance y se puede cancelar uno sin perder los demás.
+ */
+export async function enqueuePlaylist(
+  url: string,
+  options: Partial<DownloadOptions> = {}
+): Promise<{ added: number; error: string | null }> {
+  const { out, err, code } = await runYtDlp(buildPlaylistArgs(url))
+  const entries = parsePlaylistEntries(out)
+  if (entries.length === 0) {
+    const reason =
+      err
+        .split(/\r?\n/)
+        .filter((l) => l.trim().startsWith('ERROR'))
+        .pop()
+        ?.replace(/^ERROR:\s*/, '') ?? `No se encontró ningún video (código ${code})`
+    return { added: 0, error: reason }
+  }
+  for (const e of entries) enqueue(e.url, options, e.title)
+  return { added: entries.length, error: null }
 }
 
 export function cancel(id: string): void {

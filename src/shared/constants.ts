@@ -40,6 +40,7 @@ export const IPC_CHANNELS = {
   INSTALL_DOWNLOAD_TOOLS: 'downloads:installTools',
   GET_DOWNLOADS: 'downloads:list',
   ENQUEUE_DOWNLOAD: 'downloads:enqueue',
+  ENQUEUE_PLAYLIST: 'downloads:enqueuePlaylist',
   CANCEL_DOWNLOAD: 'downloads:cancel',
   REMOVE_DOWNLOAD: 'downloads:remove',
   CLEAR_DOWNLOADS: 'downloads:clear',

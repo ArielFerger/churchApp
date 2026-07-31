@@ -3,6 +3,7 @@ import {
   Download,
   Film,
   FolderOpen,
+  ListVideo,
   Loader2,
   Music,
   Trash2,
@@ -11,13 +12,17 @@ import {
   CheckCircle2
 } from 'lucide-react'
 import {
+  AUDIO_BITRATES,
+  VIDEO_QUALITIES,
   formatBytes,
   formatDuration,
   formatSpeed,
   looksLikePlaylist,
   normalizeUrl,
+  type AudioBitrate,
   type DownloadJob,
-  type DownloadKind
+  type DownloadKind,
+  type VideoQuality
 } from '@/shared/utils/downloads'
 import type { DownloadTools } from '@/shared/types/electronAPI'
 import { useSettingsStore } from '@/shared/store/settingsStore'
@@ -33,6 +38,9 @@ export default function Downloads() {
   const [jobs, setJobs] = useState<DownloadJob[]>([])
   const [url, setUrl] = useState('')
   const [kind, setKind] = useState<DownloadKind>('video')
+  const [quality, setQuality] = useState<VideoQuality>('1080')
+  const [bitrate, setBitrate] = useState<AudioBitrate>('320')
+  const [busy, setBusy] = useState(false)
   const [installing, setInstalling] = useState<{ step: string; ratio: number | null } | null>(
     null
   )
@@ -70,15 +78,34 @@ export default function Downloads() {
     }
   }
 
+  const opciones = { kind, quality, bitrate }
+
   function handleAdd() {
     setError(null)
     if (!normalized) {
       setError('Eso no parece un enlace. Pegá la dirección completa del video.')
       return
     }
-    void window.electronAPI?.enqueueDownload(normalized, kind)
+    void window.electronAPI?.enqueueDownload(normalized, opciones)
     setUrl('')
     inputRef.current?.focus()
+  }
+
+  /** Expande la lista y encola un trabajo por video. */
+  async function handleAddPlaylist() {
+    if (!normalized) return
+    setError(null)
+    setBusy(true)
+    try {
+      const r = await window.electronAPI?.enqueuePlaylist(normalized, opciones)
+      if (r?.error) setError(r.error)
+      else {
+        setUrl('')
+        inputRef.current?.focus()
+      }
+    } finally {
+      setBusy(false)
+    }
   }
 
   const activos = jobs.filter(
@@ -208,6 +235,45 @@ export default function Downloads() {
             </button>
           </div>
 
+          {/* Calidad */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
+              {kind === 'audio' ? 'Calidad del MP3' : 'Resolución máxima'}
+            </span>
+            <div className="flex overflow-hidden rounded-md border border-slate-700">
+              {kind === 'audio'
+                ? AUDIO_BITRATES.map((b) => (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => setBitrate(b.id)}
+                      className={`px-2.5 py-1 text-xs transition-colors ${
+                        bitrate === b.id
+                          ? 'bg-slate-600 text-white'
+                          : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {b.label}
+                    </button>
+                  ))
+                : VIDEO_QUALITIES.map((q) => (
+                    <button
+                      key={q.id}
+                      type="button"
+                      onClick={() => setQuality(q.id)}
+                      title={q.hint}
+                      className={`px-2.5 py-1 text-xs transition-colors ${
+                        quality === q.id
+                          ? 'bg-slate-600 text-white'
+                          : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {q.label}
+                    </button>
+                  ))}
+            </div>
+          </div>
+
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
             <span className="inline-flex items-center gap-1.5 text-slate-500">
               <FolderOpen className="h-3.5 w-3.5" />
@@ -219,12 +285,31 @@ export default function Downloads() {
                 </span>
               )}
             </span>
-            {normalized && looksLikePlaylist(normalized) && (
-              <span className="text-amber-400">
-                El enlace es de una lista: se baja sólo el video, no la lista entera.
-              </span>
-            )}
           </div>
+
+          {normalized && looksLikePlaylist(normalized) && (
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-md border border-slate-700 bg-slate-900/60 p-2.5">
+              <ListVideo className="h-4 w-4 shrink-0 text-blue-400" />
+              <span className="text-xs text-slate-300">
+                Ese enlace es de una lista. <strong>Descargar</strong> baja sólo ese
+                video.
+              </span>
+              <button
+                type="button"
+                onClick={() => void handleAddPlaylist()}
+                disabled={!ready || !destFolder || busy}
+                className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-blue-500/60 px-3 py-1.5 text-xs font-medium text-blue-300 transition-colors hover:bg-blue-500/10 disabled:opacity-40"
+              >
+                {busy ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Leyendo la lista…
+                  </>
+                ) : (
+                  <>Encolar la lista completa</>
+                )}
+              </button>
+            </div>
+          )}
 
           {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
         </section>
@@ -252,12 +337,6 @@ export default function Downloads() {
           </section>
         )}
 
-        <p className="mt-8 text-xs leading-relaxed text-slate-500">
-          Bajá sólo material que puedas usar: contenido propio, con licencia
-          Creative Commons, o del que tengas permiso. La mayoría de los videos de
-          YouTube tienen derechos de autor y usarlos en una reunión sin licencia no
-          está permitido.
-        </p>
       </div>
     </div>
   )
@@ -289,7 +368,13 @@ function JobRow({ job }: { job: DownloadJob }) {
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm text-slate-200">{job.title ?? job.url}</p>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
-            <span className="uppercase">{job.kind === 'audio' ? 'MP3' : 'Video'}</span>
+            <span className="uppercase">
+              {job.kind === 'audio'
+                ? `MP3 ${job.bitrate}k`
+                : job.quality === 'best'
+                  ? 'Video máx.'
+                  : `Video ${job.quality}p`}
+            </span>
             {job.uploader && <span>· {job.uploader}</span>}
             {job.durationSec != null && <span>· {formatDuration(job.durationSec)}</span>}
           </p>

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildArgs,
+  buildPlaylistArgs,
+  parsePlaylistEntries,
   formatBytes,
   formatDuration,
   formatSpeed,
@@ -162,11 +164,10 @@ describe('buildArgs', () => {
     expect(args).not.toContain('--extract-audio')
   })
 
-  it('el audio sale en mp3 a máxima calidad', () => {
+  it('el audio sale en mp3', () => {
     const args = buildArgs({ ...base, kind: 'audio' })
     expect(args).toContain('--extract-audio')
     expect(args[args.indexOf('--audio-format') + 1]).toBe('mp3')
-    expect(args[args.indexOf('--audio-quality') + 1]).toBe('0')
     expect(args).not.toContain('--merge-output-format')
   })
 
@@ -189,6 +190,101 @@ describe('buildArgs', () => {
 
   it('la URL va primera, para que no la coma un flag anterior', () => {
     expect(buildArgs({ ...base, kind: 'video' })[0]).toBe('https://x/y')
+  })
+})
+
+describe('calidad', () => {
+  const base = { url: 'u', destDir: 'D:/media', ffmpegDir: null }
+
+  it('limita la altura del video a la resolución elegida', () => {
+    const f = buildArgs({ ...base, kind: 'video', quality: '720' })[
+      buildArgs({ ...base, kind: 'video', quality: '720' }).indexOf('--format') + 1
+    ]
+    expect(f).toContain('[height<=720]')
+    expect(f).not.toContain('height<=1080')
+  })
+
+  it('"máxima" no pone tope de altura', () => {
+    const args = buildArgs({ ...base, kind: 'video', quality: 'best' })
+    expect(args[args.indexOf('--format') + 1]).not.toContain('height<=')
+  })
+
+  it('cada formato de reserva también respeta el tope', () => {
+    // Si sólo el primero tuviera el límite, un video sin mp4 caería al
+    // siguiente formato y bajaría en 4K igual.
+    const args = buildArgs({ ...base, kind: 'video', quality: '480' })
+    const alternativas = args[args.indexOf('--format') + 1].split('/')
+    // La última es el comodín 'best' a secas, a propósito: mejor bajarlo en
+    // otra resolución que fallar.
+    for (const alt of alternativas.slice(0, -1)) {
+      expect(alt).toContain('[height<=480]')
+    }
+  })
+
+  it('el bitrate del MP3 se pasa en kbps', () => {
+    const args = buildArgs({ ...base, kind: 'audio', bitrate: '192' })
+    expect(args[args.indexOf('--audio-quality') + 1]).toBe('192K')
+  })
+
+  it('sin opciones usa 1080p y 320 kbps', () => {
+    expect(buildArgs({ ...base, kind: 'video' })).toContain(
+      'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best'
+    )
+    const audio = buildArgs({ ...base, kind: 'audio' })
+    expect(audio[audio.indexOf('--audio-quality') + 1]).toBe('320K')
+  })
+
+  it('el MP3 se lleva la tapa y los datos adentro', () => {
+    const args = buildArgs({ ...base, kind: 'audio' })
+    expect(args).toContain('--embed-thumbnail')
+    expect(args).toContain('--embed-metadata')
+    // Las miniaturas vienen en webp y un MP3 no las puede guardar así.
+    expect(args[args.indexOf('--convert-thumbnails') + 1]).toBe('jpg')
+  })
+})
+
+describe('listas de reproducción', () => {
+  it('las expande sin bajar nada', () => {
+    const args = buildPlaylistArgs('https://x/list')
+    expect(args).toContain('--flat-playlist')
+    expect(args).toContain('--dump-json')
+    expect(args).toContain('--yes-playlist')
+  })
+
+  it('lee un video por línea', () => {
+    const salida = [
+      '{"id":"aaa","title":"Uno","url":"https://www.youtube.com/watch?v=aaa"}',
+      '{"id":"bbb","title":"Dos","url":"https://www.youtube.com/watch?v=bbb"}'
+    ].join('\n')
+    expect(parsePlaylistEntries(salida)).toEqual([
+      { url: 'https://www.youtube.com/watch?v=aaa', title: 'Uno' },
+      { url: 'https://www.youtube.com/watch?v=bbb', title: 'Dos' }
+    ])
+  })
+
+  it('arma la url desde el id cuando la entrada no la trae', () => {
+    expect(parsePlaylistEntries('{"id":"ccc","title":"Tres"}')).toEqual([
+      { url: 'https://www.youtube.com/watch?v=ccc', title: 'Tres' }
+    ])
+  })
+
+  it('saltea los videos privados o borrados en vez de cortar la lista', () => {
+    const salida = [
+      '{"id":"aaa","title":"Uno","url":"https://www.youtube.com/watch?v=aaa"}',
+      '{"title":"[Private video]"}',
+      'ERROR: Video unavailable',
+      '{"id":"ccc","title":"Tres","url":"https://www.youtube.com/watch?v=ccc"}'
+    ].join('\n')
+    expect(parsePlaylistEntries(salida).map((e) => e.title)).toEqual(['Uno', 'Tres'])
+  })
+
+  it('una línea rota no tira abajo el resto', () => {
+    const salida = '{"id":"aaa","url":"https://x/a"}\n{roto\n{"id":"bbb","url":"https://x/b"}'
+    expect(parsePlaylistEntries(salida)).toHaveLength(2)
+  })
+
+  it('una salida vacía no devuelve nada', () => {
+    expect(parsePlaylistEntries('')).toEqual([])
   })
 })
 

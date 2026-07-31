@@ -4,7 +4,7 @@ import type { Song, Album } from './song'
 import type { BibleBook } from './bible'
 import type { AudioTrack, AudioPlaylist } from './audio'
 import type { BibleFont } from './fonts'
-import type { DownloadJob, DownloadKind } from '../utils/downloads'
+import type { DownloadJob, DownloadOptions } from '../utils/downloads'
 
 /** Dónde están (o no) yt-dlp y ffmpeg. */
 export interface DownloadTools {
@@ -104,7 +104,11 @@ export interface ControlElectronAPI {
   getDownloadTools: () => Promise<DownloadTools>
   installDownloadTools: () => Promise<DownloadTools>
   getDownloads: () => Promise<DownloadJob[]>
-  enqueueDownload: (url: string, kind: DownloadKind) => Promise<DownloadJob>
+  enqueueDownload: (url: string, options: Partial<DownloadOptions>) => Promise<DownloadJob>
+  enqueuePlaylist: (
+    url: string,
+    options: Partial<DownloadOptions>
+  ) => Promise<{ added: number; error: string | null }>
   cancelDownload: (id: string) => Promise<void>
   removeDownload: (id: string) => Promise<void>
   clearDownloads: () => Promise<void>

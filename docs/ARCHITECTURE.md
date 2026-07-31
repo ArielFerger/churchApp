@@ -91,6 +91,16 @@ functions, so the wire format is pinned by tests instead of discovered live:
 - `parseProgressLine` / `parseFileLine` — stdout carries progress, ordinary
   log lines and `--print` output interleaved, so each thing we care about is
   requested with its own tag prefix and everything else is ignored.
+- `parsePlaylistEntries` — one JSON object per line from `--flat-playlist`,
+  skipping private/deleted entries instead of aborting the whole list.
+
+Quality caps are applied to **every** fallback in the `--format` chain, not
+just the first: capping only the preferred one means a video with no mp4
+silently falls through and downloads in 4K. The last fallback is a bare `best`
+on purpose — better a different resolution than a failed download.
+
+Playlists are expanded into one job per video rather than handed to yt-dlp
+whole, so each entry gets its own progress and can be canceled individually.
 
 Downloads land straight in the configured media/audio folders, so the existing
 chokidar watchers pick them up and they appear in the library with no extra

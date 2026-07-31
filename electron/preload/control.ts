@@ -11,7 +11,7 @@ import type { Song, Album } from '../../src/shared/types/song'
 import type { BibleBook } from '../../src/shared/types/bible'
 import type { AudioTrack, AudioPlaylist } from '../../src/shared/types/audio'
 import type { BibleFont } from '../../src/shared/types/fonts'
-import type { DownloadJob, DownloadKind } from '../../src/shared/utils/downloads'
+import type { DownloadJob, DownloadOptions } from '../../src/shared/utils/downloads'
 import type { ToolStatus as DownloadTools } from '../services/downloadsService'
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -181,8 +181,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   getDownloads: (): Promise<DownloadJob[]> => ipcRenderer.invoke(IPC_CHANNELS.GET_DOWNLOADS),
 
-  enqueueDownload: (url: string, kind: DownloadKind): Promise<DownloadJob> =>
-    ipcRenderer.invoke(IPC_CHANNELS.ENQUEUE_DOWNLOAD, url, kind),
+  enqueueDownload: (
+    url: string,
+    options: Partial<DownloadOptions>
+  ): Promise<DownloadJob> =>
+    ipcRenderer.invoke(IPC_CHANNELS.ENQUEUE_DOWNLOAD, url, options),
+
+  enqueuePlaylist: (
+    url: string,
+    options: Partial<DownloadOptions>
+  ): Promise<{ added: number; error: string | null }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.ENQUEUE_PLAYLIST, url, options),
 
   cancelDownload: (id: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.CANCEL_DOWNLOAD, id),

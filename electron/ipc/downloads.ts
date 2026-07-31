@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain } from 'electron'
 import { IPC_CHANNELS } from '../../src/shared/constants'
 import * as downloads from '../services/downloadsService'
-import type { DownloadJob, DownloadKind } from '../../src/shared/utils/downloads'
+import type { DownloadJob, DownloadOptions } from '../../src/shared/utils/downloads'
 
 export function registerDownloadsHandlers(controlWindow: BrowserWindow): () => void {
   const send = (channel: string, payload: unknown): void => {
@@ -22,7 +22,14 @@ export function registerDownloadsHandlers(controlWindow: BrowserWindow): () => v
 
   ipcMain.handle(
     IPC_CHANNELS.ENQUEUE_DOWNLOAD,
-    (_e, url: string, kind: DownloadKind): DownloadJob => downloads.enqueue(url, kind)
+    (_e, url: string, options: Partial<DownloadOptions>): DownloadJob =>
+      downloads.enqueue(url, options)
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.ENQUEUE_PLAYLIST,
+    (_e, url: string, options: Partial<DownloadOptions>) =>
+      downloads.enqueuePlaylist(url, options)
   )
 
   ipcMain.handle(IPC_CHANNELS.CANCEL_DOWNLOAD, (_e, id: string) => downloads.cancel(id))
@@ -40,6 +47,7 @@ export function registerDownloadsHandlers(controlWindow: BrowserWindow): () => v
       IPC_CHANNELS.INSTALL_DOWNLOAD_TOOLS,
       IPC_CHANNELS.GET_DOWNLOADS,
       IPC_CHANNELS.ENQUEUE_DOWNLOAD,
+      IPC_CHANNELS.ENQUEUE_PLAYLIST,
       IPC_CHANNELS.CANCEL_DOWNLOAD,
       IPC_CHANNELS.REMOVE_DOWNLOAD,
       IPC_CHANNELS.CLEAR_DOWNLOADS
