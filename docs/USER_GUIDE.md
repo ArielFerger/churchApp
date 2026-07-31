@@ -23,7 +23,29 @@ La app abre **dos ventanas**: la de **Control** (donde trabajás vos) y la de **
 
 ## Canciones 🎵
 
-Biblioteca con secciones (verso, coro, puente…). Seleccioná una canción y navegá los slides; también podés agrupar canciones en álbumes para el repertorio del servicio.
+Dos modos, con el interruptor arriba a la derecha: **Editar** (cargar la letra) y **Tocar** (dirigir la reunión). Al abrir la sección vas directo a Tocar.
+
+### Escribir la letra (Editar)
+
+Es un solo cuadro de texto:
+
+- **Una línea en blanco** separa un slide del siguiente.
+- **`# Coro`** al principio de una estrofa le pone nombre a esa parte (`# Verso 1`, `# Puente`, lo que quieras). Se ve en el mazo para que la reconozcas de un vistazo, pero **nunca se proyecta**.
+- **Acordes entre corchetes**, en la posición exacta donde tocan: `que ge[Am]nial, est[A]a canción`. Son sólo para vos: la proyección siempre va sin acordes.
+
+Mientras la canción exista, **se guarda sola** — no hace falta apretar Guardar. Las canciones nuevas sí se crean a mano con *Crear canción*, así no quedan borradores vacíos dando vueltas.
+
+### Dirigir (Tocar)
+
+La canción entera se ve como un **mazo de cuadritos**, uno por slide, para tener todos los pedazos a la vista sin scrollear:
+
+- **Click en un cuadro** lo proyecta. El que está al aire queda marcado en rojo.
+- **Teclado**: <kbd>←</kbd> <kbd>→</kbd> (o <kbd>espacio</kbd>) pasan de slide, <kbd>1</kbd>–<kbd>9</kbd> saltan directo, <kbd>Inicio</kbd>/<kbd>Fin</kbd> van al primero/último y <kbd>Esc</kbd> limpia la pantalla. Es lo cómodo en vivo: no hace falta soltar nada para buscar el mouse.
+- **XS · S · M · L** cambia el tamaño de los cuadros: más chicos, más pedacitos entran en pantalla. Queda elegido para la próxima vez.
+- **Con acordes / Sin acordes** solo afecta lo que ves vos.
+- El contador (`2/7`) te dice en qué slide vas. Si el coro se repite, marca el que tocaste, no el primero con la misma letra.
+
+Podés agrupar canciones en **álbumes** para el repertorio del servicio (el desplegable filtra la lista) y buscarlas por nombre, autor o etiqueta.
 
 ## Biblia 📖
 
@@ -62,3 +84,5 @@ Biblioteca con secciones (verso, coro, puente…). Seleccioná una canción y na
 
 - **Esc** — cierra paneles/palettes.
 - En la pestaña Biblia, **cualquier letra** abre el buscador rápido.
+- En Canciones → Tocar: **← →** o **espacio** pasan de slide, **1–9** saltan directo, **Inicio/Fin** van al primero/último, **Esc** limpia la pantalla.
+- En Media, **Esc** limpia la búsqueda.

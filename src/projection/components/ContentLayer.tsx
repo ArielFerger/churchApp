@@ -196,20 +196,9 @@ function SlideBlock({ content }: { content: SlideContent }) {
         ))}
       </div>
 
-      {(content.songTitle || content.sectionLabel) && (
-        <div className="mt-12 flex items-center justify-center gap-3 text-xl font-medium text-slate-300/90">
-          {content.songTitle && (
-            <span style={{ textShadow: '0 2px 12px rgba(0,0,0,0.85)' }}>{content.songTitle}</span>
-          )}
-          {content.songTitle && content.sectionLabel && <span className="text-slate-500">·</span>}
-          {content.sectionLabel && (
-            <span
-              className="rounded-full bg-black/30 px-3 py-0.5 text-base text-slate-200 backdrop-blur-sm"
-              style={{ textShadow: '0 2px 8px rgba(0,0,0,0.7)' }}
-            >
-              {content.sectionLabel}
-            </span>
-          )}
+      {content.songTitle && (
+        <div className="mt-12 flex items-center justify-center text-xl font-medium text-slate-300/90">
+          <span style={{ textShadow: '0 2px 12px rgba(0,0,0,0.85)' }}>{content.songTitle}</span>
         </div>
       )}
     </div>

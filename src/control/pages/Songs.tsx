@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLibraryStore } from '@/shared/store/libraryStore'
 import { useLiveStore } from '@/shared/store/liveStore'
 import type { Song } from '@/shared/types/song'
@@ -19,6 +19,25 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type View = 'editor' | 'perform'
+
+/**
+ * Ancho de columna del mazo. Cuanto más chico, más pedacitos de canción entran
+ * en pantalla — que es lo que se quiere mientras se dirige la reunión.
+ */
+const DENSITIES = [
+  { id: 'xs', label: 'XS', col: 150, font: 0.76 },
+  { id: 's', label: 'S', col: 190, font: 0.86 },
+  { id: 'm', label: 'M', col: 250, font: 0.98 },
+  { id: 'l', label: 'L', col: 330, font: 1.12 }
+] as const
+
+type DensityId = (typeof DENSITIES)[number]['id']
+const DENSITY_KEY = 'songs.deckDensity'
+
+function loadDensity(): DensityId {
+  const saved = localStorage.getItem(DENSITY_KEY)
+  return DENSITIES.some((d) => d.id === saved) ? (saved as DensityId) : 's'
+}
 
 function send(cmd: ProjectionCommand) {
   window.electronAPI?.sendProjectionCommand(cmd)
@@ -41,10 +60,11 @@ export default function Songs() {
   const lastCommand = useLiveStore((s) => s.lastCommand)
 
   const [currentSongId, setCurrentSongId] = useState<string | null>(null)
-  const [view, setView] = useState<View>('editor')
+  const [view, setView] = useState<View>('perform')
   const [albumFilter, setAlbumFilter] = useState<string>('all') // 'all' | 'none' | albumId
   const [query, setQuery] = useState('')
   const [showChords, setShowChords] = useState(true)
+  const [density, setDensity] = useState<DensityId>(loadDensity)
 
   // Editor draft (controlled inputs)
   const [titleDraft, setTitleDraft] = useState('')
@@ -68,25 +88,31 @@ export default function Songs() {
   }, [loadSongs, loadAlbums, subscribeSongs, subscribeAlbums])
 
   // Default-select first song once loaded
+  const bootedRef = useRef(false)
   useEffect(() => {
     if (!songsLoaded) return
-    if (currentSongId && songs.find((s) => s.id === currentSongId)) return
-    if (songs.length > 0) {
-      const next = songs[0]
-      setCurrentSongId(next.id)
-    } else {
-      setCurrentSongId(null)
+    // Con la biblioteca vacía no hay nada que tocar: arrancar en el editor.
+    if (!bootedRef.current) {
+      bootedRef.current = true
+      if (songs.length === 0) setView('editor')
     }
+    if (currentSongId && songs.find((s) => s.id === currentSongId)) return
+    setCurrentSongId(songs.length > 0 ? songs[0].id : null)
   }, [songsLoaded, songs, currentSongId])
 
-  // Sync draft fields when current song changes (and we're not mid-edit)
+  /**
+   * Qué canción está cargada en el editor. Sirve para cargar los campos UNA
+   * vez por canción: antes el efecto dependía de `songs` entero, así que
+   * cualquier guardado (propio o de la otra ventana) pisaba lo que estabas
+   * escribiendo en el medio.
+   */
+  const loadedRef = useRef<string | null | undefined>(undefined)
+
   useEffect(() => {
+    if (loadedRef.current === currentSongId) return
     if (!currentSongId) {
-      setTitleDraft('')
-      setAuthorDraft('')
-      setAlbumDraft('')
-      setContentDraft('')
-      setDirty(false)
+      // Borrador nuevo: handleNew ya dejó los campos como los quiere.
+      loadedRef.current = null
       return
     }
     const s = songs.find((x) => x.id === currentSongId)
@@ -96,6 +122,7 @@ export default function Songs() {
     setAlbumDraft(s.albumId ?? '')
     setContentDraft(synthesizeContent(s))
     setDirty(false)
+    loadedRef.current = currentSongId
   }, [currentSongId, songs])
 
   // Derived: filtered songs based on album + query
@@ -119,15 +146,24 @@ export default function Songs() {
     [contentDraft]
   )
 
-  // Which slide is currently LIVE on the projector?
-  const liveSlideKey = useMemo<string | null>(() => {
+  /** Slide sobre el que está parado el operador (lo que avanza con el teclado). */
+  const [cursor, setCursor] = useState(0)
+  useEffect(() => {
+    setCursor(0)
+  }, [currentSongId])
+
+  /**
+   * Qué slide está al aire. Se resuelve comparando la letra proyectada, pero
+   * dando prioridad al cursor: un coro que se repite tiene dos slides con el
+   * mismo texto y sin esto siempre se marcaría el primero.
+   */
+  const liveIndex = useMemo<number | null>(() => {
     if (!lastCommand || lastCommand.type !== 'showSlide') return null
-    const live = lastCommand.content
-    return (
-      slides.find((sl) => sl.plainLines.join('|') === live.lines.join('|'))?.key ??
-      null
-    )
-  }, [lastCommand, slides])
+    const live = lastCommand.content.lines.join('|')
+    if (slides[cursor]?.plainLines.join('|') === live) return cursor
+    const i = slides.findIndex((sl) => sl.plainLines.join('|') === live)
+    return i === -1 ? null : i
+  }, [lastCommand, slides, cursor])
 
   // Counts per album
   const albumCounts = useMemo(() => {
@@ -159,6 +195,25 @@ export default function Songs() {
       setSaveFlash(true)
       window.setTimeout(() => setSaveFlash(false), 1400)
     }
+  }
+
+  /**
+   * Autoguardado. Una vez que la canción existe, escribir no exige acordarse de
+   * apretar Guardar. Las nuevas se crean a mano a propósito: si no, cualquier
+   * tecla suelta dejaría borradores vacíos tirados en la biblioteca.
+   */
+  useEffect(() => {
+    if (!dirty || !currentSong) return
+    const t = window.setTimeout(() => void handleSave(), 900)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, titleDraft, authorDraft, albumDraft, contentDraft, currentSong])
+
+  /** Cambiar de canción sin perder lo que se estaba escribiendo. */
+  function selectSong(id: string) {
+    if (id === currentSongId) return
+    if (dirty && !confirm('Hay cambios sin guardar en esta canción. ¿Descartarlos?')) return
+    setCurrentSongId(id)
   }
 
   function handleNew() {
@@ -215,39 +270,107 @@ export default function Songs() {
     setAlbumFilter('all')
   }
 
-  function projectSlide(slide: ContentSlide, songTitle: string) {
-    send({
-      type: 'showSlide',
-      content: {
-        lines: slide.plainLines,
-        songTitle,
-        sectionLabel: `Slide ${slide.index + 1}`
-      }
-    })
-  }
+  const songTitle = titleDraft || 'Sin título'
 
-  function projectClear() {
-    send({ type: 'clear' })
-  }
+  const projectAt = useCallback(
+    (index: number) => {
+      const slide = slides[index]
+      if (!slide) return
+      setCursor(index)
+      // El nombre de la parte ("Coro") es una ayuda para el operador y no viaja
+      // a la pantalla: la congregación no necesita saber en qué slide vamos.
+      send({
+        type: 'showSlide',
+        content: { lines: slide.plainLines, songTitle }
+      })
+    },
+    [slides, songTitle]
+  )
+
+  const projectClear = useCallback(() => send({ type: 'clear' }), [])
+
+  /**
+   * Teclado del mazo. Dirigir una reunión con el mouse es incómodo: con las
+   * flechas / barra espaciadora se pasa de slide sin soltar nada.
+   */
+  useEffect(() => {
+    if (view !== 'perform') return
+    const onKey = (e: KeyboardEvent): void => {
+      const el = e.target as HTMLElement | null
+      if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return
+      if (e.ctrlKey || e.altKey || e.metaKey) return
+
+      const step = (delta: number): void => {
+        e.preventDefault()
+        const next = Math.min(slides.length - 1, Math.max(0, (liveIndex ?? cursor) + delta))
+        projectAt(next)
+      }
+
+      switch (e.key) {
+        case 'ArrowRight':
+        case 'ArrowDown':
+        case 'PageDown':
+        case ' ':
+          return step(1)
+        case 'ArrowLeft':
+        case 'ArrowUp':
+        case 'PageUp':
+          return step(-1)
+        case 'Home':
+          e.preventDefault()
+          return projectAt(0)
+        case 'End':
+          e.preventDefault()
+          return projectAt(slides.length - 1)
+        case 'Enter':
+          e.preventDefault()
+          return projectAt(cursor)
+        case 'Escape':
+          e.preventDefault()
+          return projectClear()
+        default:
+          if (/^[1-9]$/.test(e.key)) {
+            e.preventDefault()
+            projectAt(Number(e.key) - 1)
+          }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [view, slides.length, liveIndex, cursor, projectAt, projectClear])
 
   // ─── Render ────────────────────────────────────────────────────────────
+  const perform = view === 'perform'
+
   return (
     <div className="songbook h-full overflow-y-auto">
-      <div className="mx-auto max-w-[1100px] px-6 pb-24 pt-6">
-        {/* Header */}
-        <header className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-songbook-border-soft pb-5">
+      <div className="mx-auto max-w-[1500px] px-6 pb-24 pt-5">
+        {/* Header — en Tocar se achica: cada pixel de arriba es un pedacito de
+            canción menos que entra en el mazo. */}
+        <header
+          className={`flex flex-wrap items-end justify-between gap-4 border-b border-songbook-border-soft ${
+            perform ? 'mb-3 pb-3' : 'mb-6 pb-5'
+          }`}
+        >
           <div>
-            <h1 className="font-serif text-4xl italic leading-none tracking-tight">
+            <h1
+              className={`font-serif italic leading-none tracking-tight ${
+                perform ? 'text-2xl' : 'text-4xl'
+              }`}
+            >
               Cancion<span className="text-songbook-amber">ero</span>
             </h1>
-            <p className="mt-2 text-[11px] font-medium uppercase tracking-[0.15em] text-songbook-ink-faint">
-              Letras · Acordes · Proyección
-            </p>
+            {!perform && (
+              <p className="mt-2 text-[11px] font-medium uppercase tracking-[0.15em] text-songbook-ink-faint">
+                Letras · Acordes · Proyección
+              </p>
+            )}
           </div>
           <ViewSwitch view={view} onChange={setView} />
         </header>
 
-        {/* Album chips */}
+        {/* Album chips — en Tocar viven como un desplegable dentro de Canciones */}
+        {!perform && (
         <Section label="Álbumes">
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Chip
@@ -283,14 +406,35 @@ export default function Songs() {
             )}
           </div>
         </Section>
+        )}
 
         {/* Song chips */}
         <Section
           label="Canciones"
           aside={
             <div className="flex items-center gap-2">
+              {perform && (
+                <select
+                  value={albumFilter}
+                  onChange={(e) => setAlbumFilter(e.target.value)}
+                  className="input-base is-sm w-[150px]"
+                  title="Filtrar por álbum"
+                >
+                  <option value="all">Todos ({albumCounts.all})</option>
+                  <option value="none">Sin álbum ({albumCounts.none})</option>
+                  {albums.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} ({albumCounts.byAlbum.get(a.id) ?? 0})
+                    </option>
+                  ))}
+                </select>
+              )}
               <SearchInput value={query} onChange={setQuery} />
-              <button type="button" className="btn-soft" onClick={handleNew}>
+              <button
+                type="button"
+                className="btn-soft whitespace-nowrap"
+                onClick={handleNew}
+              >
                 ＋ Nueva canción
               </button>
             </div>
@@ -311,7 +455,7 @@ export default function Songs() {
               <Chip
                 key={s.id}
                 selected={s.id === currentSongId}
-                onClick={() => setCurrentSongId(s.id)}
+                onClick={() => selectSong(s.id)}
                 label={s.title || 'Sin título'}
               />
             ))}
@@ -319,7 +463,7 @@ export default function Songs() {
         </Section>
 
         {/* Editor / Perform views */}
-        {view === 'editor' ? (
+        {!perform ? (
           <Section label="Editando">
             <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_220px]">
               <input
@@ -371,17 +515,32 @@ export default function Songs() {
                   setContentDraft(e.target.value)
                   setDirty(true)
                 }}
-                placeholder={'[Am]Esta es la [C]letra\nlínea 2…\n\n[F]Nueva estrofa…'}
+                placeholder={
+                  '# Verso 1\n[Am]Esta es la [C]letra\nlínea 2…\n\n# Coro\n[F]Nueva estrofa…'
+                }
                 className="input-base min-h-[280px] resize-y font-mono text-sm leading-relaxed"
                 spellCheck={false}
               />
-              <p className="mt-3 font-serif text-[15px] italic leading-relaxed text-songbook-ink-dim">
-                Acordes entre corchetes en la posición exacta donde tocan:{' '}
-                <code className="rounded bg-songbook-sage/15 px-1.5 py-[0.1rem] font-mono text-[0.78em] not-italic text-songbook-sage">
-                  que ge[Am]nial, est[A]a canción
-                </code>
-                . Una línea en blanco separa slides para proyectar.
-              </p>
+              <ul className="mt-3 space-y-1.5 font-serif text-[15px] italic leading-relaxed text-songbook-ink-dim">
+                <li>
+                  <strong className="not-italic">Una línea en blanco</strong> separa
+                  un slide del siguiente.
+                </li>
+                <li>
+                  <code className="rounded bg-songbook-sage/15 px-1.5 py-[0.1rem] font-mono text-[0.78em] not-italic text-songbook-sage">
+                    # Coro
+                  </code>{' '}
+                  al principio de una estrofa le pone nombre a esa parte. Se ve en
+                  el mazo pero <strong className="not-italic">no se proyecta</strong>.
+                </li>
+                <li>
+                  Acordes entre corchetes, en la posición exacta donde tocan:{' '}
+                  <code className="rounded bg-songbook-sage/15 px-1.5 py-[0.1rem] font-mono text-[0.78em] not-italic text-songbook-sage">
+                    que ge[Am]nial, est[A]a canción
+                  </code>
+                  .
+                </li>
+              </ul>
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
@@ -391,8 +550,13 @@ export default function Songs() {
                 onClick={() => void handleSave()}
                 disabled={!dirty && !!currentSong}
               >
-                {saveFlash ? '✓ Guardado' : 'Guardar'}
+                {currentSong ? 'Guardar' : 'Crear canción'}
               </button>
+              {currentSong && (
+                <span className="save-status">
+                  {dirty ? 'Guardando…' : saveFlash ? '✓ Guardado' : 'Se guarda solo'}
+                </span>
+              )}
               {currentSong && (
                 <button
                   type="button"
@@ -414,23 +578,20 @@ export default function Songs() {
           </Section>
         ) : (
           <PerformanceView
-            song={
-              currentSong ?? {
-                id: 'draft',
-                title: titleDraft || 'Sin título',
-                tags: [],
-                language: 'es',
-                createdAt: '',
-                updatedAt: ''
-              }
-            }
-            content={contentDraft}
+            title={songTitle}
             slides={slides}
             showChords={showChords}
             onToggleChords={setShowChords}
-            liveSlideKey={liveSlideKey}
-            onProject={(s) => projectSlide(s, titleDraft || 'Sin título')}
+            density={density}
+            onDensity={(d) => {
+              setDensity(d)
+              localStorage.setItem(DENSITY_KEY, d)
+            }}
+            liveIndex={liveIndex}
+            cursor={cursor}
+            onProject={projectAt}
             onClear={projectClear}
+            onEdit={() => setView('editor')}
             albumName={albums.find((a) => a.id === albumDraft)?.name ?? null}
           />
         )}
@@ -444,34 +605,80 @@ export default function Songs() {
 
 // ─── PerformanceView ─────────────────────────────────────────────────────────
 interface PerfProps {
-  song: Song
-  content: string
+  title: string
   slides: ContentSlide[]
   showChords: boolean
   onToggleChords: (v: boolean) => void
-  liveSlideKey: string | null
-  onProject: (slide: ContentSlide) => void
+  density: DensityId
+  onDensity: (d: DensityId) => void
+  liveIndex: number | null
+  cursor: number
+  onProject: (index: number) => void
   onClear: () => void
+  onEdit: () => void
   albumName: string | null
 }
 
 function PerformanceView({
-  song,
+  title,
   slides,
   showChords,
   onToggleChords,
-  liveSlideKey,
+  density,
+  onDensity,
+  liveIndex,
+  cursor,
   onProject,
   onClear,
+  onEdit,
   albumName
 }: PerfProps) {
+  const dens = DENSITIES.find((d) => d.id === density) ?? DENSITIES[1]
+  const at = liveIndex ?? cursor
+  const liveRef = useRef<HTMLButtonElement | null>(null)
+
+  // Seguir con la vista al slide que está al aire, para no perderlo de vista
+  // en canciones largas cuando se avanza con el teclado.
+  useEffect(() => {
+    liveRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [liveIndex])
+
   return (
     <Section label="Tocar">
       <div className="perf-bar mt-3">
         <div className="now-playing">
-          <strong>{song.title || 'Sin título'}</strong>
+          <strong>{title}</strong>
           {albumName && <> · {albumName}</>}
         </div>
+
+        {slides.length > 0 && (
+          <>
+            <div className="divider" />
+            <div className="deck-nav">
+              <button
+                type="button"
+                onClick={() => onProject(at - 1)}
+                disabled={at <= 0}
+                title="Slide anterior (←)"
+              >
+                ‹
+              </button>
+              <span className="deck-pos">
+                {liveIndex === null ? '—' : liveIndex + 1}
+                <em>/{slides.length}</em>
+              </span>
+              <button
+                type="button"
+                onClick={() => onProject(at + 1)}
+                disabled={at >= slides.length - 1}
+                title="Slide siguiente (→ o barra espaciadora)"
+              >
+                ›
+              </button>
+            </div>
+          </>
+        )}
+
         <div className="divider" />
         <div className="chord-toggle">
           <button
@@ -489,58 +696,93 @@ function PerformanceView({
             Sin acordes
           </button>
         </div>
-        <button type="button" className="btn-soft ml-auto" onClick={onClear}>
-          ⌫ Limpiar
-        </button>
+
+        <div className="density-toggle" title="Tamaño de los cuadros">
+          {DENSITIES.map((d) => (
+            <button
+              key={d.id}
+              type="button"
+              className={d.id === density ? 'active' : ''}
+              onClick={() => onDensity(d.id)}
+            >
+              {d.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="ml-auto flex gap-2">
+          <button type="button" className="btn-soft" onClick={onEdit}>
+            ✎ Editar letra
+          </button>
+          <button type="button" className="btn-soft" onClick={onClear} title="Esc">
+            ⌫ Limpiar
+          </button>
+        </div>
       </div>
 
       {slides.length === 0 ? (
         <p className="empty-state mt-6 text-center">
-          Esta canción aún no tiene letra. Volvé al editor para agregar el contenido.
+          Esta canción aún no tiene letra. Tocá <strong>Editar letra</strong> para
+          agregarla.
         </p>
       ) : (
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {slides.map((slide) => (
+        <div
+          className="deck mt-4"
+          style={
+            {
+              '--deck-col': `${dens.col}px`,
+              '--deck-font': `${dens.font}rem`
+            } as React.CSSProperties
+          }
+        >
+          {slides.map((slide, i) => (
             <SlideCard
               key={slide.key}
+              ref={i === at ? liveRef : undefined}
               slide={slide}
               showChords={showChords}
-              isLive={slide.key === liveSlideKey}
-              onProject={() => onProject(slide)}
+              isLive={i === liveIndex}
+              onProject={() => onProject(i)}
             />
           ))}
         </div>
       )}
 
-      <div className="mt-6 text-center font-serif text-[13px] italic text-songbook-ink-faint">
-        Click en una tarjeta para proyectarla. Los acordes son sólo para el
-        operador — la proyección siempre va sin acordes.
-      </div>
+      {slides.length > 0 && (
+        <div className="mt-5 text-center font-serif text-[13px] italic text-songbook-ink-faint">
+          <kbd>←</kbd> <kbd>→</kbd> o <kbd>espacio</kbd> pasan de slide ·{' '}
+          <kbd>1</kbd>–<kbd>9</kbd> saltan directo · <kbd>Esc</kbd> limpia la
+          pantalla. Los acordes son sólo para vos: la proyección siempre va sin
+          acordes.
+        </div>
+      )}
     </Section>
   )
 }
 
 // ─── SlideCard ───────────────────────────────────────────────────────────────
-function SlideCard({
-  slide,
-  showChords,
-  isLive,
-  onProject
-}: {
-  slide: ContentSlide
-  showChords: boolean
-  isLive: boolean
-  onProject: () => void
-}) {
+const SlideCard = forwardRef<
+  HTMLButtonElement,
+  {
+    slide: ContentSlide
+    showChords: boolean
+    isLive: boolean
+    onProject: () => void
+  }
+>(function SlideCard({ slide, showChords, isLive, onProject }, ref) {
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onProject}
       className={`slide-card text-left ${isLive ? 'is-live' : ''} ${showChords ? '' : 'no-chords'}`}
     >
       <div className="slide-card-header">
-        <span className="slide-card-index">Slide {slide.index + 1}</span>
-        {isLive && <span className="live-pip">● LIVE</span>}
+        <span className="slide-card-index">
+          <span className="num">{slide.index + 1}</span>
+          {slide.label && <span className="label">{slide.label}</span>}
+        </span>
+        {isLive && <span className="live-pip">●</span>}
       </div>
       <div className="lyrics-stage">
         {slide.lines.map((line, li) => (
@@ -549,7 +791,7 @@ function SlideCard({
       </div>
     </button>
   )
-}
+})
 
 function LineView({ line }: { line: ChordLine }) {
   if (line.isBlank) return <div className="lyrics-line is-blank" />
@@ -669,7 +911,7 @@ function SearchInput({ value, onChange }: { value: string; onChange: (v: string)
       placeholder="Buscar…"
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="input-base h-9 max-w-[200px] py-1.5 text-sm"
+      className="input-base is-sm max-w-[180px]"
     />
   )
 }
@@ -805,6 +1047,18 @@ const songbookCss = `
   cursor: pointer;
 }
 .songbook select.input-base option { background: #1c1611; color: #f0e3cd; }
+/* Variante chica para las barras de herramientas. Va acá y no con clases de
+   Tailwind porque .songbook .input-base gana por especificidad y el padding
+   grande recortaba el texto dentro de un alto fijo. */
+.songbook .input-base.is-sm {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.85rem;
+  border-radius: 7px;
+}
+.songbook select.input-base.is-sm {
+  padding-right: 1.9rem;
+  background-position: right 0.6rem center;
+}
 
 .songbook .btn-primary,
 .songbook .btn-soft,
@@ -847,6 +1101,14 @@ const songbookCss = `
   border-color: rgba(214, 90, 74, 0.4);
 }
 .songbook .btn-danger:hover { background: rgba(214, 90, 74, 0.12); }
+
+.songbook .save-status {
+  align-self: center;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.75rem;
+  color: rgba(240, 227, 205, 0.28);
+  letter-spacing: 0.02em;
+}
 
 .songbook .empty-state {
   font-family: 'Fraunces', Georgia, serif;
@@ -894,69 +1156,152 @@ const songbookCss = `
 }
 .songbook .chord-toggle button.active { background: #8fb98a; color: #14100c; }
 
+/* Navegación del mazo + tamaño de los cuadros */
+.songbook .deck-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.songbook .deck-nav button {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(245, 226, 196, 0.08);
+  color: #f0e3cd;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  transition: all 0.15s;
+}
+.songbook .deck-nav button:hover:not(:disabled) { border-color: #f5b342; color: #f5b342; }
+.songbook .deck-nav button:disabled { opacity: 0.25; cursor: not-allowed; }
+.songbook .deck-pos {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  color: #f5b342;
+  min-width: 3.2rem;
+  text-align: center;
+}
+.songbook .deck-pos em {
+  font-style: normal;
+  color: rgba(240, 227, 205, 0.28);
+}
+
+.songbook .density-toggle {
+  display: inline-flex;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(245, 226, 196, 0.08);
+  border-radius: 8px;
+  padding: 3px;
+}
+.songbook .density-toggle button {
+  background: transparent;
+  border: none;
+  color: rgba(240, 227, 205, 0.4);
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  font-size: 0.68rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 5px;
+  cursor: pointer;
+  min-width: 26px;
+}
+.songbook .density-toggle button.active { background: #f5b342; color: #14100c; }
+
+.songbook kbd {
+  font-family: 'JetBrains Mono', monospace;
+  font-style: normal;
+  font-size: 0.85em;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(245, 226, 196, 0.12);
+  border-radius: 4px;
+  padding: 0.1em 0.4em;
+  color: rgba(240, 227, 205, 0.55);
+}
+
+/* Mazo: tantas columnas como entren para el ancho elegido. align-items:start
+   deja que cada cuadro mida lo que mide su letra en vez de estirarse al más
+   alto de la fila — así entran más pedacitos en pantalla. */
+.songbook .deck {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--deck-col), 1fr));
+  align-items: start;
+  gap: 0.6rem;
+}
+
 /* Slide cards */
 .songbook .slide-card {
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid rgba(245, 226, 196, 0.08);
-  border-radius: 12px;
-  padding: 0.9rem 1.1rem 1.1rem;
+  border-radius: 10px;
+  padding: 0.5rem 0.65rem 0.6rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
   display: flex;
   flex-direction: column;
-  min-height: 140px;
 }
 .songbook .slide-card:hover {
-  border-color: rgba(245, 226, 196, 0.18);
+  border-color: rgba(245, 226, 196, 0.3);
   background: rgba(0, 0, 0, 0.32);
 }
 .songbook .slide-card.is-live {
   border-color: rgba(214, 90, 74, 0.7);
+  background: rgba(214, 90, 74, 0.08);
   box-shadow: 0 0 0 1px rgba(214, 90, 74, 0.35), 0 8px 32px -12px rgba(214, 90, 74, 0.4);
 }
 .songbook .slide-card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.5rem;
+  gap: 0.4rem;
+  margin-bottom: 0.3rem;
 }
 .songbook .slide-card-index {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.7rem;
-  color: rgba(240, 227, 205, 0.28);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
 }
-.songbook .live-pip {
+.songbook .slide-card-index .num {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.65rem;
-  font-weight: 600;
-  color: #fff;
-  background: #d65a4a;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  letter-spacing: 0.1em;
+  font-size: 0.62rem;
+  color: rgba(240, 227, 205, 0.28);
+}
+.songbook .slide-card-index .label {
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8fb98a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.songbook .slide-card.is-live .slide-card-index .label { color: #e8a596; }
+.songbook .live-pip {
+  font-size: 0.6rem;
+  color: #d65a4a;
+  flex-shrink: 0;
 }
 
 /* Lyrics rendering */
-.songbook .lyrics-stage {
-  padding-top: 0.5rem;
-}
 .songbook .lyrics-line {
   font-family: 'Fraunces', Georgia, serif;
   font-weight: 400;
-  font-size: 1.1rem;
-  line-height: 2.2;
-  margin-bottom: 0.2rem;
-  padding: 0.1rem 0.2rem;
-  border-radius: 4px;
+  font-size: var(--deck-font, 0.86rem);
+  line-height: 1.32;
+  margin-bottom: 0.1rem;
 }
-.songbook .lyrics-line.is-blank { height: 0.6rem; margin: 0; padding: 0; }
+.songbook .lyrics-line.is-blank { height: 0.4rem; margin: 0; }
+/* Con acordes cada línea necesita el renglón de arriba para el cifrado. */
+.songbook .slide-card:not(.no-chords) .lyrics-line { margin-bottom: 0.22rem; }
 .songbook .word {
   display: inline-flex;
   align-items: flex-end;
   vertical-align: bottom;
-  margin-right: 0.35rem;
+  margin-right: 0.28rem;
 }
 .songbook .part {
   display: inline-flex;
@@ -966,17 +1311,19 @@ const songbookCss = `
 }
 .songbook .part .chord {
   font-family: 'JetBrains Mono', monospace;
-  font-weight: 500;
-  font-size: 0.5em;
+  font-weight: 600;
+  font-size: 0.66em;
   color: #8fb98a;
-  letter-spacing: 0.04em;
-  height: 1.4em;
-  line-height: 1.4em;
-  margin-bottom: 0.1em;
+  letter-spacing: 0.02em;
+  height: 1.2em;
+  line-height: 1.2em;
+  margin-bottom: 0.05em;
   text-shadow: 0 0 12px rgba(143, 185, 138, 0.3);
   white-space: nowrap;
   min-width: 1px;
 }
+/* Sin acordes el renglón de arriba no hace falta: se recupera esa altura. */
+.songbook .slide-card.no-chords .part { line-height: inherit; }
 .songbook .part .text {
   line-height: 1.15;
   white-space: pre;

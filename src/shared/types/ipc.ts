@@ -3,7 +3,6 @@ export type Transition = 'fade' | 'cut'
 export interface SlideContent {
   lines: string[]
   songTitle?: string
-  sectionLabel?: string
 }
 
 export type ProjectionCommand =

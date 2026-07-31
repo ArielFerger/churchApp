@@ -68,6 +68,28 @@ All file serving goes through privileged custom schemes registered before `app.w
 
 The Media page builds an ordered queue of videos (`videoQueueStore`). When the projected clip fires `ended`, the projection emits an immediate (un-throttled) playback event with `ended: true`; `useProjectionBridge` in control advances to the next queued video (pre-loaded ahead of time) or clears the projection at the end. Queued clips never loop.
 
+## Songs: one textarea, one parser
+
+A song's canonical form is a single `content` string (`shared/types/song.ts`);
+everything the Songs page shows is derived from it by `songParser`, never
+stored twice:
+
+- a blank line starts a new slide,
+- `[Am]` markers ride along inside the text and are stripped for projection,
+- a `# Coro` line names the slide for the operator and is dropped from
+  `plainLines` — it is deliberately **not** sent to the projection window, which
+  only ever receives lyrics plus the song title.
+
+Legacy songs (`sections`/`order`, pre-2026-05) are converted on read by
+`synthesizeContent`, which writes their section labels back out as `# label`
+lines — so an old song opens in the deck with its parts already named. New
+saves only ever write `content`.
+
+The perform view keeps a `cursor` (where the operator is) separate from
+`liveIndex` (what the projector shows, resolved by matching the projected
+lines). Two slides with identical lyrics — a repeated chorus — would otherwise
+always highlight the first one, so the cursor wins when it matches.
+
 ## Media metadata (categories + "para hoy")
 
 The scanners only know what's on disk. What the operator adds on top — a
