@@ -19,6 +19,8 @@ interface Props {
   mediaReplay: { nonce: number } | null
   /** Desired play state for the active content video. */
   mediaPlaying: boolean
+  /** Sube con cada orden de play/pausa para poder re-aplicar el mismo valor. */
+  mediaPlayNonce: number
   /** Volume (0..1) for the active content video. */
   mediaVolume: number
   /** Receives video timing to push up to control. */
@@ -48,6 +50,7 @@ export default function ContentLayer({
   mediaSeek,
   mediaReplay,
   mediaPlaying,
+  mediaPlayNonce,
   mediaVolume,
   onMediaPlayback,
   onMediaEnded,
@@ -113,6 +116,7 @@ export default function ContentLayer({
               fadeOutSec={mediaCmd.fadeOutSec ?? 2.5}
               volume={mediaVolume}
               playing={mediaPlaying}
+              playNonce={mediaPlayNonce}
               seekSignal={mediaSeek}
               replaySignal={mediaReplay}
               onPlayback={onMediaPlayback}
@@ -192,22 +196,6 @@ function SlideBlock({ content }: { content: SlideContent }) {
         ))}
       </div>
 
-      {(content.songTitle || content.sectionLabel) && (
-        <div className="mt-12 flex items-center justify-center gap-3 text-xl font-medium text-slate-300/90">
-          {content.songTitle && (
-            <span style={{ textShadow: '0 2px 12px rgba(0,0,0,0.85)' }}>{content.songTitle}</span>
-          )}
-          {content.songTitle && content.sectionLabel && <span className="text-slate-500">·</span>}
-          {content.sectionLabel && (
-            <span
-              className="rounded-full bg-black/30 px-3 py-0.5 text-base text-slate-200 backdrop-blur-sm"
-              style={{ textShadow: '0 2px 8px rgba(0,0,0,0.7)' }}
-            >
-              {content.sectionLabel}
-            </span>
-          )}
-        </div>
-      )}
     </div>
   )
 }

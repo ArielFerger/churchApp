@@ -29,11 +29,19 @@ export interface ContentSlide {
   key: string
   /** Index within the song. */
   index: number
+  /**
+   * Nombre de la sección (`Coro`, `Verso 1`, `Puente`), escrito como una línea
+   * `# Coro` dentro de la estrofa. Es sólo para el operador: nunca se proyecta.
+   */
+  label: string | null
   /** Parsed lines with chord metadata. */
   lines: ChordLine[]
   /** Just the plain text of each line — what gets projected. */
   plainLines: string[]
 }
+
+/** Una línea `# Coro` marca el nombre de la sección, no letra. */
+const LABEL_RE = /^\s*#\s*(.*)$/
 
 const CHORD_RE = /\[([^\]]+)\]/g
 
@@ -114,6 +122,10 @@ export function stripChords(line: string): string {
 /**
  * Split a song's `content` field into projection slides. A new slide begins
  * after a blank line; consecutive non-blank lines stay on the same slide.
+ *
+ * Una línea `# Coro` dentro de la estrofa le pone nombre al slide y se saca de
+ * la letra — sirve para que el operador reconozca las partes de un vistazo sin
+ * que "Coro" termine proyectado en la pantalla.
  */
 export function parseSongContent(content: string): ContentSlide[] {
   const rawLines = content.split('\n')
@@ -126,16 +138,29 @@ export function parseSongContent(content: string): ContentSlide[] {
     // Drop trailing blank lines within a slide.
     while (buffer.length > 0 && buffer[buffer.length - 1].trim() === '') buffer.pop()
     if (buffer.length === 0) return
-    const lines = buffer.map(parseChordLine)
-    const plainLines = buffer.map(stripChords)
+
+    let label: string | null = null
+    const body: string[] = []
+    for (const raw of buffer) {
+      const m = LABEL_RE.exec(raw)
+      if (m) {
+        if (label === null) label = m[1].trim() || null
+        continue
+      }
+      body.push(raw)
+    }
+    buffer = []
+    // Una estrofa que sólo tenía la etiqueta no es un slide proyectable.
+    if (body.length === 0) return
+
     slides.push({
       key: `slide-${idx}`,
       index: idx,
-      lines,
-      plainLines
+      label,
+      lines: body.map(parseChordLine),
+      plainLines: body.map(stripChords)
     })
     idx += 1
-    buffer = []
   }
 
   for (const raw of rawLines) {
@@ -149,14 +174,68 @@ export function parseSongContent(content: string): ContentSlide[] {
   return slides
 }
 
+// ─── Importar canciones desde archivos de texto ──────────────────────────────
+
+/**
+ * Decodifica el contenido crudo de un `.txt`. Se intenta UTF-8 en modo estricto
+ * y, si el archivo no es UTF-8 válido, se cae a windows-1252: los `.txt` de
+ * letras suelen venir de Word o del Bloc de notas viejo y ahí las eñes y las
+ * tildes están en esa codificación. Sin esto "corazón" llega como "corazÃ³n".
+ */
+export function decodeSongFile(bytes: Uint8Array): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    try {
+      return new TextDecoder('windows-1252').decode(bytes)
+    } catch {
+      return new TextDecoder('utf-8').decode(bytes)
+    }
+  }
+}
+
+/**
+ * Deja el texto de un `.txt` listo para el editor: saca el BOM, normaliza los
+ * saltos de línea de Windows y colapsa los huecos de varias líneas en blanco a
+ * uno solo — si no, cada hueco grande generaría slides de más.
+ */
+export function normalizeImportedText(raw: string): string {
+  return raw
+    .replace(/^﻿/, '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((l) => l.replace(/[ \t]+$/, ''))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/**
+ * Nombre de la canción a partir del nombre del archivo: sin extensión, con los
+ * guiones bajos como espacios y sin el número de pista de adelante.
+ *
+ * El número sólo se saca si viene con separador ("01 - Sublime gracia"), para
+ * no arruinar una canción que empiece con un número ("40 días").
+ */
+export function titleFromFileName(fileName: string): string {
+  const base = fileName.replace(/\.[^.]+$/, '')
+  const clean = base
+    .replace(/^\d{1,3}\s*[-–_.)]\s+/, '')
+    .replace(/[_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return clean || base.trim() || 'Sin título'
+}
+
 // ─── Legacy → modern content synthesis ───────────────────────────────────────
 
 /**
  * If a song has only the legacy `sections` model, build a `content` string
- * from it so the new editor can show it. Each legacy slide becomes a stanza,
- * stanzas separated by blank lines, section labels written as `# label` lines
- * which the parser preserves as plain text. (No chord recovery — legacy songs
- * didn't have chord data.)
+ * from it so the new editor can show it. Cada slide viejo pasa a ser una
+ * estrofa separada por una línea en blanco, y la etiqueta de la sección
+ * ("Coro", "Verso 1") se conserva como línea `# label`: así una canción vieja
+ * abre en el mazo ya con sus partes nombradas. (No chord recovery — legacy
+ * songs didn't have chord data.)
  */
 export function synthesizeContent(song: Song): string {
   if (song.content && song.content.length > 0) return song.content
@@ -171,7 +250,8 @@ export function synthesizeContent(song: Song): string {
     const sec = sectionsById.get(secId)
     if (!sec) continue
     for (const slide of sec.slides) {
-      stanzas.push(slide.lines.join('\n'))
+      const head = sec.label.trim() ? `# ${sec.label.trim()}\n` : ''
+      stanzas.push(head + slide.lines.join('\n'))
     }
   }
   return stanzas.join('\n\n')
@@ -195,7 +275,7 @@ export function flattenSong(song: Song): PlaySlide[] {
     return parseSongContent(song.content).map((cs) => ({
       key: cs.key,
       sectionId: 'content',
-      sectionLabel: `Slide ${cs.index + 1}`,
+      sectionLabel: cs.label ?? `Slide ${cs.index + 1}`,
       slideIndex: cs.index,
       slide: { id: cs.key, lines: cs.plainLines }
     }))

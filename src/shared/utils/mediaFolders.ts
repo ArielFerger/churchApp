@@ -46,3 +46,28 @@ export function parentFolder(path: string): string {
   const i = path.lastIndexOf('/')
   return i === -1 ? '' : path.slice(0, i)
 }
+
+/**
+ * Minúsculas y sin acentos, para que "Adoracion" encuentre "Adoración".
+ * NFD separa la letra de su tilde y \p{M} borra las tildes ya sueltas.
+ */
+export function normalizeText(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+}
+
+/**
+ * Busca en TODA la librería (no solo en la carpeta abierta): cada término de
+ * la consulta tiene que aparecer en el nombre del archivo o en su ruta de
+ * carpetas. Consulta vacía = sin resultados (el llamador muestra la carpeta).
+ */
+export function searchMedia(items: MediaItem[], query: string): MediaItem[] {
+  const terms = normalizeText(query).split(/\s+/).filter(Boolean)
+  if (terms.length === 0) return []
+  return items.filter((m) => {
+    const haystack = normalizeText(`${m.folder ?? ''}/${m.fileName}`)
+    return terms.every((term) => haystack.includes(term))
+  })
+}

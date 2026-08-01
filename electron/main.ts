@@ -26,6 +26,8 @@ import {
   registerFontProtocolHandler
 } from './services/fontProtocol'
 import { registerFontsHandlers } from './ipc/fonts'
+import { registerDownloadsHandlers } from './ipc/downloads'
+import { dispose as disposeDownloads } from './services/downloadsService'
 import { IPC_CHANNELS } from '../src/shared/constants'
 import log from 'electron-log'
 
@@ -58,6 +60,7 @@ app.whenReady().then(async () => {
   void bibleService.init()
   registerAudioHandlers(controlWindow)
   registerFontsHandlers(controlWindow, projectionWindow)
+  registerDownloadsHandlers(controlWindow)
 
   registerSettingsHandlers((next, prev) => {
     // La proyección refleja en vivo los cambios de apariencia de versículos.
@@ -133,6 +136,9 @@ app.on('before-quit', () => {
   void bibleMediaScanner.dispose()
   void audioScanner.dispose()
   void songsService.dispose()
+  // yt-dlp lanza ffmpeg como hijo y ambos sobreviven al cierre: sin esto quedan
+  // procesos invisibles comiendo ancho de banda y reteniendo el archivo .part.
+  disposeDownloads()
 })
 
 export { controlWindow, projectionWindow }

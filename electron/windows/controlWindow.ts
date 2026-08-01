@@ -15,7 +15,11 @@ export function createControlWindow(): BrowserWindow {
       preload: join(__dirname, '../preload/control.mjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      // El reproductor de música vive en este renderer: si la ventana queda
+      // tapada por la de proyección (monitor único), el estrangulamiento de
+      // timers en segundo plano entrecorta el audio y los contadores.
+      backgroundThrottling: false
     }
   })
 

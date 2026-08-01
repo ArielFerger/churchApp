@@ -6,11 +6,13 @@ import type {
   DisplayInfo,
   MediaPlaybackState
 } from '../../src/shared/types/ipc'
-import type { MediaItem } from '../../src/shared/types/media'
+import type { MediaCategory, MediaItem, MediaMeta } from '../../src/shared/types/media'
 import type { Song, Album } from '../../src/shared/types/song'
 import type { BibleBook } from '../../src/shared/types/bible'
 import type { AudioTrack, AudioPlaylist } from '../../src/shared/types/audio'
 import type { BibleFont } from '../../src/shared/types/fonts'
+import type { DownloadJob, DownloadOptions } from '../../src/shared/utils/downloads'
+import type { ToolStatus as DownloadTools } from '../services/downloadsService'
 
 contextBridge.exposeInMainWorld('electronAPI', {
   sendProjectionCommand: (cmd: ProjectionCommand) =>
@@ -50,6 +52,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: Electron.IpcRendererEvent, items: MediaItem[]) => callback(items)
     ipcRenderer.on(IPC_CHANNELS.BIBLE_MEDIA_UPDATED, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.BIBLE_MEDIA_UPDATED, handler)
+  },
+
+  getMediaMeta: (): Promise<MediaMeta> => ipcRenderer.invoke(IPC_CHANNELS.GET_MEDIA_META),
+
+  setMediaCategory: (mediaId: string, category: MediaCategory | null): Promise<MediaMeta> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_MEDIA_CATEGORY, mediaId, category),
+
+  setMediaToday: (mediaId: string, selected: boolean): Promise<MediaMeta> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_MEDIA_TODAY, mediaId, selected),
+
+  clearMediaToday: (): Promise<MediaMeta> => ipcRenderer.invoke(IPC_CHANNELS.CLEAR_MEDIA_TODAY),
+
+  onMediaMetaUpdated: (callback: (meta: MediaMeta) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, meta: MediaMeta) => callback(meta)
+    ipcRenderer.on(IPC_CHANNELS.MEDIA_META_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.MEDIA_META_UPDATED, handler)
   },
 
   onProjectionState: (callback: (cmd: ProjectionCommand) => void) => {
@@ -152,5 +170,54 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: Electron.IpcRendererEvent, key: string) => callback(key)
     ipcRenderer.on(IPC_CHANNELS.SHORTCUT_FIRED, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.SHORTCUT_FIRED, handler)
+  },
+
+  // ─── Descargas de YouTube ───────────────────────────────────────────────
+  getDownloadTools: (): Promise<DownloadTools> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_DOWNLOAD_TOOLS),
+
+  installDownloadTools: (): Promise<DownloadTools> =>
+    ipcRenderer.invoke(IPC_CHANNELS.INSTALL_DOWNLOAD_TOOLS),
+
+  getDownloads: (): Promise<DownloadJob[]> => ipcRenderer.invoke(IPC_CHANNELS.GET_DOWNLOADS),
+
+  enqueueDownload: (
+    url: string,
+    options: Partial<DownloadOptions>
+  ): Promise<DownloadJob> =>
+    ipcRenderer.invoke(IPC_CHANNELS.ENQUEUE_DOWNLOAD, url, options),
+
+  enqueuePlaylist: (
+    url: string,
+    options: Partial<DownloadOptions>
+  ): Promise<{ added: number; error: string | null }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.ENQUEUE_PLAYLIST, url, options),
+
+  cancelDownload: (id: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CANCEL_DOWNLOAD, id),
+
+  removeDownload: (id: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.REMOVE_DOWNLOAD, id),
+
+  clearDownloads: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.CLEAR_DOWNLOADS),
+
+  youtubeLogin: (): Promise<{ ok: boolean; cookies: number; error: string | null }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.YOUTUBE_LOGIN),
+
+  youtubeSessionStatus: (): Promise<boolean> =>
+    ipcRenderer.invoke(IPC_CHANNELS.YOUTUBE_SESSION_STATUS),
+
+  youtubeLogout: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.YOUTUBE_LOGOUT),
+
+  onDownloadsUpdated: (
+    callback: (payload: {
+      jobs?: DownloadJob[]
+      install?: { step: string; ratio: number | null }
+    }) => void
+  ) => {
+    const handler = (_: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) =>
+      callback(payload)
+    ipcRenderer.on(IPC_CHANNELS.DOWNLOADS_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.DOWNLOADS_UPDATED, handler)
   }
 })

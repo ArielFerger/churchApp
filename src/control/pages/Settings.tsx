@@ -5,7 +5,12 @@ import type { AppSettings } from '@/shared/types/ipc'
 
 type FolderKey = Extract<
   keyof AppSettings,
-  'mediaFolder' | 'audioFolder' | 'songsFolder' | 'liveLoopFolder' | 'bibleBackgroundsFolder'
+  | 'mediaFolder'
+  | 'audioFolder'
+  | 'songsFolder'
+  | 'liveLoopFolder'
+  | 'bibleBackgroundsFolder'
+  | 'toolsFolder'
 >
 
 const folderRows: { key: FolderKey; label: string; hint?: string }[] = [
@@ -21,7 +26,12 @@ const folderRows: { key: FolderKey; label: string; hint?: string }[] = [
     hint: 'Carpeta aparte para los fondos de los versículos proyectados. Admite subcarpetas. Si no se configura, se usa la carpeta de media.'
   },
   { key: 'audioFolder', label: 'Música' },
-  { key: 'songsFolder', label: 'Canciones' }
+  { key: 'songsFolder', label: 'Canciones' },
+  {
+    key: 'toolsFolder',
+    label: 'Herramientas de descarga',
+    hint: 'Carpeta con yt-dlp y ffmpeg, para bajar de YouTube. Si no se configura, se buscan en las ubicaciones habituales y en el PATH; desde la pestaña Descargar se pueden instalar solas.'
+  }
 ]
 
 export default function Settings() {

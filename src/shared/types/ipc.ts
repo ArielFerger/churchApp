@@ -1,9 +1,11 @@
 export type Transition = 'fade' | 'cut'
 
+/**
+ * Lo único que va a la pantalla es la letra. El título de la canción y el
+ * nombre de la parte ("Coro") son ayudas de cabina y se quedan en el control.
+ */
 export interface SlideContent {
   lines: string[]
-  songTitle?: string
-  sectionLabel?: string
 }
 
 export type ProjectionCommand =
@@ -86,6 +88,19 @@ export interface AppSettings {
   projectionDisplayId: number | null
   mediaFolder: string | null
   audioFolder: string | null
+  /**
+   * Carpeta con yt-dlp y ffmpeg para las descargas de YouTube. `null` = buscar
+   * en las ubicaciones por defecto y en el PATH.
+   */
+  toolsFolder: string | null
+  /**
+   * Navegador del que tomar la sesión de YouTube ya iniciada. `null` = ninguno.
+   *
+   * Sirve cuando YouTube contesta "iniciá sesión para confirmar que no sos un
+   * robot", que pasa en conexiones con IP compartida. No evade el control: lo
+   * responde, identificándose con la cuenta del propio usuario.
+   */
+  downloadCookiesBrowser: string | null
   songsFolder: string | null
   /** Carpeta exclusiva para los videos de loop de "En Vivo" (null = usa mediaFolder). */
   liveLoopFolder: string | null

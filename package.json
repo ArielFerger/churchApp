@@ -1,6 +1,6 @@
 {
   "name": "church-projector",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "App de proyección para iglesia — letras, versículos, media y audio",
   "type": "module",
   "main": "out/main/index.js",
@@ -15,7 +15,9 @@
     "preview": "electron-vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "convert-bibles": "tsx scripts/convert-bible.ts",
     "build:icons": "tsx scripts/build-icons.ts",
     "package": "electron-builder --dir",
@@ -64,6 +66,7 @@
     "tailwindcss": "^3.4.17",
     "tsx": "^4.22.3",
     "typescript": "^5.8.3",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vitest": "^3.2.7"
   }
 }

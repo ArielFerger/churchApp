@@ -6,6 +6,7 @@ import Songs from './pages/Songs'
 import Bible from './pages/Bible'
 import Media from './pages/Media'
 import Audio from './pages/Audio'
+import Downloads from './pages/Downloads'
 import Settings from './pages/Settings'
 import LiveIndicator from './components/LiveIndicator'
 import QuickActions from './components/QuickActions'
@@ -21,6 +22,7 @@ const navItems = [
   { to: '/bible', label: 'Biblia' },
   { to: '/media', label: 'Media' },
   { to: '/audio', label: 'Audio' },
+  { to: '/downloads', label: 'Descargar' },
   { to: '/settings', label: 'Ajustes' }
 ]
 
@@ -80,6 +82,7 @@ export default function App() {
             <Route path="/bible" element={<Bible />} />
             <Route path="/media" element={<Media />} />
             <Route path="/audio" element={<Audio />} />
+            <Route path="/downloads" element={<Downloads />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>
