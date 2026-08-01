@@ -32,6 +32,10 @@ export function registerDownloadsHandlers(controlWindow: BrowserWindow): () => v
       downloads.enqueuePlaylist(url, options)
   )
 
+  ipcMain.handle(IPC_CHANNELS.YOUTUBE_LOGIN, () => downloads.openYoutubeLogin(controlWindow))
+  ipcMain.handle(IPC_CHANNELS.YOUTUBE_SESSION_STATUS, () => downloads.hasYoutubeSession())
+  ipcMain.handle(IPC_CHANNELS.YOUTUBE_LOGOUT, () => downloads.clearYoutubeSession())
+
   ipcMain.handle(IPC_CHANNELS.CANCEL_DOWNLOAD, (_e, id: string) => downloads.cancel(id))
   ipcMain.handle(IPC_CHANNELS.REMOVE_DOWNLOAD, (_e, id: string) => downloads.remove(id))
   ipcMain.handle(IPC_CHANNELS.CLEAR_DOWNLOADS, () => downloads.clearFinished())
@@ -48,6 +52,9 @@ export function registerDownloadsHandlers(controlWindow: BrowserWindow): () => v
       IPC_CHANNELS.GET_DOWNLOADS,
       IPC_CHANNELS.ENQUEUE_DOWNLOAD,
       IPC_CHANNELS.ENQUEUE_PLAYLIST,
+      IPC_CHANNELS.YOUTUBE_LOGIN,
+      IPC_CHANNELS.YOUTUBE_SESSION_STATUS,
+      IPC_CHANNELS.YOUTUBE_LOGOUT,
       IPC_CHANNELS.CANCEL_DOWNLOAD,
       IPC_CHANNELS.REMOVE_DOWNLOAD,
       IPC_CHANNELS.CLEAR_DOWNLOADS

@@ -113,7 +113,11 @@ No es un problema de la app. Pasa cuando tu conexión comparte la IP pública co
 Qué se puede hacer, en orden:
 
 1. **Esperar un rato o probar desde otra red** (por ejemplo el celular como hotspot). Suele alcanzar.
-2. **Usar la sesión de tu navegador.** Cuando la app detecta ese error te ofrece elegir un navegador del que tomar la sesión de YouTube ya iniciada. No esquiva el control: lo responde, identificándote con tu propia cuenta, que es lo que YouTube está pidiendo. Ojo con dos cosas: el navegador tiene que estar **cerrado** para que se pueda leer la sesión, y bajar mucho material con una cuenta puede hacer que Google la marque — mejor usar una cuenta de la iglesia y no la personal.
+2. **Iniciar sesión desde la app.** Cuando aparece ese error, la pantalla te muestra el botón *Iniciar sesión en YouTube*. Se abre YouTube en una ventana aparte, **vos** entrás con tu cuenta y pasás la verificación como en cualquier navegador, y al cerrar la ventana la app se queda con esa sesión para las descargas.
+
+   La contraseña la escribís en la página real de Google: la app no la ve ni la guarda. Y si cerrás la ventana sin haber entrado, te avisa en vez de dar por hecho que quedó lista.
+
+   Dos advertencias: bajar mucho material con una cuenta puede hacer que Google la marque, así que conviene usar una **cuenta de la iglesia y no la personal**; y *Borrar la sesión* corta cualquier descarga en curso, porque son las que están usando esa credencial.
 
 Lo que **no** hay es forma de saltear el control sin identificarse. Si te encontrás con eso justo antes de una reunión, lo práctico es tener el video ya bajado de antes: por eso conviene no depender de descargar en el momento.
 

@@ -6,6 +6,8 @@ import {
   explainError,
   lastMeaningfulLine,
   parsePlaylistEntries,
+  hasAuthCookies,
+  toNetscapeCookies,
   formatBytes,
   formatDuration,
   formatSpeed,
@@ -340,6 +342,121 @@ describe('argumentos de red', () => {
     expect(conCookies[conCookies.indexOf('--cookies-from-browser') + 1]).toBe('firefox')
     expect(buildProbeArgs('u', null, 'firefox')).toContain('--cookies-from-browser')
     expect(buildPlaylistArgs('u', null, 'firefox')).toContain('--cookies-from-browser')
+  })
+})
+
+describe('toNetscapeCookies', () => {
+  const cookie = (over = {}) => ({
+    name: 'SID',
+    value: 'abc123',
+    domain: '.youtube.com',
+    path: '/',
+    secure: true,
+    expirationDate: 1800000000.5,
+    ...over
+  })
+
+  it('escribe la cabecera que yt-dlp espera', () => {
+    expect(toNetscapeCookies([])).toMatch(/^# Netscape HTTP Cookie File/)
+  })
+
+  it('arma los siete campos separados por TAB', () => {
+    const linea = toNetscapeCookies([cookie()]).trim().split('\n').pop() ?? ''
+    expect(linea.split('\t')).toEqual([
+      '.youtube.com',
+      'TRUE',
+      '/',
+      'TRUE',
+      '1800000000',
+      'SID',
+      'abc123'
+    ])
+  })
+
+  it('el punto adelante del dominio marca que vale para subdominios', () => {
+    const conPunto = toNetscapeCookies([cookie({ domain: '.youtube.com' })])
+    const sinPunto = toNetscapeCookies([cookie({ domain: 'www.youtube.com' })])
+    expect(conPunto).toContain('\tTRUE\t/')
+    expect(sinPunto).toContain('\tFALSE\t/')
+  })
+
+  it('una cookie de sesión (sin vencimiento) va con 0', () => {
+    const linea = toNetscapeCookies([cookie({ expirationDate: undefined })])
+    expect(linea.split('\t')[4]).toBe('0')
+  })
+
+  it('el vencimiento se trunca a segundos enteros', () => {
+    // Electron lo da con decimales y yt-dlp espera un entero.
+    expect(toNetscapeCookies([cookie({ expirationDate: 123.99 })])).toContain('\t123\t')
+  })
+
+  it('una ruta vacía se normaliza a /', () => {
+    expect(toNetscapeCookies([cookie({ path: '' })])).toContain('\t/\t')
+  })
+
+  it('sin cookies devuelve un archivo válido pero vacío', () => {
+    const out = toNetscapeCookies([])
+    expect(out.split('\n').filter((l) => l && !l.startsWith('#'))).toEqual([])
+  })
+})
+
+describe('hasAuthCookies', () => {
+  it('las cookies que deja cargar la página NO cuentan como sesión', () => {
+    // Sólo abrir youtube.com deja consentimiento y datos de visitante. Si eso
+    // contara, la app diría "sesión guardada" sin que nadie haya entrado.
+    const soloVisita = [
+      { name: 'CONSENT' },
+      { name: 'VISITOR_INFO1_LIVE' },
+      { name: 'YSC' },
+      { name: 'PREF' },
+      { name: 'SOCS' }
+    ]
+    expect(hasAuthCookies(soloVisita)).toBe(false)
+  })
+
+  it('reconoce una sesión iniciada de verdad', () => {
+    expect(hasAuthCookies([{ name: 'YSC' }, { name: 'LOGIN_INFO' }])).toBe(true)
+    expect(hasAuthCookies([{ name: '__Secure-1PSID' }])).toBe(true)
+    expect(hasAuthCookies([{ name: 'SAPISID' }])).toBe(true)
+  })
+
+  it('sin cookies no hay sesión', () => {
+    expect(hasAuthCookies([])).toBe(false)
+  })
+})
+
+describe('prioridad de la sesión', () => {
+  const base = { url: 'u', destDir: 'D:/media', ffmpegDir: null, kind: 'video' as const }
+
+  it('el archivo de sesión le gana a leer el navegador', () => {
+    // El archivo lo generó un login hecho a mano dentro de la app; leer el
+    // navegador exige que esté cerrado, así que es peor opción.
+    const args = buildArgs({
+      ...base,
+      cookiesBrowser: 'chrome',
+      cookiesFile: 'D:/data/cookies.txt'
+    })
+    expect(args[args.indexOf('--cookies') + 1]).toBe('D:/data/cookies.txt')
+    expect(args).not.toContain('--cookies-from-browser')
+  })
+
+  it('sin archivo, cae al navegador', () => {
+    const args = buildArgs({ ...base, cookiesBrowser: 'chrome', cookiesFile: null })
+    expect(args).toContain('--cookies-from-browser')
+    expect(args).not.toContain('--cookies')
+  })
+
+  it('sin nada, no manda ninguna credencial', () => {
+    const args = buildArgs(base)
+    expect(args).not.toContain('--cookies')
+    expect(args).not.toContain('--cookies-from-browser')
+  })
+
+  it('la sesión también va en la consulta y en la lista', () => {
+    // Si sólo la descarga la llevara, la consulta previa fallaría igual y el
+    // trabajo quedaría en error antes de intentar bajar nada.
+    expect(buildProbeArgs('u', null, null, 'c.txt')).toContain('--cookies')
+    expect(buildPlaylistArgs('u', null, null, 'c.txt')).toContain('--cookies')
   })
 })
 

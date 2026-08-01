@@ -112,6 +112,9 @@ export interface ControlElectronAPI {
   cancelDownload: (id: string) => Promise<void>
   removeDownload: (id: string) => Promise<void>
   clearDownloads: () => Promise<void>
+  youtubeLogin: () => Promise<{ ok: boolean; cookies: number; error: string | null }>
+  youtubeSessionStatus: () => Promise<boolean>
+  youtubeLogout: () => Promise<void>
   onDownloadsUpdated: (
     callback: (payload: {
       jobs?: DownloadJob[]

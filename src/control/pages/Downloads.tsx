@@ -15,7 +15,6 @@ import {
 import {
   ACTIVOS,
   AUDIO_BITRATES,
-  COOKIE_BROWSERS,
   VIDEO_QUALITIES,
   formatBytes,
   formatDuration,
@@ -37,7 +36,6 @@ import { useSettingsStore } from '@/shared/store/settingsStore'
  */
 export default function Downloads() {
   const settings = useSettingsStore((s) => s.settings)
-  const updateSettings = useSettingsStore((s) => s.update)
   const [tools, setTools] = useState<DownloadTools | null>(null)
   const [jobs, setJobs] = useState<DownloadJob[]>([])
   const [url, setUrl] = useState('')
@@ -51,19 +49,51 @@ export default function Downloads() {
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
+  // Sesión de YouTube (para cuando pide confirmar que no sos un robot)
+  const [sesion, setSesion] = useState(false)
+  const [loggingIn, setLoggingIn] = useState(false)
+  const [loginMsg, setLoginMsg] = useState<string | null>(null)
+
+  const refreshSesion = useCallback(async () => {
+    setSesion((await window.electronAPI?.youtubeSessionStatus()) ?? false)
+  }, [])
+
+  async function handleLogin() {
+    setLoginMsg(null)
+    setLoggingIn(true)
+    try {
+      const r = await window.electronAPI?.youtubeLogin()
+      setLoginMsg(
+        r?.ok
+          ? `Listo: se guardó la sesión. Probá la descarga de nuevo.`
+          : (r?.error ?? 'No se pudo guardar la sesión.')
+      )
+    } finally {
+      setLoggingIn(false)
+      void refreshSesion()
+    }
+  }
+
+  async function handleLogout() {
+    await window.electronAPI?.youtubeLogout()
+    setLoginMsg('Sesión borrada.')
+    void refreshSesion()
+  }
+
   const refreshTools = useCallback(async () => {
     setTools((await window.electronAPI?.getDownloadTools()) ?? null)
   }, [])
 
   useEffect(() => {
     void refreshTools()
+    void refreshSesion()
     void window.electronAPI?.getDownloads().then((j) => setJobs(j ?? []))
     const unsub = window.electronAPI?.onDownloadsUpdated((payload) => {
       if (payload.jobs) setJobs(payload.jobs)
       if (payload.install) setInstalling(payload.install)
     })
     return unsub
-  }, [refreshTools])
+  }, [refreshTools, refreshSesion])
 
   const ready = Boolean(tools?.ytDlp && tools?.ffmpegDir)
   const destFolder = kind === 'audio' ? settings?.audioFolder : settings?.mediaFolder
@@ -331,35 +361,66 @@ export default function Downloads() {
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-slate-400">
               Pasa cuando la conexión comparte la IP con muchos usuarios (Starlink,
-              datos móviles, wifi de un edificio): YouTube no sabe si sos una persona
-              y pide identificarse. Podés usar la sesión que ya tenés abierta en tu
-              navegador.
+              datos móviles, wifi de un edificio): YouTube no sabe si del otro lado
+              hay una persona y pide identificarse.
             </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <label className="text-xs text-slate-400" htmlFor="cookieBrowser">
-                Usar la sesión de:
-              </label>
-              <select
-                id="cookieBrowser"
-                value={settings?.downloadCookiesBrowser ?? ''}
-                onChange={(e) =>
-                  void updateSettings({ downloadCookiesBrowser: e.target.value || null })
-                }
-                className="rounded-md border border-slate-600 bg-slate-900 px-2.5 py-1.5 text-sm text-slate-100 outline-none focus:border-blue-500"
-              >
-                <option value="">Ninguno</option>
-                {COOKIE_BROWSERS.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <p className="mt-2 text-xs leading-relaxed text-amber-400/80">
-              Tené en cuenta: bajar mucho material con la sesión de una cuenta puede
-              hacer que Google la marque. Conviene usar una cuenta de la iglesia, no
-              la personal. El navegador tiene que estar cerrado para que se pueda leer
-              la sesión.
+
+            {sesion ? (
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <span className="inline-flex items-center gap-1.5 text-sm text-emerald-400">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Sesión de YouTube guardada
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void handleLogin()}
+                  disabled={loggingIn}
+                  className="rounded-md border border-slate-600 px-3 py-1.5 text-xs text-slate-300 transition-colors hover:bg-slate-700 disabled:opacity-50"
+                >
+                  Volver a iniciar sesión
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleLogout()}
+                  className="text-xs text-slate-500 transition-colors hover:text-red-400"
+                >
+                  Borrar la sesión
+                </button>
+              </div>
+            ) : (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => void handleLogin()}
+                  disabled={loggingIn}
+                  className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
+                >
+                  {loggingIn ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Esperando a que cierres la ventana…
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound className="h-4 w-4" />
+                      Iniciar sesión en YouTube
+                    </>
+                  )}
+                </button>
+                <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                  Se abre YouTube en una ventana aparte. Iniciás sesión y pasás la
+                  verificación vos mismo, como en cualquier navegador; después cerrás
+                  la ventana y la app se queda con esa sesión para las descargas. La
+                  contraseña la ponés en la página de Google: la app no la ve.
+                </p>
+              </div>
+            )}
+
+            {loginMsg && <p className="mt-2 text-xs text-slate-400">{loginMsg}</p>}
+
+            <p className="mt-3 text-xs leading-relaxed text-amber-400/80">
+              Ojo: bajar mucho material con una cuenta puede hacer que Google la
+              marque. Conviene usar una cuenta de la iglesia y no la personal.
             </p>
           </section>
         )}

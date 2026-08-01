@@ -232,9 +232,73 @@ export const COOKIE_BROWSERS = [
   { id: 'vivaldi', label: 'Vivaldi' }
 ] as const
 
+/** Una cookie tal como la devuelve Electron. */
+export interface SessionCookie {
+  name: string
+  value: string
+  domain: string
+  path: string
+  secure: boolean
+  /** Segundos desde epoch. Ausente = cookie de sesión. */
+  expirationDate?: number
+}
+
+/**
+ * Pasa las cookies al formato Netscape, que es el único que entiende yt-dlp
+ * (`--cookies archivo.txt`). Son siete campos separados por TAB:
+ *
+ *   dominio  incluirSubdominios  ruta  seguro  vencimiento  nombre  valor
+ *
+ * El archivo que sale es una credencial: da acceso a la cuenta de YouTube de
+ * quien inició sesión. Se guarda en userData y no se loguea nunca.
+ */
+export function toNetscapeCookies(cookies: SessionCookie[]): string {
+  const lineas = ['# Netscape HTTP Cookie File', '# Generado por Church Projector', '']
+  for (const c of cookies) {
+    // Un punto adelante significa "vale para los subdominios".
+    const incluyeSub = c.domain.startsWith('.') ? 'TRUE' : 'FALSE'
+    const vence = c.expirationDate ? Math.floor(c.expirationDate) : 0
+    lineas.push(
+      [
+        c.domain,
+        incluyeSub,
+        c.path || '/',
+        c.secure ? 'TRUE' : 'FALSE',
+        String(vence),
+        c.name,
+        c.value
+      ].join('\t')
+    )
+  }
+  return lineas.join('\n') + '\n'
+}
+
+/**
+ * Cookies con las que Google identifica a una cuenta. Sólo cargar youtube.com
+ * ya deja media docena de cookies de consentimiento y de visitante, así que
+ * contar cookies no alcanza para saber si alguien inició sesión: hay que
+ * buscar las de autenticación.
+ */
+const AUTH_COOKIES = [
+  'LOGIN_INFO',
+  'SID',
+  'HSID',
+  'SSID',
+  'APISID',
+  'SAPISID',
+  '__Secure-1PSID',
+  '__Secure-3PSID'
+]
+
+/** Si el conjunto de cookies corresponde a una sesión realmente iniciada. */
+export function hasAuthCookies(cookies: { name: string }[]): boolean {
+  return cookies.some((c) => AUTH_COOKIES.includes(c.name))
+}
+
 export function networkArgs(
   jsRuntime: JsRuntime | null,
-  cookiesBrowser: string | null = null
+  cookiesBrowser: string | null = null,
+  cookiesFile: string | null = null
 ): string[] {
   const args = [
     '-4',
@@ -254,10 +318,13 @@ export function networkArgs(
   if (jsRuntime) {
     args.push('--js-runtimes', jsRuntime.path ? `${jsRuntime.name}:${jsRuntime.path}` : jsRuntime.name)
   }
-  // Sesión ya iniciada del navegador del usuario. Es la vía que indica el
-  // propio mensaje de YouTube cuando pide confirmar que no sos un robot:
-  // identificarse con la cuenta propia, no esquivar el control.
-  if (cookiesBrowser) args.push('--cookies-from-browser', cookiesBrowser)
+  // Sesión iniciada por el propio usuario. Es la vía que indica el mensaje de
+  // YouTube cuando pide confirmar que no sos un robot: identificarse con la
+  // cuenta propia, no esquivar el control. El archivo tiene prioridad porque lo
+  // generó una sesión hecha a mano dentro de la app, mientras que leer el
+  // navegador exige que esté cerrado.
+  if (cookiesFile) args.push('--cookies', cookiesFile)
+  else if (cookiesBrowser) args.push('--cookies-from-browser', cookiesBrowser)
   return args
 }
 
@@ -277,10 +344,15 @@ export function buildArgs(opts: {
   bitrate?: AudioBitrate
   jsRuntime?: JsRuntime | null
   cookiesBrowser?: string | null
+  cookiesFile?: string | null
 }): string[] {
   const args = [
     opts.url,
-    ...networkArgs(opts.jsRuntime ?? null, opts.cookiesBrowser ?? null),
+    ...networkArgs(
+      opts.jsRuntime ?? null,
+      opts.cookiesBrowser ?? null,
+      opts.cookiesFile ?? null
+    ),
     '--no-playlist',
     '--newline',
     '--no-mtime',
@@ -350,11 +422,12 @@ export function buildArgs(opts: {
 export function buildPlaylistArgs(
   url: string,
   jsRuntime: JsRuntime | null = null,
-  cookiesBrowser: string | null = null
+  cookiesBrowser: string | null = null,
+  cookiesFile: string | null = null
 ): string[] {
   return [
     url,
-    ...networkArgs(jsRuntime, cookiesBrowser),
+    ...networkArgs(jsRuntime, cookiesBrowser, cookiesFile),
     '--flat-playlist',
     '--dump-json',
     '--no-warnings',
@@ -367,11 +440,12 @@ export function buildPlaylistArgs(
 export function buildProbeArgs(
   url: string,
   jsRuntime: JsRuntime | null = null,
-  cookiesBrowser: string | null = null
+  cookiesBrowser: string | null = null,
+  cookiesFile: string | null = null
 ): string[] {
   return [
     url,
-    ...networkArgs(jsRuntime, cookiesBrowser),
+    ...networkArgs(jsRuntime, cookiesBrowser, cookiesFile),
     '--no-playlist',
     '--skip-download',
     '--no-warnings',

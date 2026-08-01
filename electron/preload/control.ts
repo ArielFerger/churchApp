@@ -201,6 +201,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   clearDownloads: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.CLEAR_DOWNLOADS),
 
+  youtubeLogin: (): Promise<{ ok: boolean; cookies: number; error: string | null }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.YOUTUBE_LOGIN),
+
+  youtubeSessionStatus: (): Promise<boolean> =>
+    ipcRenderer.invoke(IPC_CHANNELS.YOUTUBE_SESSION_STATUS),
+
+  youtubeLogout: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.YOUTUBE_LOGOUT),
+
   onDownloadsUpdated: (
     callback: (payload: {
       jobs?: DownloadJob[]

@@ -125,6 +125,27 @@ simultaneous processes against the same URL, which is also exactly the traffic
 pattern that gets an IP served a CAPTCHA: the app used to inflict the block on
 itself.
 
+### YouTube session
+
+When YouTube answers "sign in to confirm you're not a bot" — IP reputation, not
+anything the app did — `openYoutubeLogin` opens a real youtube.com window in its
+own `persist:` partition. **A human does the human verification**: the app never
+sees the password and never tries to solve the challenge itself. On close, the
+partition's cookies are exported to Netscape format for `--cookies`.
+
+Two things that are easy to get wrong here:
+
+- Merely loading youtube.com leaves ~8 consent and visitor cookies, so counting
+  cookies would report "session saved" for someone who never logged in.
+  `hasAuthCookies` looks for the actual Google auth names instead.
+- yt-dlp **rewrites** the cookies file when it exits (the file says "generated
+  by yt-dlp" inside). Deleting it while a download is running does nothing —
+  the dying process recreates it a second later — so `clearYoutubeSession`
+  stops everything using it first, then deletes and verifies.
+
+The exported file is a credential: it lives in userData, is never logged, and
+its contents are never surfaced in the UI.
+
 Errors are translated by `explainError` into something an operator can act on,
 with the raw stderr kept in `job.errorDetail` so it can be read and copied from
 the page. Collapsing stderr to "the last line starting with ERROR" hid every
