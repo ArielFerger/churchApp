@@ -4,6 +4,7 @@ import {
   buildPlaylistArgs,
   buildProbeArgs,
   explainError,
+  isBotCheckError,
   lastMeaningfulLine,
   parsePlaylistEntries,
   hasAuthCookies,
@@ -466,6 +467,28 @@ describe('explainError', () => {
     const msg = explainError(real)
     expect(msg).toMatch(/robot/i)
     expect(msg).toMatch(/otra red|IP|conexión/i)
+  })
+
+  it('reconoce el mensaje TAL COMO LLEGA de la consola de Windows', () => {
+    // El mensaje real de YouTube trae apóstrofo tipográfico (you’re) y al salir
+    // por cp1252 llega roto. Buscar "you're" no matcheaba NUNCA: el panel para
+    // iniciar sesión no aparecía y no había forma de salir del error.
+    const crudo =
+      'ERROR: [youtube] Fp-j6T5r2jA: Sign in to confirm you�re not a bot. Use --cookies-from-browser'
+    expect(explainError(crudo)).toMatch(/robot/i)
+    expect(isBotCheckError(crudo)).toBe(true)
+  })
+
+  it('reconoce las tres variantes del apóstrofo', () => {
+    for (const ap of ["'", '’', '�']) {
+      expect(isBotCheckError(`Sign in to confirm you${ap}re not a bot.`)).toBe(true)
+    }
+  })
+
+  it('no confunde otros errores con el pedido de sesión', () => {
+    expect(isBotCheckError('ERROR: Video unavailable')).toBe(false)
+    expect(isBotCheckError('HTTP Error 429: Too Many Requests')).toBe(false)
+    expect(isBotCheckError('')).toBe(false)
   })
 
   it('reconoce el 429', () => {

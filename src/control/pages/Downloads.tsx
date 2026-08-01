@@ -144,10 +144,14 @@ export default function Downloads() {
 
   const activos = jobs.filter((j) => ACTIVOS.includes(j.stage))
 
-  /** Si algún trabajo falló porque YouTube pidió identificarse. */
-  const bloqueado = jobs.some(
-    (j) => j.stage === 'error' && /robot|sesión/i.test(j.error ?? '')
-  )
+  /**
+   * Si algún trabajo falló porque YouTube pidió identificarse. Lo marca el
+   * servicio: antes se deducía con una expresión regular sobre el texto del
+   * error, y el mensaje real de YouTube trae un apóstrofo tipográfico que la
+   * consola de Windows rompe, así que no matcheaba nunca y el panel para
+   * iniciar sesión no llegaba a aparecer.
+   */
+  const bloqueado = jobs.some((j) => j.needsLogin)
 
   return (
     <div className="h-full overflow-y-auto bg-slate-900">
@@ -349,6 +353,22 @@ export default function Downloads() {
           )}
 
           {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+
+          {/* Acceso permanente: si la app no llegara a reconocer el error, sin
+              esto no habría forma de iniciar sesión desde ningún lado. */}
+          {!bloqueado && !sesion && (
+            <p className="mt-2 text-xs text-slate-500">
+              ¿YouTube te pide iniciar sesión?{' '}
+              <button
+                type="button"
+                onClick={() => void handleLogin()}
+                disabled={loggingIn}
+                className="text-blue-400 underline underline-offset-2 hover:text-blue-300 disabled:opacity-50"
+              >
+                {loggingIn ? 'Esperando…' : 'Iniciá sesión acá'}
+              </button>
+            </p>
+          )}
         </section>
 
         {/* Sesión del navegador. Aparece sólo cuando hace falta: si las

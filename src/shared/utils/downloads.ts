@@ -88,6 +88,8 @@ export interface DownloadJob {
   error: string | null
   /** stderr crudo del fallo, para poder verlo y copiarlo desde la pantalla. */
   errorDetail?: string | null
+  /** El fallo fue porque YouTube pide iniciar sesión: hay que ofrecer el login. */
+  needsLogin?: boolean
   createdAt: number
 }
 
@@ -461,10 +463,24 @@ export function buildProbeArgs(
  * error, y en ese caso el llamador muestra el texto crudo: es preferible un
  * mensaje feo y cierto a uno lindo e inventado.
  */
+/**
+ * Si el error es el pedido de YouTube de iniciar sesión.
+ *
+ * A propósito NO se busca el apóstrofo: el mensaje real es "Sign in to confirm
+ * you’re not a bot" con apóstrofo tipográfico, y al salir por la consola de
+ * Windows (cp1252) llega como un carácter roto. Buscar "you're" no matcheaba
+ * nunca, así que el panel para iniciar sesión no aparecía jamás y el usuario
+ * se quedaba mirando el mismo error sin manera de resolverlo.
+ */
+export function isBotCheckError(stderr: string): boolean {
+  const s = stderr.toLowerCase()
+  return s.includes('not a bot') || s.includes('sign in to confirm')
+}
+
 export function explainError(stderr: string): string | null {
   const s = stderr.toLowerCase()
 
-  if (s.includes("confirm you're not a bot") || s.includes('confirm youre not a bot')) {
+  if (isBotCheckError(stderr)) {
     return (
       'YouTube está pidiendo iniciar sesión para confirmar que no sos un robot. ' +
       'Suele pasar cuando la conexión comparte la IP con muchos usuarios (Starlink, ' +

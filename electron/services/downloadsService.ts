@@ -11,6 +11,7 @@ import {
   buildPlaylistArgs,
   buildProbeArgs,
   explainError,
+  isBotCheckError,
   lastMeaningfulLine,
   parseFileLine,
   parsePlaylistEntries,
@@ -176,33 +177,52 @@ const YT_PARTITION = 'persist:youtube-login'
  * La verificación la hace un humano en la página real de Google: la app no ve
  * la contraseña ni intenta resolver el desafío por su cuenta.
  */
+let loginEnCurso: {
+  win: BrowserWindow
+  promesa: Promise<{ ok: boolean; cookies: number; error: string | null }>
+} | null = null
+
 export function openYoutubeLogin(parent?: BrowserWindow): Promise<{
   ok: boolean
   cookies: number
   error: string | null
 }> {
-  return new Promise((resolve) => {
-    let win: BrowserWindow
-    try {
-      win = new BrowserWindow({
-        width: 1000,
-        height: 760,
-        parent,
-        title: 'Iniciar sesión en YouTube',
-        autoHideMenuBar: true,
-        webPreferences: {
-          partition: YT_PARTITION,
-          contextIsolation: true,
-          nodeIntegration: false,
-          // Ventana de un tercero: nada de la app tiene que estar accesible acá.
-          sandbox: true
-        }
-      })
-    } catch (e) {
-      return resolve({ ok: false, cookies: 0, error: String(e) })
-    }
+  // Si ya hay una ventana abierta, traerla al frente en vez de abrir otra: si
+  // quedó detrás de la ventana de control, el usuario ve "esperando a que
+  // cierres la ventana" sin ninguna ventana a la vista que pueda cerrar.
+  if (loginEnCurso && !loginEnCurso.win.isDestroyed()) {
+    if (loginEnCurso.win.isMinimized()) loginEnCurso.win.restore()
+    loginEnCurso.win.show()
+    loginEnCurso.win.focus()
+    return loginEnCurso.promesa
+  }
 
+  // La ventana se crea FUERA del ejecutor de la promesa: el ejecutor corre de
+  // forma síncrona, así que guardar ahí una referencia a `promesa` la tocaba
+  // antes de que existiera y tiraba ReferenceError.
+  let win: BrowserWindow
+  try {
+    win = new BrowserWindow({
+      width: 1000,
+      height: 760,
+      parent,
+      title: 'Iniciar sesión en YouTube',
+      autoHideMenuBar: true,
+      webPreferences: {
+        partition: YT_PARTITION,
+        contextIsolation: true,
+        nodeIntegration: false,
+        // Ventana de un tercero: nada de la app tiene que estar accesible acá.
+        sandbox: true
+      }
+    })
+  } catch (e) {
+    return Promise.resolve({ ok: false, cookies: 0, error: String(e) })
+  }
+
+  const promesa = new Promise<{ ok: boolean; cookies: number; error: string | null }>((resolve) => {
     win.on('closed', () => {
+      loginEnCurso = null
       void (async () => {
         try {
           const all = await session.fromPartition(YT_PARTITION).cookies.get({})
@@ -242,6 +262,9 @@ export function openYoutubeLogin(parent?: BrowserWindow): Promise<{
 
     void win.loadURL('https://www.youtube.com/')
   })
+
+  loginEnCurso = { win, promesa }
+  return promesa
 }
 
 // ─── Instalación de las herramientas ─────────────────────────────────────────
@@ -654,6 +677,9 @@ function runJob(job: DownloadJob): Promise<void> {
         patch(job.id, {
           stage: 'error',
           error: reason,
+          // La pantalla no tiene que adivinar leyendo el texto del error: se lo
+          // marca acá, donde está el stderr crudo.
+          needsLogin: isBotCheckError(detalle),
           // El stderr crudo va al job para que se pueda ver y copiar desde la
           // pantalla: sin esto, diagnosticar exige reproducir el fallo a mano.
           errorDetail: detalle.slice(-8000) || null
