@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   buildArgs,
   buildPlaylistArgs,
+  buildProbeArgs,
+  explainError,
+  lastMeaningfulLine,
   parsePlaylistEntries,
   formatBytes,
   formatDuration,
@@ -285,6 +288,110 @@ describe('listas de reproducción', () => {
 
   it('una salida vacía no devuelve nada', () => {
     expect(parsePlaylistEntries('')).toEqual([])
+  })
+})
+
+describe('argumentos de red', () => {
+  const base = { url: 'u', destDir: 'D:/media', ffmpegDir: null, kind: 'video' as const }
+
+  it('fuerza IPv4 en TODA invocacion', () => {
+    // Medido en la maquina del usuario: yt-dlp usa urllib, que no hace Happy
+    // Eyeballs. Con IPv6 anunciado pero sin ruta real se cuelga para siempre,
+    // sin timeout ni mensaje. Con -4 responde en segundos. Es LA diferencia
+    // entre "no anda" y "anda", asi que no puede faltar en ninguna llamada.
+    expect(buildArgs(base)).toContain('-4')
+    expect(buildPlaylistArgs('u')).toContain('-4')
+    expect(buildProbeArgs('u')).toContain('-4')
+  })
+
+  it('pone timeout de socket y reintentos en todas', () => {
+    for (const args of [buildArgs(base), buildPlaylistArgs('u'), buildProbeArgs('u')]) {
+      expect(args).toContain('--socket-timeout')
+      expect(args).toContain('--retries')
+    }
+  })
+
+  it('le nombra el runtime de JavaScript con su ruta', () => {
+    // yt-dlp solo habilita deno por su cuenta: con node instalado igual hay que
+    // pedirselo, si no YouTube no entrega los formatos.
+    const args = buildArgs({ ...base, jsRuntime: { name: 'node', path: 'D:/Node/node.exe' } })
+    expect(args[args.indexOf('--js-runtimes') + 1]).toBe('node:D:/Node/node.exe')
+  })
+
+  it('sin ruta, deja que lo busque en el PATH', () => {
+    const args = buildProbeArgs('u', { name: 'deno', path: null })
+    expect(args[args.indexOf('--js-runtimes') + 1]).toBe('deno')
+  })
+
+  it('sin runtime disponible, no inventa el flag', () => {
+    expect(buildArgs({ ...base, jsRuntime: null })).not.toContain('--js-runtimes')
+  })
+
+  it('la sesión del navegador es opcional y por defecto no va', () => {
+    expect(buildArgs(base)).not.toContain('--cookies-from-browser')
+    expect(buildProbeArgs('u')).not.toContain('--cookies-from-browser')
+    expect(buildPlaylistArgs('u')).not.toContain('--cookies-from-browser')
+  })
+
+  it('cuando se elige un navegador, se usa en las tres llamadas', () => {
+    // Si sólo la descarga llevara la sesión, la consulta previa fallaría
+    // igual y el trabajo quedaría en error antes de intentar bajar nada.
+    const conCookies = buildArgs({ ...base, cookiesBrowser: 'firefox' })
+    expect(conCookies[conCookies.indexOf('--cookies-from-browser') + 1]).toBe('firefox')
+    expect(buildProbeArgs('u', null, 'firefox')).toContain('--cookies-from-browser')
+    expect(buildPlaylistArgs('u', null, 'firefox')).toContain('--cookies-from-browser')
+  })
+})
+
+describe('explainError', () => {
+  it('traduce el bloqueo por reputacion de IP', () => {
+    const real = "ERROR: [youtube] YE7VzlLtp-4: Sign in to confirm you're not a bot."
+    const msg = explainError(real)
+    expect(msg).toMatch(/robot/i)
+    expect(msg).toMatch(/otra red|IP|conexión/i)
+  })
+
+  it('reconoce el 429', () => {
+    expect(explainError('ERROR: HTTP Error 429: Too Many Requests')).toMatch(/pedidos/i)
+  })
+
+  it('reconoce video privado, borrado y solo-miembros', () => {
+    expect(explainError('ERROR: Private video')).toMatch(/privado/i)
+    expect(explainError('ERROR: Video unavailable')).toMatch(/no está disponible/i)
+    expect(explainError('ERROR: Join this channel to get access')).toMatch(/miembros/i)
+  })
+
+  it('reconoce transmisiones que no empezaron', () => {
+    expect(explainError('ERROR: This live event will begin in 3 hours')).toMatch(/no empezó/i)
+  })
+
+  it('reconoce problemas de disco y permisos', () => {
+    expect(explainError('OSError: No space left on device')).toMatch(/espacio/i)
+    expect(explainError('PermissionError: Access is denied')).toMatch(/permisos|no deja/i)
+  })
+
+  it('devuelve null cuando no reconoce nada, para no inventar', () => {
+    expect(explainError('algo rarisimo que nadie vio nunca')).toBeNull()
+    expect(explainError('')).toBeNull()
+  })
+})
+
+describe('lastMeaningfulLine', () => {
+  it('prefiere la ultima linea de ERROR', () => {
+    const s = 'WARNING: algo\nERROR: primero\nalgo mas\nERROR: el que importa'
+    expect(lastMeaningfulLine(s)).toBe('el que importa')
+  })
+
+  it('si no hay ERROR usa la ultima linea util en vez de rendirse', () => {
+    // Antes, un traceback de Python sin la etiqueta ERROR terminaba mostrando
+    // "yt-dlp terminó con código 1", que no le sirve a nadie.
+    expect(lastMeaningfulLine('Traceback...\nValueError: algo roto\n\n')).toBe(
+      'ValueError: algo roto'
+    )
+  })
+
+  it('con stderr vacio devuelve null', () => {
+    expect(lastMeaningfulLine('   \n\n')).toBeNull()
   })
 })
 

@@ -104,7 +104,18 @@ Pegás el enlace de un video, elegís **Video** o **MP3**, y listo. El video cae
 - Mientras baja ves el avance, la velocidad y cuánto falta. **Cancelar** corta en el acto y no deja archivos a medias en la biblioteca.
 - **Listas de reproducción**: si pegás el enlace de una lista, por defecto baja sólo ese video. Aparece un botón para **encolar la lista completa**, que la expande y arma un trabajo por video — así ves el avance de cada uno y podés cancelar uno solo sin perder el resto.
 
-La primera vez hace falta instalar dos programas externos: **yt-dlp** (baja) y **ffmpeg** (junta video con audio y arma el MP3). La pantalla tiene un botón que los baja solos (~180 MB). No vienen con la app a propósito: yt-dlp se desactualiza cada pocas semanas cuando YouTube cambia algo, y conviene poder renovarlo sin reinstalar todo. Si ya los tenés, poné la carpeta en *Ajustes → Herramientas de descarga*.
+La primera vez hace falta instalar dos programas externos: **yt-dlp** (baja) y **ffmpeg** (junta video con audio y arma el MP3). La pantalla tiene un botón que los baja solos (~180 MB). No vienen con la app a propósito: yt-dlp se desactualiza cada pocas semanas cuando YouTube cambia algo, y conviene poder renovarlo sin reinstalar todo. Si ya los tenés instalados (winget, chocolatey, o sueltos en el PATH), la app los encuentra sola; también podés indicar la carpeta en *Ajustes → Herramientas de descarga*.
+
+### Si YouTube te pide "iniciar sesión para confirmar que no sos un robot"
+
+No es un problema de la app. Pasa cuando tu conexión comparte la IP pública con muchos otros usuarios —**Starlink, datos móviles, wifi de un edificio**— y alguno de ellos abusó: Google marca esa IP compartida y le pide identificarse a todos los que estén detrás. Es intermitente: depende de qué IP te toque ese día.
+
+Qué se puede hacer, en orden:
+
+1. **Esperar un rato o probar desde otra red** (por ejemplo el celular como hotspot). Suele alcanzar.
+2. **Usar la sesión de tu navegador.** Cuando la app detecta ese error te ofrece elegir un navegador del que tomar la sesión de YouTube ya iniciada. No esquiva el control: lo responde, identificándote con tu propia cuenta, que es lo que YouTube está pidiendo. Ojo con dos cosas: el navegador tiene que estar **cerrado** para que se pueda leer la sesión, y bajar mucho material con una cuenta puede hacer que Google la marque — mejor usar una cuenta de la iglesia y no la personal.
+
+Lo que **no** hay es forma de saltear el control sin identificarse. Si te encontrás con eso justo antes de una reunión, lo práctico es tener el video ya bajado de antes: por eso conviene no depender de descargar en el momento.
 
 ## Atajos útiles
 

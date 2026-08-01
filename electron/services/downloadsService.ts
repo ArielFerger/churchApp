@@ -1,18 +1,25 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
-import { existsSync } from 'fs'
-import { chmod, mkdir, readdir, rename, rm, writeFile } from 'fs/promises'
+import { createWriteStream, existsSync } from 'fs'
+import { chmod, mkdir, readdir, rename, rm } from 'fs/promises'
+import { Readable } from 'stream'
+import { pipeline } from 'stream/promises'
 import { join } from 'path'
 import { app } from 'electron'
 import log from 'electron-log'
 import {
   buildArgs,
   buildPlaylistArgs,
+  buildProbeArgs,
+  explainError,
+  lastMeaningfulLine,
   parseFileLine,
   parsePlaylistEntries,
   parseProgressLine,
+  ACTIVOS,
   DEFAULT_OPTIONS,
   type DownloadJob,
-  type DownloadOptions
+  type DownloadOptions,
+  type JsRuntime
 } from '../../src/shared/utils/downloads'
 import { getSettings } from './settingsService'
 
@@ -31,11 +38,45 @@ import { getSettings } from './settingsService'
 export interface ToolStatus {
   ytDlp: string | null
   ffmpegDir: string | null
+  /** Intérprete de JavaScript disponible. YouTube no funciona sin uno. */
+  jsRuntime: JsRuntime | null
   /** Dónde se buscó, para poder mostrarlo si falta algo. */
   searched: string[]
 }
 
 const EXE = process.platform === 'win32' ? '.exe' : ''
+
+/** Busca un ejecutable en el PATH del sistema. */
+function findInPath(name: string): string | null {
+  const raw = process.env.PATH ?? ''
+  for (const dir of raw.split(process.platform === 'win32' ? ';' : ':')) {
+    if (!dir) continue
+    const p = join(dir, name + EXE)
+    try {
+      if (existsSync(p)) return p
+    } catch {
+      /* entrada de PATH inválida */
+    }
+  }
+  return null
+}
+
+/**
+ * Busca un intérprete de JavaScript. yt-dlp lo necesita para resolver el
+ * desafío de firma de YouTube, y sólo habilita `deno` por su cuenta: con node
+ * instalado igual hay que nombrárselo, si no lo reporta como no disponible y
+ * las descargas de YouTube se cuelgan sin explicar nada.
+ */
+function findJsRuntime(dirs: string[]): JsRuntime | null {
+  const orden: JsRuntime['name'][] = ['deno', 'node', 'bun', 'quickjs']
+  for (const name of orden) {
+    const local = findIn(dirs, name)
+    if (local) return { name, path: local }
+    const inPath = findInPath(name)
+    if (inPath) return { name, path: inPath }
+  }
+  return null
+}
 
 /** Carpetas donde se busca, en orden de prioridad. */
 function candidateDirs(): string[] {
@@ -59,18 +100,19 @@ function findIn(dirs: string[], name: string): string | null {
 }
 
 /**
- * Resuelve dónde están las herramientas. Si no aparecen en ninguna carpeta
- * conocida se devuelve el nombre pelado: puede estar en el PATH, y si tampoco,
- * el spawn falla con ENOENT y se reporta como corresponde.
+ * Resuelve dónde están las herramientas: primero en las carpetas conocidas y
+ * después en el PATH. Buscar en el PATH importa — quien ya instaló yt-dlp con
+ * winget o chocolatey no tiene por qué bajarse otros 180 MB.
  */
 export function resolveTools(): ToolStatus {
   const dirs = candidateDirs()
-  const ytDlp = findIn(dirs, 'yt-dlp')
-  const ffmpeg = findIn(dirs, 'ffmpeg')
+  const ytDlp = findIn(dirs, 'yt-dlp') ?? findInPath('yt-dlp')
+  const ffmpeg = findIn(dirs, 'ffmpeg') ?? findInPath('ffmpeg')
   return {
     ytDlp,
     ffmpegDir: ffmpeg ? join(ffmpeg, '..') : null,
-    searched: dirs
+    jsRuntime: findJsRuntime(dirs),
+    searched: [...dirs, '(PATH del sistema)']
   }
 }
 
@@ -93,18 +135,36 @@ const FFMPEG_ZIP_WIN =
 
 export type InstallProgress = (step: string, ratio: number | null) => void
 
-async function fetchToFile(url: string, dest: string, onProgress: InstallProgress, label: string): Promise<void> {
-  const res = await fetch(url)
+/**
+ * Baja a disco en streaming. Acumular los 180 MB de ffmpeg en memoria hacía un
+ * pico de ~360 MB al concatenar, y avisar del avance en cada trozo inundaba el
+ * IPC con miles de mensajes que dejaban la interfaz pegada; por eso el avance
+ * se reporta como mucho cuatro veces por segundo.
+ */
+async function fetchToFile(
+  url: string,
+  dest: string,
+  onProgress: InstallProgress,
+  label: string
+): Promise<void> {
+  const res = await fetch(url, { signal: AbortSignal.timeout(15 * 60_000) })
   if (!res.ok || !res.body) throw new Error(`${label}: HTTP ${res.status}`)
   const total = Number(res.headers.get('content-length')) || null
-  const chunks: Buffer[] = []
+
+  const out = createWriteStream(dest)
   let got = 0
-  for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
-    chunks.push(Buffer.from(chunk))
+  let ultimoAviso = 0
+  const source = Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0])
+  source.on('data', (chunk: Buffer) => {
     got += chunk.byteLength
-    onProgress(label, total ? got / total : null)
-  }
-  await writeFile(dest, Buffer.concat(chunks))
+    const ahora = Date.now()
+    if (ahora - ultimoAviso >= 250) {
+      ultimoAviso = ahora
+      onProgress(label, total ? got / total : null)
+    }
+  })
+  await pipeline(source, out)
+  onProgress(label, 1)
 }
 
 /**
@@ -120,7 +180,12 @@ export async function installTools(onProgress: InstallProgress): Promise<ToolSta
   if (!ytUrl) throw new Error(`No hay build de yt-dlp para ${process.platform}`)
 
   if (!findIn([dir], 'yt-dlp')) {
-    await fetchToFile(ytUrl, join(dir, 'yt-dlp' + EXE), onProgress, 'yt-dlp')
+    // Escritura atómica: si se corta la luz a mitad, un yt-dlp.exe truncado
+    // queda para siempre y la app lo da por instalado, fallando en cada
+    // descarga sin ofrecer forma de arreglarlo desde la interfaz.
+    const tmp = join(dir, 'yt-dlp.descargando')
+    await fetchToFile(ytUrl, tmp, onProgress, 'yt-dlp')
+    await rename(tmp, join(dir, 'yt-dlp' + EXE))
     if (process.platform !== 'win32') await chmod(join(dir, 'yt-dlp'), 0o755)
   }
 
@@ -134,10 +199,15 @@ export async function installTools(onProgress: InstallProgress): Promise<ToolSta
     await fetchToFile(FFMPEG_ZIP_WIN, zip, onProgress, 'ffmpeg')
     onProgress('Descomprimiendo ffmpeg', null)
     const unpack = join(dir, 'ffmpeg-tmp')
+    // Las comillas simples se duplican para escaparlas: la ruta sale de una
+    // opción configurable y del nombre de usuario de Windows, así que un
+    // apellido con apóstrofe (O'Brien) rompía el comando — y era una vía de
+    // inyección a través de un valor de configuración.
+    const psQuote = (p: string): string => `'${p.replace(/'/g, "''")}'`
     await runCommand('powershell', [
       '-NoProfile',
       '-Command',
-      `Expand-Archive -LiteralPath '${zip}' -DestinationPath '${unpack}' -Force`
+      `Expand-Archive -LiteralPath ${psQuote(zip)} -DestinationPath ${psQuote(unpack)} -Force`
     ])
     // El zip trae todo dentro de una carpeta con el número de build adentro.
     for (const name of ['ffmpeg', 'ffprobe']) {
@@ -186,14 +256,53 @@ let jobs: DownloadJob[] = []
 let running: { id: string; child: ChildProcessWithoutNullStreams } | null = null
 let listeners: Listener[] = []
 let seq = 0
+/**
+ * Evita que `pump` se ejecute dos veces a la vez. Sin esto, encolar una lista
+ * de 50 videos disparaba 50 `pump()` en la misma vuelta del event loop —
+ * `running` recién se asigna dentro de `runJob`, así que todos veían la cola
+ * libre y lanzaban su propio yt-dlp. Cincuenta procesos a la vez clavaban la
+ * máquina y, de paso, era justo el patrón de tráfico que hace que YouTube
+ * conteste con un CAPTCHA: la app se autoinfligía el bloqueo.
+ */
+let pumping = false
+/** Procesos de probe/lista, para poder matarlos al cerrar la app. */
+const auxiliares = new Set<ChildProcessWithoutNullStreams>()
 
 function emit(): void {
   const snapshot = jobs.map((j) => ({ ...j }))
   for (const l of listeners) l(snapshot)
 }
 
+/**
+ * Con una lista larga, yt-dlp escribe varias líneas de progreso por segundo y
+ * cada una serializaba la cola entera por IPC. Los cambios de progreso se
+ * agrupan a ~4 por segundo; los de etapa (empezó, terminó, falló) salen ya.
+ */
+let emitPendiente: NodeJS.Timeout | null = null
+function emitThrottled(): void {
+  if (emitPendiente) return
+  emitPendiente = setTimeout(() => {
+    emitPendiente = null
+    emit()
+  }, 250)
+}
+
 function patch(id: string, changes: Partial<DownloadJob>): void {
+  const antes = jobs.find((j) => j.id === id)
   jobs = jobs.map((j) => (j.id === id ? { ...j, ...changes } : j))
+
+  // Un tick de progreso trae `stage` también, pero repitiendo el que ya estaba:
+  // lo que decide es si la etapa cambió de verdad.
+  const cambioEtapa = changes.stage !== undefined && changes.stage !== antes?.stage
+  const soloProgreso =
+    !cambioEtapa &&
+    Object.keys(changes).every((k) => k === 'progress' || k === 'stage')
+
+  if (soloProgreso) return emitThrottled()
+  if (emitPendiente) {
+    clearTimeout(emitPendiente)
+    emitPendiente = null
+  }
   emit()
 }
 
@@ -210,16 +319,49 @@ export function list(): DownloadJob[] {
 
 // ─── yt-dlp ──────────────────────────────────────────────────────────────────
 
-function runYtDlp(args: string[]): Promise<{ code: number; out: string; err: string }> {
+/**
+ * Corre yt-dlp y espera a que termine. El timeout no es opcional: sin él, un
+ * yt-dlp colgado deja la promesa sin resolver, `pump` queda trabado esperándola
+ * y la cola entera se detiene para siempre — el usuario ve "En espera…" en
+ * todos los videos y la única salida es cerrar la app.
+ */
+function runYtDlp(
+  args: string[],
+  timeoutMs = 60_000
+): Promise<{ code: number; out: string; err: string }> {
   const { ytDlp } = resolveTools()
   return new Promise((resolve, reject) => {
-    const child = spawn(ytDlp ?? `yt-dlp${EXE}`, args, { windowsHide: true })
+    let child: ChildProcessWithoutNullStreams
+    try {
+      child = spawn(ytDlp ?? `yt-dlp${EXE}`, args, { windowsHide: true })
+    } catch (e) {
+      return reject(e)
+    }
+    auxiliares.add(child)
+
     let out = ''
     let err = ''
+    let cerrado = false
+    const timer = setTimeout(() => {
+      if (cerrado) return
+      killTree(child)
+      cerrado = true
+      auxiliares.delete(child)
+      reject(new Error(`yt-dlp no respondió en ${Math.round(timeoutMs / 1000)}s`))
+    }, timeoutMs)
+
+    const terminar = (fn: () => void): void => {
+      if (cerrado) return
+      cerrado = true
+      clearTimeout(timer)
+      auxiliares.delete(child)
+      fn()
+    }
+
     child.stdout.on('data', (d) => (out += d))
     child.stderr.on('data', (d) => (err += d))
-    child.on('error', reject)
-    child.on('close', (code) => resolve({ code: code ?? -1, out, err }))
+    child.on('error', (e) => terminar(() => reject(e)))
+    child.on('close', (code) => terminar(() => resolve({ code: code ?? -1, out, err })))
   })
 }
 
@@ -230,13 +372,11 @@ export async function probe(url: string): Promise<{
   durationSec: number | null
   thumbnail: string | null
 }> {
-  const { out } = await runYtDlp([
-    url,
-    '--no-playlist',
-    '--skip-download',
-    '--no-warnings',
-    '--dump-single-json'
-  ])
+  const { out, err } = await runYtDlp(
+    buildProbeArgs(url, resolveTools().jsRuntime, getSettings().downloadCookiesBrowser),
+    45_000
+  )
+  if (err.trim()) log.debug('probe stderr:', err.trim().slice(-2000))
   try {
     const j = JSON.parse(out)
     return {
@@ -255,11 +395,34 @@ export async function probe(url: string): Promise<{
  * kill sobre el padre lo deja huérfano mordiendo el archivo de salida.
  */
 function killTree(child: ChildProcessWithoutNullStreams): void {
+  if (child.exitCode !== null || child.signalCode !== null) return // ya murió
   if (process.platform === 'win32' && child.pid) {
-    spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true })
+    // Sin un handler de 'error', si taskkill no se puede lanzar Node relanza el
+    // evento como excepción no capturada y se cae TODA la app — en el peor
+    // momento posible, con la proyección al aire.
+    const tk = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+      windowsHide: true
+    })
+    tk.on('error', (e) => {
+      log.warn('taskkill falló, se intenta SIGKILL:', e)
+      try {
+        child.kill('SIGKILL')
+      } catch {
+        /* ya no está */
+      }
+    })
   } else {
     child.kill('SIGTERM')
   }
+}
+
+/** Mata todo lo que esté corriendo. Se llama al cerrar la app. */
+export function dispose(): void {
+  if (running) killTree(running.child)
+  running = null
+  for (const c of auxiliares) killTree(c)
+  auxiliares.clear()
+  listeners = []
 }
 
 function runJob(job: DownloadJob): Promise<void> {
@@ -283,7 +446,9 @@ function runJob(job: DownloadJob): Promise<void> {
       quality: job.quality,
       bitrate: job.bitrate,
       destDir,
-      ffmpegDir: tools.ffmpegDir
+      ffmpegDir: tools.ffmpegDir,
+      jsRuntime: tools.jsRuntime,
+      cookiesBrowser: getSettings().downloadCookiesBrowser
     })
 
     let child: ChildProcessWithoutNullStreams
@@ -332,23 +497,39 @@ function runJob(job: DownloadJob): Promise<void> {
 
     child.on('close', (code) => {
       if (pending) handleLine(pending)
-      running = null
+      // Sólo soltar el puesto si el que cerró es realmente el que estaba
+      // corriendo: si no, un proceso que tarda en morir después de cancelarlo
+      // borra la referencia al que ya arrancó en su lugar, y a partir de ahí
+      // corren dos en paralelo y el segundo queda incancelable.
+      if (running?.id === job.id) running = null
+
       const current = jobs.find((j) => j.id === job.id)
+      // Si alcanzó a terminar bien justo mientras lo cancelaban, vale como
+      // hecho: el archivo está en la carpeta, decir "cancelada" haría que el
+      // usuario lo baje de nuevo al pedo.
+      if (code === 0 && filePath) {
+        patch(job.id, { stage: 'done', filePath, progress: null, error: null })
+        return resolve()
+      }
       if (current?.stage === 'canceled') return resolve()
       if (current?.stage === 'error') return resolve()
 
       if (code === 0) {
         patch(job.id, { stage: 'done', filePath, progress: null })
       } else {
-        // yt-dlp escribe el motivo real en la última línea de ERROR.
+        const detalle = stderr.trim()
         const reason =
-          stderr
-            .split(/\r?\n/)
-            .filter((l) => l.trim().startsWith('ERROR'))
-            .pop()
-            ?.replace(/^ERROR:\s*/, '') ?? `yt-dlp terminó con código ${code}`
-        log.warn('descarga fallida:', reason)
-        patch(job.id, { stage: 'error', error: reason })
+          explainError(detalle) ??
+          lastMeaningfulLine(detalle) ??
+          `yt-dlp terminó con código ${code}`
+        log.error('descarga fallida:', job.url, '\n', detalle.slice(-8000))
+        patch(job.id, {
+          stage: 'error',
+          error: reason,
+          // El stderr crudo va al job para que se pueda ver y copiar desde la
+          // pantalla: sin esto, diagnosticar exige reproducir el fallo a mano.
+          errorDetail: detalle.slice(-8000) || null
+        })
       }
       resolve()
     })
@@ -357,31 +538,41 @@ function runJob(job: DownloadJob): Promise<void> {
 
 /** Arranca la próxima descarga si no hay ninguna corriendo. */
 async function pump(): Promise<void> {
-  if (running) return
-  const next = jobs.find((j) => j.stage === 'queued')
-  if (!next) return
-
-  // Los datos del video son un lujo: si el probe falla, se baja igual. Lo que
-  // ya se sabía (el título que trajo la lista) no se pisa con un null.
+  if (pumping || running) return
+  pumping = true
   try {
-    const meta = await probe(next.url)
-    const current = jobs.find((j) => j.id === next.id)
-    if (current?.stage === 'queued') {
-      patch(next.id, {
-        title: meta.title ?? current.title,
-        uploader: meta.uploader ?? current.uploader,
-        durationSec: meta.durationSec ?? current.durationSec,
-        thumbnail: meta.thumbnail ?? current.thumbnail
-      })
-    }
-  } catch {
-    /* sin metadatos */
-  }
-  const still = jobs.find((j) => j.id === next.id)
-  if (!still || still.stage !== 'queued') return void pump()
+    const next = jobs.find((j) => j.stage === 'queued')
+    if (!next) return
 
-  await runJob(still)
-  void pump()
+    // Consultar el video puede tardar casi un minuto. Sin avisarlo, la fila
+    // quedaba en "En espera…" sin moverse y parecía que la app estaba trabada.
+    patch(next.id, { stage: 'preparing' })
+
+    // Los datos del video son un lujo: si el probe falla, se baja igual. Lo que
+    // ya se sabía (el título que trajo la lista) no se pisa con un null.
+    try {
+      const meta = await probe(next.url)
+      const current = jobs.find((j) => j.id === next.id)
+      if (current?.stage === 'preparing') {
+        patch(next.id, {
+          title: meta.title ?? current.title,
+          uploader: meta.uploader ?? current.uploader,
+          durationSec: meta.durationSec ?? current.durationSec,
+          thumbnail: meta.thumbnail ?? current.thumbnail
+        })
+      }
+    } catch (e) {
+      log.warn('no se pudieron leer los datos del video:', String(e))
+    }
+
+    // Sigue en 'preparing' salvo que lo hayan cancelado mientras se consultaba.
+    const still = jobs.find((j) => j.id === next.id)
+    if (still?.stage === 'preparing') await runJob(still)
+  } finally {
+    pumping = false
+  }
+  // Fuera del candado, para que la próxima vuelta lo tome limpio.
+  if (jobs.some((j) => j.stage === 'queued')) void pump()
 }
 
 export function enqueue(
@@ -422,15 +613,30 @@ export async function enqueuePlaylist(
   url: string,
   options: Partial<DownloadOptions> = {}
 ): Promise<{ added: number; error: string | null }> {
-  const { out, err, code } = await runYtDlp(buildPlaylistArgs(url))
+  let out: string
+  let err: string
+  let code: number
+  try {
+    ;({ out, err, code } = await runYtDlp(
+      buildPlaylistArgs(
+        url,
+        resolveTools().jsRuntime,
+        getSettings().downloadCookiesBrowser
+      ),
+      90_000
+    ))
+  } catch (e) {
+    return { added: 0, error: String(e instanceof Error ? e.message : e) }
+  }
+
   const entries = parsePlaylistEntries(out)
   if (entries.length === 0) {
+    const detalle = err.trim()
     const reason =
-      err
-        .split(/\r?\n/)
-        .filter((l) => l.trim().startsWith('ERROR'))
-        .pop()
-        ?.replace(/^ERROR:\s*/, '') ?? `No se encontró ningún video (código ${code})`
+      explainError(detalle) ??
+      lastMeaningfulLine(detalle) ??
+      `No se encontró ningún video (código ${code})`
+    log.error('lista fallida:', url, '\n', detalle.slice(-4000))
     return { added: 0, error: reason }
   }
   for (const e of entries) enqueue(e.url, options, e.title)
@@ -444,13 +650,42 @@ export function cancel(id: string): void {
   patch(id, { stage: 'canceled', progress: null })
   if (running?.id === id) {
     killTree(running.child)
-    running = null
+    // No se toca `running`: lo limpia el handler de 'close' cuando el proceso
+    // realmente muera. Soltarlo acá deja arrancar otra descarga mientras la
+    // anterior todavía agoniza, y ahí corren dos a la vez.
+    void limpiarParciales(job)
+  }
+}
+
+/**
+ * Borra los `.part` que quedaron de una descarga cortada. Un `taskkill /F` no
+ * le da a yt-dlp la chance de limpiar, y esos archivos —invisibles para la app,
+ * porque el scanner filtra por extensión— se acumulan de a cientos de MB hasta
+ * llenar el disco sin que nadie entienda por qué.
+ */
+async function limpiarParciales(job: DownloadJob): Promise<void> {
+  const dir = destinationFor(job.kind)
+  if (!dir) return
+  // Darle tiempo al proceso a soltar el archivo antes de intentar borrarlo.
+  await new Promise((r) => setTimeout(r, 1500))
+  try {
+    for (const f of await readdir(dir)) {
+      if (!/\.part$|\.ytdl$/i.test(f)) continue
+      try {
+        await rm(join(dir, f), { force: true })
+        log.info('descarga cancelada: se borró el parcial', f)
+      } catch {
+        /* sigue en uso: quedará para el próximo barrido */
+      }
+    }
+  } catch {
+    /* la carpeta puede haber desaparecido */
   }
 }
 
 /** Saca de la lista lo que ya no está corriendo. */
 export function clearFinished(): void {
-  jobs = jobs.filter((j) => j.stage === 'queued' || j.stage === 'downloading' || j.stage === 'processing')
+  jobs = jobs.filter((j) => ACTIVOS.includes(j.stage))
   emit()
 }
 

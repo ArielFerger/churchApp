@@ -3,6 +3,7 @@ import {
   Download,
   Film,
   FolderOpen,
+  KeyRound,
   ListVideo,
   Loader2,
   Music,
@@ -12,7 +13,9 @@ import {
   CheckCircle2
 } from 'lucide-react'
 import {
+  ACTIVOS,
   AUDIO_BITRATES,
+  COOKIE_BROWSERS,
   VIDEO_QUALITIES,
   formatBytes,
   formatDuration,
@@ -34,6 +37,7 @@ import { useSettingsStore } from '@/shared/store/settingsStore'
  */
 export default function Downloads() {
   const settings = useSettingsStore((s) => s.settings)
+  const updateSettings = useSettingsStore((s) => s.update)
   const [tools, setTools] = useState<DownloadTools | null>(null)
   const [jobs, setJobs] = useState<DownloadJob[]>([])
   const [url, setUrl] = useState('')
@@ -108,8 +112,11 @@ export default function Downloads() {
     }
   }
 
-  const activos = jobs.filter(
-    (j) => j.stage === 'queued' || j.stage === 'downloading' || j.stage === 'processing'
+  const activos = jobs.filter((j) => ACTIVOS.includes(j.stage))
+
+  /** Si algún trabajo falló porque YouTube pidió identificarse. */
+  const bloqueado = jobs.some(
+    (j) => j.stage === 'error' && /robot|sesión/i.test(j.error ?? '')
   )
 
   return (
@@ -314,6 +321,49 @@ export default function Downloads() {
           {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
         </section>
 
+        {/* Sesión del navegador. Aparece sólo cuando hace falta: si las
+            descargas andan, no hay motivo para ofrecerlo. */}
+        {(bloqueado || settings?.downloadCookiesBrowser) && (
+          <section className="mt-4 rounded-lg border border-slate-700 bg-slate-800/40 p-4">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+              <KeyRound className="h-4 w-4 text-amber-400" />
+              YouTube te está pidiendo iniciar sesión
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-400">
+              Pasa cuando la conexión comparte la IP con muchos usuarios (Starlink,
+              datos móviles, wifi de un edificio): YouTube no sabe si sos una persona
+              y pide identificarse. Podés usar la sesión que ya tenés abierta en tu
+              navegador.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <label className="text-xs text-slate-400" htmlFor="cookieBrowser">
+                Usar la sesión de:
+              </label>
+              <select
+                id="cookieBrowser"
+                value={settings?.downloadCookiesBrowser ?? ''}
+                onChange={(e) =>
+                  void updateSettings({ downloadCookiesBrowser: e.target.value || null })
+                }
+                className="rounded-md border border-slate-600 bg-slate-900 px-2.5 py-1.5 text-sm text-slate-100 outline-none focus:border-blue-500"
+              >
+                <option value="">Ninguno</option>
+                {COOKIE_BROWSERS.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-amber-400/80">
+              Tené en cuenta: bajar mucho material con la sesión de una cuenta puede
+              hacer que Google la marque. Conviene usar una cuenta de la iglesia, no
+              la personal. El navegador tiene que estar cerrado para que se pueda leer
+              la sesión.
+            </p>
+          </section>
+        )}
+
         {/* Cola */}
         {jobs.length > 0 && (
           <section className="mt-6">
@@ -382,6 +432,12 @@ function JobRow({ job }: { job: DownloadJob }) {
           {job.stage === 'queued' && (
             <p className="mt-1 text-xs text-slate-500">En espera…</p>
           )}
+          {job.stage === 'preparing' && (
+            <p className="mt-1 inline-flex items-center gap-1.5 text-xs text-slate-400">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Consultando el video… (puede tardar hasta un minuto)
+            </p>
+          )}
           {job.stage === 'processing' && (
             <p className="mt-1 inline-flex items-center gap-1.5 text-xs text-blue-400">
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -415,13 +471,30 @@ function JobRow({ job }: { job: DownloadJob }) {
             <p className="mt-1 text-xs text-slate-500">Cancelada</p>
           )}
           {job.stage === 'error' && (
-            <p className="mt-1 text-xs text-red-400">{job.error}</p>
+            <>
+              <p className="mt-1 text-xs text-red-400">{job.error}</p>
+              {job.errorDetail && (
+                <details className="mt-1">
+                  <summary className="cursor-pointer text-[11px] text-slate-500 hover:text-slate-300">
+                    Ver detalle técnico
+                  </summary>
+                  <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-slate-950/70 p-2 font-mono text-[10px] leading-relaxed text-slate-400">
+                    {job.errorDetail}
+                  </pre>
+                  <button
+                    type="button"
+                    onClick={() => void navigator.clipboard.writeText(job.errorDetail ?? '')}
+                    className="mt-1 text-[11px] text-slate-500 hover:text-slate-300"
+                  >
+                    Copiar
+                  </button>
+                </details>
+              )}
+            </>
           )}
         </div>
 
-        {job.stage === 'downloading' ||
-        job.stage === 'queued' ||
-        job.stage === 'processing' ? (
+        {ACTIVOS.includes(job.stage) ? (
           <button
             type="button"
             onClick={() => void window.electronAPI?.cancelDownload(job.id)}

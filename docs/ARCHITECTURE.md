@@ -99,6 +99,37 @@ just the first: capping only the preferred one means a video with no mp4
 silently falls through and downloads in 4K. The last fallback is a bare `best`
 on purpose — better a different resolution than a failed download.
 
+### Two flags that decide whether this works at all
+
+`networkArgs` goes into *every* yt-dlp invocation (download, probe, playlist
+expansion), and two entries there are load-bearing:
+
+- **`-4`.** yt-dlp uses Python's urllib, which — unlike curl — does not
+  implement Happy Eyeballs. On a network that advertises IPv6 without a working
+  route (common on consumer links), yt-dlp tries IPv6 and blocks forever: no
+  timeout, no message, not even the "Extracting URL" line. Measured on the
+  developer's machine: hangs indefinitely without it, answers in seconds with
+  it. `--socket-timeout` does *not* rescue this — the stall is before any
+  socket read.
+- **`--js-runtimes`.** YouTube requires solving a JS challenge to hand over
+  formats. yt-dlp only enables `deno` on its own, so a machine with node
+  installed and on PATH still reports `JS runtimes: none` and the challenge
+  never resolves. `resolveTools` looks for deno/node/bun/quickjs in the tools
+  folders and on PATH and names it explicitly.
+
+The queue is strictly sequential, guarded by a `pumping` flag. Without it,
+`enqueuePlaylist` calling `enqueue` in a loop fired one `pump()` per entry in
+the same tick — `running` is only assigned inside `runJob`, so every one of
+them saw a free queue and spawned its own yt-dlp. A 50-video playlist meant 50
+simultaneous processes against the same URL, which is also exactly the traffic
+pattern that gets an IP served a CAPTCHA: the app used to inflict the block on
+itself.
+
+Errors are translated by `explainError` into something an operator can act on,
+with the raw stderr kept in `job.errorDetail` so it can be read and copied from
+the page. Collapsing stderr to "the last line starting with ERROR" hid every
+Python traceback and every warning behind `yt-dlp terminó con código 1`.
+
 Playlists are expanded into one job per video rather than handed to yt-dlp
 whole, so each entry gets its own progress and can be canceled individually.
 

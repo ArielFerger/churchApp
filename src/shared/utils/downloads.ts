@@ -31,11 +31,21 @@ export const AUDIO_BITRATES: { id: AudioBitrate; label: string }[] = [
 
 export type DownloadStage =
   | 'queued'
+  /** Consultando los datos del video. Puede tardar ~1 min y antes no se veía. */
+  | 'preparing'
   | 'downloading'
   | 'processing'
   | 'done'
   | 'error'
   | 'canceled'
+
+/** Etapas en las que el trabajo todavía está en curso. */
+export const ACTIVOS: DownloadStage[] = [
+  'queued',
+  'preparing',
+  'downloading',
+  'processing'
+]
 
 export interface DownloadProgress {
   /** 0..1, o null cuando todavía no se sabe el tamaño total. */
@@ -76,6 +86,8 @@ export interface DownloadJob {
   /** Ruta final del archivo, una vez que terminó. */
   filePath: string | null
   error: string | null
+  /** stderr crudo del fallo, para poder verlo y copiarlo desde la pantalla. */
+  errorDetail?: string | null
   createdAt: number
 }
 
@@ -199,6 +211,63 @@ export function formatDuration(seconds: number | null): string {
  * para poder fijarlos en un test: un cambio de flags silencioso es la clase de
  * cosa que se descubre en vivo un domingo.
  */
+/**
+ * Argumentos de red y robustez que van en TODA invocación a yt-dlp, incluida
+ * la que lee los datos del video y la que expande una lista.
+ *
+ * `-4` no es un detalle: yt-dlp usa urllib, que —a diferencia de curl— no
+ * implementa Happy Eyeballs. En una red con IPv6 anunciado pero sin ruta real
+ * (bastante común en conexiones hogareñas), yt-dlp intenta IPv6 y se queda
+ * esperando para siempre, sin timeout, sin mensaje y sin llegar a imprimir
+ * siquiera que empezó. Medido en esta máquina: sin `-4` se cuelga indefinido;
+ * con `-4` responde en segundos. Es la diferencia entre "no anda" y "anda".
+ */
+/** Navegadores de los que yt-dlp sabe leer la sesión. */
+export const COOKIE_BROWSERS = [
+  { id: 'chrome', label: 'Chrome' },
+  { id: 'edge', label: 'Edge' },
+  { id: 'firefox', label: 'Firefox' },
+  { id: 'brave', label: 'Brave' },
+  { id: 'opera', label: 'Opera' },
+  { id: 'vivaldi', label: 'Vivaldi' }
+] as const
+
+export function networkArgs(
+  jsRuntime: JsRuntime | null,
+  cookiesBrowser: string | null = null
+): string[] {
+  const args = [
+    '-4',
+    '--socket-timeout',
+    '20',
+    '--retries',
+    '3',
+    '--fragment-retries',
+    '3',
+    '--extractor-retries',
+    '2',
+    '--no-colors'
+  ]
+  // YouTube exige resolver un desafío en JavaScript para entregar los formatos.
+  // yt-dlp sólo habilita `deno` por defecto: aunque haya node instalado y en el
+  // PATH, lo reporta como no disponible salvo que se lo pidan explícitamente.
+  if (jsRuntime) {
+    args.push('--js-runtimes', jsRuntime.path ? `${jsRuntime.name}:${jsRuntime.path}` : jsRuntime.name)
+  }
+  // Sesión ya iniciada del navegador del usuario. Es la vía que indica el
+  // propio mensaje de YouTube cuando pide confirmar que no sos un robot:
+  // identificarse con la cuenta propia, no esquivar el control.
+  if (cookiesBrowser) args.push('--cookies-from-browser', cookiesBrowser)
+  return args
+}
+
+/** Un intérprete de JavaScript que yt-dlp puede usar. */
+export interface JsRuntime {
+  name: 'deno' | 'node' | 'bun' | 'quickjs'
+  /** Ruta al binario. `null` = que lo busque en el PATH. */
+  path: string | null
+}
+
 export function buildArgs(opts: {
   url: string
   kind: DownloadKind
@@ -206,9 +275,12 @@ export function buildArgs(opts: {
   ffmpegDir: string | null
   quality?: VideoQuality
   bitrate?: AudioBitrate
+  jsRuntime?: JsRuntime | null
+  cookiesBrowser?: string | null
 }): string[] {
   const args = [
     opts.url,
+    ...networkArgs(opts.jsRuntime ?? null, opts.cookiesBrowser ?? null),
     '--no-playlist',
     '--newline',
     '--no-mtime',
@@ -275,15 +347,103 @@ export function buildArgs(opts: {
  * un JSON por video. `--flat-playlist` evita resolver cada video por separado,
  * que en una lista larga es la diferencia entre un segundo y varios minutos.
  */
-export function buildPlaylistArgs(url: string): string[] {
+export function buildPlaylistArgs(
+  url: string,
+  jsRuntime: JsRuntime | null = null,
+  cookiesBrowser: string | null = null
+): string[] {
   return [
     url,
+    ...networkArgs(jsRuntime, cookiesBrowser),
     '--flat-playlist',
     '--dump-json',
     '--no-warnings',
     '--ignore-errors',
     '--yes-playlist'
   ]
+}
+
+/** Argumentos para pedir los datos de un video sin bajarlo. */
+export function buildProbeArgs(
+  url: string,
+  jsRuntime: JsRuntime | null = null,
+  cookiesBrowser: string | null = null
+): string[] {
+  return [
+    url,
+    ...networkArgs(jsRuntime, cookiesBrowser),
+    '--no-playlist',
+    '--skip-download',
+    '--no-warnings',
+    '--dump-single-json'
+  ]
+}
+
+// ─── Traducir los errores de yt-dlp ──────────────────────────────────────────
+
+/**
+ * Convierte el berenjenal que escribe yt-dlp en stderr en una frase que le
+ * sirva a quien está por empezar la reunión. Devuelve `null` si no reconoce el
+ * error, y en ese caso el llamador muestra el texto crudo: es preferible un
+ * mensaje feo y cierto a uno lindo e inventado.
+ */
+export function explainError(stderr: string): string | null {
+  const s = stderr.toLowerCase()
+
+  if (s.includes("confirm you're not a bot") || s.includes('confirm youre not a bot')) {
+    return (
+      'YouTube está pidiendo iniciar sesión para confirmar que no sos un robot. ' +
+      'Suele pasar cuando la conexión comparte la IP con muchos usuarios (Starlink, ' +
+      'datos móviles, wifi público). Probá desde otra red, o esperá un rato: es intermitente.'
+    )
+  }
+  if (s.includes('http error 429') || s.includes('too many requests')) {
+    return 'YouTube cortó por exceso de pedidos. Esperá unos minutos antes de reintentar.'
+  }
+  if (s.includes('video unavailable')) {
+    return 'El video no está disponible. Puede ser privado, borrado, o bloqueado en este país.'
+  }
+  if (s.includes('private video')) return 'Es un video privado: no se puede descargar.'
+  if (s.includes('members-only') || s.includes('join this channel')) {
+    return 'El video es solo para miembros del canal.'
+  }
+  if (s.includes('age') && s.includes('restrict')) {
+    return 'El video tiene restricción de edad y requiere una sesión iniciada.'
+  }
+  if (s.includes('this live event will begin')) {
+    return 'Es una transmisión que todavía no empezó.'
+  }
+  if (s.includes('is live') && s.includes('formats')) {
+    return 'Es una transmisión en vivo. Esperá a que termine para poder bajarla.'
+  }
+  if (s.includes('requested format is not available')) {
+    return 'No hay ningún formato que sirva para la calidad elegida. Probá con "Máxima".'
+  }
+  if (s.includes('unable to download webpage') || s.includes('urlopen error')) {
+    return 'No se pudo llegar a YouTube. Revisá la conexión a internet.'
+  }
+  if (s.includes('ffmpeg') && (s.includes('not found') || s.includes('no encontr'))) {
+    return 'Falta ffmpeg: sin él no se puede juntar el video con el audio ni armar el MP3.'
+  }
+  if (s.includes('no space left') || s.includes('espacio')) {
+    return 'No hay espacio en disco para guardar el archivo.'
+  }
+  if (s.includes('permission denied') || s.includes('access is denied')) {
+    return 'Windows no deja escribir en la carpeta destino. Revisá los permisos o elegí otra.'
+  }
+  return null
+}
+
+/**
+ * Última línea útil del stderr, para cuando no se reconoce el error. Se
+ * prefieren las líneas de ERROR, pero si no hay ninguna se toma la última no
+ * vacía en vez de devolver el inútil "terminó con código N".
+ */
+export function lastMeaningfulLine(stderr: string): string | null {
+  const lines = stderr.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+  const err = lines.filter((l) => /^error/i.test(l)).pop()
+  if (err) return err.replace(/^ERROR:\s*/i, '')
+  return lines.pop() ?? null
 }
 
 /**

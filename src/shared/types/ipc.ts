@@ -93,6 +93,14 @@ export interface AppSettings {
    * en las ubicaciones por defecto y en el PATH.
    */
   toolsFolder: string | null
+  /**
+   * Navegador del que tomar la sesión de YouTube ya iniciada. `null` = ninguno.
+   *
+   * Sirve cuando YouTube contesta "iniciá sesión para confirmar que no sos un
+   * robot", que pasa en conexiones con IP compartida. No evade el control: lo
+   * responde, identificándose con la cuenta del propio usuario.
+   */
+  downloadCookiesBrowser: string | null
   songsFolder: string | null
   /** Carpeta exclusiva para los videos de loop de "En Vivo" (null = usa mediaFolder). */
   liveLoopFolder: string | null
