@@ -9,7 +9,7 @@ import Media from './pages/Media'
 import Audio from './pages/Audio'
 import Downloads from './pages/Downloads'
 import Settings from './pages/Settings'
-import LiveIndicator from './components/LiveIndicator'
+import BarraAlAire from './components/BarraAlAire'
 import QuickActions from './components/QuickActions'
 import MiniPlayer from './components/audio/MiniPlayer'
 import { useProjectionBridge } from './hooks/useProjectionBridge'
@@ -63,20 +63,25 @@ export default function App() {
 
   return (
     <HashRouter>
-      <div className="flex h-screen flex-col bg-slate-900 text-slate-100">
-        <header className="flex shrink-0 items-center gap-4 border-b border-slate-700 px-4 py-2">
-          <span className="text-sm font-semibold text-slate-400">{APP_NAME}</span>
-          <nav className="flex gap-1">
+      <div className="flex h-screen flex-col bg-cabina-negro font-sans text-cabina-tinta">
+        <header className="flex shrink-0 items-center gap-4 border-b border-cabina-linea bg-cabina-panel px-4 py-2">
+          <span className="font-mono text-[11px] uppercase tracking-rotulo text-cabina-tinta-tenue">
+            {APP_NAME}
+          </span>
+          <nav className="flex gap-0.5">
             {navItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 end={item.to === '/'}
                 className={({ isActive }) =>
-                  `rounded px-3 py-1.5 text-sm transition-colors ${
+                  // La sección activa se marca con una línea abajo, no con un
+                  // bloque de color: el relleno fuerte queda reservado para
+                  // los estados (al aire / preparado).
+                  `rounded-t px-3 py-1.5 text-sm transition-colors border-b-2 ${
                     isActive
-                      ? 'bg-blue-600 text-white'
-                      : 'text-slate-400 hover:bg-slate-700 hover:text-white'
+                      ? 'border-listo bg-listo-suave font-semibold text-listo'
+                      : 'border-transparent text-cabina-tinta-dim hover:bg-cabina-alto hover:text-cabina-tinta'
                   }`
                 }
               >
@@ -86,20 +91,23 @@ export default function App() {
           </nav>
           <div className="ml-auto flex items-center gap-2">
             <QuickActions />
-            <span className="h-5 w-px bg-slate-700" />
+            <span className="h-5 w-px bg-cabina-linea" />
             <button
               type="button"
               onClick={() => void window.electronAPI?.showProjection()}
               onDoubleClick={() => void window.electronAPI?.showProjection({ reload: true })}
-              className="inline-flex items-center gap-1.5 rounded-md bg-slate-800 px-2.5 py-1.5 text-xs text-slate-200 transition-colors hover:bg-slate-700"
+              className="inline-flex items-center gap-1.5 rounded-md bg-cabina-alto px-2.5 py-1.5 text-xs text-cabina-tinta transition-colors hover:bg-cabina-linea-fuerte"
               title="Mostrar / recuperar la ventana de proyección (doble clic: recargar)"
             >
               <MonitorPlay className="h-3.5 w-3.5" />
               Proyección
             </button>
-            <LiveIndicator />
+            {/* La pastilla LIVE que iba acá quedó de más: la barra de abajo
+                dice lo mismo y además dice QUÉ está al aire. */}
           </div>
         </header>
+
+        <BarraAlAire />
 
         <main className="flex-1 overflow-hidden">
           <SeccionesConRed />

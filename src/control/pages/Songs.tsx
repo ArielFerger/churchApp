@@ -1011,28 +1011,46 @@ function SearchInput({ value, onChange }: { value: string; onChange: (v: string)
 
 // ─── Styles (scoped to .songbook root) ───────────────────────────────────────
 const songbookCss = `
+/* Esta pantalla tenía su propio tema ("cancionero": serif, degradados cálidos,
+   otra familia tipográfica) que no se parecía en nada al resto de la app. El
+   problema no era que fuera feo sino que contaba otra historia: decía "estás
+   leyendo un libro" cuando en realidad estás manejando una salida en vivo.
+   Ahora usa los mismos tokens de cabina que todo lo demás, y el serif queda
+   sólo dentro de las tarjetas de letra, donde sí significa algo: eso es texto
+   que se proyecta, no interfaz.
+
+   Los nombres de clase (.songbook, .chip, .slide-card…) se conservan para no
+   reescribir 1400 líneas de JSX; lo que cambió es a qué apuntan. */
 .songbook {
-  /* Warm gradient overlay over the slate-900 app shell */
-  background:
-    radial-gradient(ellipse 70% 50% at 50% 0%, rgba(245, 179, 66, 0.08), transparent 70%),
-    radial-gradient(ellipse 60% 80% at 80% 100%, rgba(201, 117, 84, 0.05), transparent 60%),
-    #14100c;
-  color: #f0e3cd;
-  font-family: 'Manrope', system-ui, sans-serif;
+  --ct-negro: #0e0d0c;
+  --ct-panel: #191614;
+  --ct-alto: #221d19;
+  --ct-tinta: #efe6d6;
+  --ct-dim: rgba(239, 230, 214, 0.72);
+  --ct-tenue: rgba(239, 230, 214, 0.48);
+  --ct-linea: rgba(239, 230, 214, 0.14);
+  --ct-linea-fuerte: rgba(239, 230, 214, 0.32);
+  --ct-aire: #e2483b;
+  --ct-listo: var(--ct-listo);
+  --ct-ok: var(--ct-ok);
+
+  background: var(--ct-negro);
+  color: var(--ct-tinta);
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 .songbook .field-label {
   font-size: 0.72rem;
-  color: rgba(240, 227, 205, 0.28);
+  color: var(--ct-tenue);
   letter-spacing: 0.15em;
   text-transform: uppercase;
   font-weight: 600;
 }
 
 .songbook .songbook-panel {
-  background: rgba(245, 226, 196, 0.04);
-  border: 1px solid rgba(245, 226, 196, 0.08);
+  background: var(--ct-panel);
+  border: 1px solid var(--ct-linea);
   border-radius: 14px;
   padding: 1.4rem 1.4rem 1.5rem;
   backdrop-filter: blur(6px);
@@ -1040,16 +1058,16 @@ const songbookCss = `
 
 .songbook .view-switch {
   display: inline-flex;
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(245, 226, 196, 0.08);
+  background: var(--ct-panel);
+  border: 1px solid var(--ct-linea);
   border-radius: 999px;
   padding: 4px;
 }
 .songbook .view-switch button {
   background: transparent;
   border: none;
-  color: rgba(240, 227, 205, 0.55);
-  font-family: 'Manrope', sans-serif;
+  color: var(--ct-dim);
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-weight: 600;
   font-size: 0.82rem;
   padding: 0.55rem 1.15rem;
@@ -1058,75 +1076,78 @@ const songbookCss = `
   letter-spacing: 0.02em;
   transition: all 0.2s ease;
 }
-.songbook .view-switch button.active { background: #f5b342; color: #14100c; }
-.songbook .view-switch button:not(.active):hover { color: #f0e3cd; }
+.songbook .view-switch button.active { background: var(--ct-listo); color: var(--ct-negro); }
+.songbook .view-switch button:not(.active):hover { color: var(--ct-tinta); }
 
 .songbook .chip {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
   padding: 0.5rem 0.95rem;
-  background: rgba(245, 226, 196, 0.04);
-  border: 1px solid rgba(245, 226, 196, 0.08);
+  background: var(--ct-panel);
+  border: 1px solid var(--ct-linea);
   border-radius: 999px;
   cursor: pointer;
-  font-family: 'Fraunces', Georgia, serif;
-  font-size: 0.92rem;
-  font-style: italic;
-  color: rgba(240, 227, 205, 0.55);
+  /* El serif queda SÓLO dentro de las tarjetas de letra, donde significa algo:
+     "esto es texto que se proyecta". Acá era la voz de documento que
+     contradecía el trabajo real de la pantalla. */
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: var(--ct-dim);
   transition: all 0.2s;
 }
-.songbook .chip:hover { color: #f0e3cd; border-color: rgba(245, 226, 196, 0.18); }
+.songbook .chip:hover { color: var(--ct-tinta); border-color: var(--ct-linea-fuerte); }
 .songbook .chip.selected {
   background: rgba(245, 179, 66, 0.12);
-  border-color: #f5b342;
-  color: #f5b342;
+  border-color: var(--ct-listo);
+  color: var(--ct-listo);
 }
 .songbook .chip.is-album.selected {
   background: rgba(143, 185, 138, 0.12);
-  border-color: #8fb98a;
-  color: #8fb98a;
+  border-color: var(--ct-ok);
+  color: var(--ct-ok);
 }
 .songbook .chip-count {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: Consolas, ui-monospace, monospace;
   font-style: normal;
   font-size: 0.72em;
   opacity: 0.6;
 }
 .songbook .chip.action {
   border-style: dashed;
-  color: rgba(240, 227, 205, 0.28);
+  color: var(--ct-tenue);
   font-style: normal;
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-size: 0.82rem;
   letter-spacing: 0.04em;
 }
-.songbook .chip.action:hover { color: #f5b342; border-color: #f5b342; }
+.songbook .chip.action:hover { color: var(--ct-listo); border-color: var(--ct-listo); }
 .songbook .chip.action.is-danger {
   color: rgba(214, 90, 74, 0.85);
-  border-color: rgba(214, 90, 74, 0.4);
+  border-color: var(--ct-aire);
 }
 .songbook .chip.action.is-danger:hover {
   background: rgba(214, 90, 74, 0.12);
-  color: #d65a4a;
+  color: var(--ct-aire);
 }
 
 .songbook .input-base {
   width: 100%;
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(245, 226, 196, 0.08);
-  color: #f0e3cd;
+  background: var(--ct-panel);
+  border: 1px solid var(--ct-linea);
+  color: var(--ct-tinta);
   padding: 0.7rem 0.95rem;
   border-radius: 8px;
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-size: 0.95rem;
   outline: none;
   transition: border-color 0.2s;
 }
-.songbook .input-base::placeholder { color: rgba(240, 227, 205, 0.28); }
-.songbook .input-base:focus { border-color: #f5b342; }
+.songbook .input-base::placeholder { color: var(--ct-tenue); }
+.songbook .input-base:focus { border-color: var(--ct-listo); }
 .songbook textarea.input-base {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: Consolas, ui-monospace, monospace;
   font-size: 0.88rem;
   line-height: 1.7;
 }
@@ -1139,7 +1160,7 @@ const songbookCss = `
   padding-right: 2.2rem;
   cursor: pointer;
 }
-.songbook select.input-base option { background: #1c1611; color: #f0e3cd; }
+.songbook select.input-base option { background: var(--ct-panel); color: var(--ct-tinta); }
 /* Variante chica para las barras de herramientas. Va acá y no con clases de
    Tailwind porque .songbook .input-base gana por especificidad y el padding
    grande recortaba el texto dentro de un alto fijo. */
@@ -1156,23 +1177,23 @@ const songbookCss = `
 .songbook .btn-primary,
 .songbook .btn-soft,
 .songbook .btn-danger {
-  border: 1px solid rgba(245, 226, 196, 0.18);
+  border: 1px solid var(--ct-linea-fuerte);
   padding: 0.55rem 1rem;
   border-radius: 8px;
   cursor: pointer;
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-weight: 500;
   font-size: 0.85rem;
   letter-spacing: 0.01em;
   transition: all 0.2s;
 }
 .songbook .btn-primary {
-  background: #f5b342;
-  color: #14100c;
-  border-color: #f5b342;
+  background: var(--ct-listo);
+  color: var(--ct-negro);
+  border-color: var(--ct-listo);
   font-weight: 600;
 }
-.songbook .btn-primary:hover { background: #d4954a; border-color: #d4954a; }
+.songbook .btn-primary:hover { background: var(--ct-listo); border-color: var(--ct-listo); }
 .songbook .btn-primary:disabled {
   background: rgba(245, 179, 66, 0.3);
   border-color: rgba(245, 179, 66, 0.3);
@@ -1181,43 +1202,42 @@ const songbookCss = `
 }
 .songbook .btn-soft {
   background: transparent;
-  color: #f0e3cd;
+  color: var(--ct-tinta);
 }
 .songbook .btn-soft:hover {
-  background: rgba(245, 226, 196, 0.06);
-  border-color: rgba(245, 226, 196, 0.3);
+  background: var(--ct-alto);
+  border-color: var(--ct-linea-fuerte);
 }
 .songbook .btn-soft:disabled { opacity: 0.4; cursor: not-allowed; }
 .songbook .btn-danger {
   background: transparent;
-  color: #d65a4a;
-  border-color: rgba(214, 90, 74, 0.4);
+  color: var(--ct-aire);
+  border-color: var(--ct-aire);
 }
 .songbook .btn-danger:hover { background: rgba(214, 90, 74, 0.12); }
 
 /* Soltar .txt en cualquier parte de la página los importa. */
 .songbook.is-dropping {
-  outline: 2px dashed #f5b342;
+  outline: 2px dashed var(--ct-listo);
   outline-offset: -10px;
 }
 .songbook .import-msg {
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-size: 0.82rem;
-  color: #f5b342;
+  color: var(--ct-listo);
 }
 
 .songbook .save-status {
   align-self: center;
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-size: 0.75rem;
-  color: rgba(240, 227, 205, 0.28);
+  color: var(--ct-tenue);
   letter-spacing: 0.02em;
 }
 
 .songbook .empty-state {
-  font-family: 'Fraunces', Georgia, serif;
-  font-style: italic;
-  color: rgba(240, 227, 205, 0.28);
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  color: var(--ct-tenue);
   font-size: 0.95rem;
 }
 
@@ -1227,38 +1247,38 @@ const songbookCss = `
   gap: 0.75rem;
   flex-wrap: wrap;
   padding: 0.75rem 1rem;
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(245, 226, 196, 0.08);
+  background: var(--ct-panel);
+  border: 1px solid var(--ct-linea);
   border-radius: 12px;
 }
 .songbook .now-playing {
-  font-family: 'Fraunces', Georgia, serif;
-  font-style: italic;
-  color: rgba(240, 227, 205, 0.55);
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-weight: 600;
+  color: var(--ct-dim);
   font-size: 0.95rem;
 }
-.songbook .now-playing strong { color: #f0e3cd; font-weight: 400; }
-.songbook .divider { width: 1px; height: 24px; background: rgba(245, 226, 196, 0.08); }
+.songbook .now-playing strong { color: var(--ct-tinta); font-weight: 400; }
+.songbook .divider { width: 1px; height: 24px; background: var(--ct-linea); }
 
 .songbook .chord-toggle {
   display: inline-flex;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(245, 226, 196, 0.08);
+  background: var(--ct-panel);
+  border: 1px solid var(--ct-linea);
   border-radius: 8px;
   padding: 3px;
 }
 .songbook .chord-toggle button {
   background: transparent;
   border: none;
-  color: rgba(240, 227, 205, 0.55);
-  font-family: 'Manrope', sans-serif;
+  color: var(--ct-dim);
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-weight: 600;
   font-size: 0.75rem;
   padding: 0.4rem 0.75rem;
   border-radius: 6px;
   cursor: pointer;
 }
-.songbook .chord-toggle button.active { background: #8fb98a; color: #14100c; }
+.songbook .chord-toggle button.active { background: var(--ct-ok); color: var(--ct-negro); }
 
 /* Navegación del mazo + tamaño de los cuadros */
 .songbook .deck-nav {
@@ -1267,9 +1287,9 @@ const songbookCss = `
   gap: 0.3rem;
 }
 .songbook .deck-nav button {
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(245, 226, 196, 0.08);
-  color: #f0e3cd;
+  background: var(--ct-panel);
+  border: 1px solid var(--ct-linea);
+  color: var(--ct-tinta);
   width: 28px;
   height: 28px;
   border-radius: 6px;
@@ -1278,32 +1298,32 @@ const songbookCss = `
   line-height: 1;
   transition: all 0.15s;
 }
-.songbook .deck-nav button:hover:not(:disabled) { border-color: #f5b342; color: #f5b342; }
+.songbook .deck-nav button:hover:not(:disabled) { border-color: var(--ct-listo); color: var(--ct-listo); }
 .songbook .deck-nav button:disabled { opacity: 0.25; cursor: not-allowed; }
 .songbook .deck-pos {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: Consolas, ui-monospace, monospace;
   font-size: 0.8rem;
-  color: #f5b342;
+  color: var(--ct-listo);
   min-width: 3.2rem;
   text-align: center;
 }
 .songbook .deck-pos em {
   font-style: normal;
-  color: rgba(240, 227, 205, 0.28);
+  color: var(--ct-tenue);
 }
 
 .songbook .density-toggle {
   display: inline-flex;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(245, 226, 196, 0.08);
+  background: var(--ct-panel);
+  border: 1px solid var(--ct-linea);
   border-radius: 8px;
   padding: 3px;
 }
 .songbook .density-toggle button {
   background: transparent;
   border: none;
-  color: rgba(240, 227, 205, 0.4);
-  font-family: 'JetBrains Mono', monospace;
+  color: var(--ct-tenue);
+  font-family: Consolas, ui-monospace, monospace;
   font-weight: 600;
   font-size: 0.68rem;
   padding: 0.35rem 0.5rem;
@@ -1311,17 +1331,17 @@ const songbookCss = `
   cursor: pointer;
   min-width: 26px;
 }
-.songbook .density-toggle button.active { background: #f5b342; color: #14100c; }
+.songbook .density-toggle button.active { background: var(--ct-listo); color: var(--ct-negro); }
 
 .songbook kbd {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: Consolas, ui-monospace, monospace;
   font-style: normal;
   font-size: 0.85em;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(245, 226, 196, 0.12);
+  background: var(--ct-negro);
+  border: 1px solid var(--ct-linea);
   border-radius: 4px;
   padding: 0.1em 0.4em;
-  color: rgba(240, 227, 205, 0.55);
+  color: var(--ct-dim);
 }
 
 /* Mazo: tantas columnas como entren para el ancho elegido. align-items:start
@@ -1336,8 +1356,8 @@ const songbookCss = `
 
 /* Slide cards */
 .songbook .slide-card {
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(245, 226, 196, 0.08);
+  background: var(--ct-panel);
+  border: 1px solid var(--ct-linea);
   border-radius: 10px;
   padding: 0.5rem 0.65rem 0.6rem;
   cursor: pointer;
@@ -1346,13 +1366,13 @@ const songbookCss = `
   flex-direction: column;
 }
 .songbook .slide-card:hover {
-  border-color: rgba(245, 226, 196, 0.3);
-  background: rgba(0, 0, 0, 0.32);
+  border-color: var(--ct-linea-fuerte);
+  background: var(--ct-alto);
 }
 .songbook .slide-card.is-live {
-  border-color: rgba(214, 90, 74, 0.7);
+  border-color: var(--ct-aire);
   background: rgba(214, 90, 74, 0.08);
-  box-shadow: 0 0 0 1px rgba(214, 90, 74, 0.35), 0 8px 32px -12px rgba(214, 90, 74, 0.4);
+  box-shadow: 0 0 0 1px rgba(214, 90, 74, 0.35), 0 8px 32px -12px var(--ct-aire);
 }
 .songbook .slide-card-header {
   display: flex;
@@ -1368,17 +1388,17 @@ const songbookCss = `
   min-width: 0;
 }
 .songbook .slide-card-index .num {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: Consolas, ui-monospace, monospace;
   font-size: 0.62rem;
-  color: rgba(240, 227, 205, 0.28);
+  color: var(--ct-tenue);
 }
 .songbook .slide-card-index .label {
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #8fb98a;
+  color: var(--ct-ok);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1386,13 +1406,13 @@ const songbookCss = `
 .songbook .slide-card.is-live .slide-card-index .label { color: #e8a596; }
 .songbook .live-pip {
   font-size: 0.6rem;
-  color: #d65a4a;
+  color: var(--ct-aire);
   flex-shrink: 0;
 }
 
 /* Lyrics rendering */
 .songbook .lyrics-line {
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: Georgia, serif;
   font-weight: 400;
   font-size: var(--deck-font, 0.86rem);
   line-height: 1.32;
@@ -1414,10 +1434,10 @@ const songbookCss = `
   line-height: 1;
 }
 .songbook .part .chord {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: Consolas, ui-monospace, monospace;
   font-weight: 600;
   font-size: 0.66em;
-  color: #8fb98a;
+  color: var(--ct-ok);
   letter-spacing: 0.02em;
   height: 1.2em;
   line-height: 1.2em;
@@ -1431,7 +1451,7 @@ const songbookCss = `
 .songbook .part .text {
   line-height: 1.15;
   white-space: pre;
-  color: #f0e3cd;
+  color: var(--ct-tinta);
 }
 .songbook .slide-card.no-chords .part .chord { display: none; }
 `
