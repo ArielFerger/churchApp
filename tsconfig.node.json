@@ -32,5 +32,8 @@
     "scripts/**/*.ts",
     "src/shared/**/*.ts",
     "tests/**/*.ts"
-  ]
+  ],
+  // Los tests de `tests/ui` importan código de renderer (React, audioEngine),
+  // así que los chequea el proyecto web: acá no tienen dónde resolverse.
+  "exclude": ["tests/ui/**"]
 }

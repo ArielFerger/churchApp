@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
-import { HashRouter, Routes, Route, NavLink } from 'react-router-dom'
+import { HashRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import ErrorBoundary from './ErrorBoundary'
 import { MonitorPlay } from 'lucide-react'
 import Live from './pages/Live'
 import Songs from './pages/Songs'
@@ -25,6 +26,31 @@ const navItems = [
   { to: '/downloads', label: 'Descargar' },
   { to: '/settings', label: 'Ajustes' }
 ]
+
+/**
+ * Las secciones van envueltas en una red de contención atada a la ruta: si una
+ * revienta, el resto de la app sigue usable y cambiar de sección la recupera
+ * sola. El boundary va acá adentro y no alrededor de todo para que la barra de
+ * navegación y el reproductor sobrevivan al error.
+ */
+function SeccionesConRed() {
+  const { pathname } = useLocation()
+  const nombre = navItems.find((i) => i.to === pathname)?.label
+
+  return (
+    <ErrorBoundary resetKey={pathname} scope={nombre ? `la sección ${nombre}` : undefined}>
+      <Routes>
+        <Route path="/" element={<Live />} />
+        <Route path="/songs" element={<Songs />} />
+        <Route path="/bible" element={<Bible />} />
+        <Route path="/media" element={<Media />} />
+        <Route path="/audio" element={<Audio />} />
+        <Route path="/downloads" element={<Downloads />} />
+        <Route path="/settings" element={<Settings />} />
+      </Routes>
+    </ErrorBoundary>
+  )
+}
 
 export default function App() {
   useProjectionBridge()
@@ -76,15 +102,7 @@ export default function App() {
         </header>
 
         <main className="flex-1 overflow-hidden">
-          <Routes>
-            <Route path="/" element={<Live />} />
-            <Route path="/songs" element={<Songs />} />
-            <Route path="/bible" element={<Bible />} />
-            <Route path="/media" element={<Media />} />
-            <Route path="/audio" element={<Audio />} />
-            <Route path="/downloads" element={<Downloads />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
+          <SeccionesConRed />
         </main>
 
         <MiniPlayer />

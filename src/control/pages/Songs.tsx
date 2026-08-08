@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTransientMessage } from '../hooks/useTransientMessage'
 import { useLibraryStore } from '@/shared/store/libraryStore'
 import { useLiveStore } from '@/shared/store/liveStore'
 import type { Song } from '@/shared/types/song'
@@ -75,12 +76,12 @@ export default function Songs() {
   const [albumDraft, setAlbumDraft] = useState<string>('')
   const [contentDraft, setContentDraft] = useState('')
   const [dirty, setDirty] = useState(false)
-  const [saveFlash, setSaveFlash] = useState(false)
+  const [saveFlash, mostrarGuardado] = useTransientMessage()
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   // Importación de .txt
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const [importMsg, setImportMsg] = useState<string | null>(null)
+  const [importMsg, setImportMsg] = useTransientMessage()
   const [dragging, setDragging] = useState(false)
 
   // Boot
@@ -200,8 +201,7 @@ export default function Songs() {
     if (saved) {
       setCurrentSongId(saved.id)
       setDirty(false)
-      setSaveFlash(true)
-      window.setTimeout(() => setSaveFlash(false), 1400)
+      mostrarGuardado('✓ Guardado', 1400)
     }
   }
 
@@ -249,8 +249,7 @@ export default function Songs() {
   async function importTxtFiles(fileList: FileList | File[]) {
     const files = [...fileList].filter((f) => /\.txt$/i.test(f.name))
     if (files.length === 0) {
-      setImportMsg('Sólo se pueden importar archivos .txt')
-      window.setTimeout(() => setImportMsg(null), 2600)
+      setImportMsg('Sólo se pueden importar archivos .txt', 2600)
       return
     }
     const albumId =
@@ -283,8 +282,7 @@ export default function Songs() {
 
     const partes = [`${ok} ${ok === 1 ? 'canción importada' : 'canciones importadas'}`]
     if (vacios.length) partes.push(`${vacios.length} vacío(s) salteado(s)`)
-    setImportMsg(partes.join(' · '))
-    window.setTimeout(() => setImportMsg(null), 3600)
+    setImportMsg(partes.join(' · '), 3600)
 
     // Saltar a la primera importada, salvo que haya algo sin guardar en curso.
     if (first && !dirty) {
@@ -649,7 +647,7 @@ export default function Songs() {
               </button>
               {currentSong && (
                 <span className="save-status">
-                  {dirty ? 'Guardando…' : saveFlash ? '✓ Guardado' : 'Se guarda solo'}
+                  {dirty ? 'Guardando…' : (saveFlash ?? 'Se guarda solo')}
                 </span>
               )}
               {currentSong && (
