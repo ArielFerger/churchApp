@@ -201,7 +201,9 @@ verifica entero con `npm test`.
 bajan `whisper-cli.exe` y el modelo, y transcriben un WAV. Verificado de punta a punta
 contra voz de verdad — ver "Verificación" más abajo.
 
-**Fase 3 — captura en vivo.** getUserMedia + worklet + troceo con solapamiento + IPC.
+**Fase 3 — HECHA.** Captura en vivo: getUserMedia + worklet + troceo con solapamiento +
+puerta por energía + IPC. Verificada sobre la app corriendo con un dispositivo de audio
+falso — ver "Verificación".
 
 **Fase 4 — la sección Escucha** y el enganche con proyección.
 
@@ -219,17 +221,23 @@ Cada fase se puede parar y dejar andando lo anterior.
 - `electron/services/escuchaService.ts` — whisper: resolver binario, bajar, transcribir ✅
 - `tests/whisper.test.ts`, `tests/escuchaService.test.ts` ✅
 - `tests/whisperE2E.test.ts` — punta a punta, apagado salvo que se pida ✅
-- `electron/ipc/escucha.ts` — canales
+- `src/shared/utils/audioVentanas.ts` — troceo, solape, VAD y WAV (puro) ✅
+- `src/shared/types/escucha.ts` — las formas que cruzan el puente ✅
+- `src/public/escucha-worklet.js` — el recolector del hilo de audio ✅
+- `src/control/audio/escuchaEnVivo.ts` — pega micrófono, whisper y estado ✅
+- `tests/audioVentanas.test.ts`, `tests/escuchaStore.test.ts` ✅
+- `electron/ipc/escucha.ts` — canales ✅
+- `src/control/audio/capturaVoz.ts` — getUserMedia + worklet a 16 kHz ✅
+- `src/shared/store/escuchaStore.ts` — estado de escucha y sugerencias ✅
 - `src/control/pages/Escucha.tsx` — la sección
-- `src/control/audio/capturaVoz.ts` — getUserMedia + downsample a 16 kHz
-- `src/shared/store/escuchaStore.ts` — estado de escucha y sugerencias
 
 **Modificados**
+- `src/shared/constants.ts` — canales IPC ✅
+- `electron/preload/control.ts` + `src/shared/types/electronAPI.d.ts` — API ✅
+- `electron/main.ts` — registrar handlers + `dispose()` al cerrar ✅
+- `src/shared/types/ipc.ts` — `AppSettings`: modelo de whisper ✅ (el dispositivo de
+  entrada queda para la fase 4, que es donde se elige)
 - `src/control/App.tsx` — import + `navItems` + `<Route>` (las tres ediciones de siempre)
-- `src/shared/constants.ts` — canales IPC
-- `electron/preload/control.ts` + `src/shared/types/electronAPI.d.ts` — API
-- `electron/main.ts` — registrar handlers + `dispose()` al cerrar
-- `src/shared/types/ipc.ts` — `AppSettings`: dispositivo de entrada, modelo, carpeta
 
 ---
 
@@ -258,8 +266,24 @@ Cada fase se puede parar y dejar andando lo anterior.
 
    Es una voz sintética: prueba que la cañería anda, no cuánta precisión va a haber el
    domingo. Eso se mide en la fase 3.
-3. **Fase 3:** con la consola conectada, hablar al micrófono y ver la transcripción
-   aparecer; medir la latencia real contra los 8 s estimados.
+3. **Fase 3 — hecha, sin micrófono humano.** Chromium sabe hacerse pasar por una placa de
+   sonido: se levanta la app con
+
+   ```bash
+   npx electron . --remote-debugging-port=9222 --use-fake-device-for-media-stream --use-file-for-fake-audio-capture=<sermon.wav>
+   ```
+
+   y `getUserMedia` recibe el WAV como si fuera la consola. Con eso se maneja la Escucha por
+   CDP y se ve el camino completo: worklet → ventanas → whisper → detector → sugerencias.
+
+   Resultado sobre 50 s (el sermón de 23 s, repetido): las tres citas correctas y **ninguna
+   de más**, 0 ventanas descartadas, whisper entre 875 y 1006 ms por ventana.
+
+   **Con un video 1080p decodificando al mismo tiempo** (verificado por el contador de
+   frames del `<video>`, 0 perdidos): 998 ms de promedio contra ~940 sin video. La CPU no
+   es el problema que se temía, al menos con el modelo `base`.
+
+   Falta lo único que no se puede simular: la consola de sonido real y una voz humana.
 4. **Fase 4:** end-to-end por CDP — decir una referencia, ver la sugerencia, clic,
    y confirmar en la ventana de proyección que salió el versículo correcto.
 5. `npm run typecheck && npm run lint && npm run build` en cada fase.
@@ -273,9 +297,10 @@ Cada fase se puede parar y dejar andando lo anterior.
   vacío. `parseTranscripcion` tira esas anotaciones, pero eso no alcanza: la ventana igual
   se transcribió y gastó CPU. Falta la puerta por energía (VAD simple) antes de mandarla,
   que es trabajo de la fase 3.
-- **CPU** — whisper compite con la decodificación de video de la proyección. Con el modelo
-  `base` debería andar, pero hay que medirlo con un video corriendo. El interruptor de
-  apagado es la válvula de escape.
+- **CPU** — **medido en la fase 3 y no es problema**: con un video 1080p al aire, whisper
+  pasó de ~940 ms a 998 ms por ventana y el video no perdió un solo frame. Igual queda el
+  interruptor de apagado como válvula de escape, y el contador de ventanas descartadas para
+  darse cuenta si algún día sí lo es.
 - **La latencia puede molestar** más de lo estimado si el pastor cita y sigue de largo.
 - **Precisión con nombres propios bíblicos** — whisper puede escribir "Habacuc" de cinco
   formas distintas. El matching difuso ayuda, pero los libros raros van a fallar más.

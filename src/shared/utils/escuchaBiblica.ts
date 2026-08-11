@@ -382,6 +382,12 @@ export function detectarReferencias(texto: string): ReferenciaDetectada[] {
  *
  * Cuando algo se repite se conserva la versión de mayor confianza: la segunda
  * vez suele oírse mejor.
+ *
+ * También se absorbe el capítulo suelto cuando ya hay una cita con versículo
+ * del mismo capítulo. Esto no es teórico: en la prueba en vivo, una ventana
+ * cortó justo después de "Juan capítulo tres" y la lista mostró `Juan 3` y
+ * `Juan 3:16` como si fueran dos pasajes distintos. Es la misma cita partida
+ * por el borde de la ventana.
  */
 export function fusionar(
   previas: ReferenciaDetectada[],
@@ -396,5 +402,13 @@ export function fusionar(
     const actual = porClave.get(k)
     if (!actual || r.confianza > actual.confianza) porClave.set(k, r)
   }
-  return [...porClave.values()].sort((a, b) => a.offset - b.offset)
+
+  const todas = [...porClave.values()]
+  const conVersiculo = new Set(
+    todas.filter((r) => r.verse !== null).map((r) => `${r.bookId}-${r.chapter}`)
+  )
+
+  return todas
+    .filter((r) => r.verse !== null || !conVersiculo.has(`${r.bookId}-${r.chapter}`))
+    .sort((a, b) => a.offset - b.offset)
 }

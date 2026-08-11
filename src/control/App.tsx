@@ -14,8 +14,30 @@ import QuickActions from './components/QuickActions'
 import MiniPlayer from './components/audio/MiniPlayer'
 import { useProjectionBridge } from './hooks/useProjectionBridge'
 import { useAudioPlayer } from './audio/useAudioPlayer'
+import { detenerEscucha, iniciarEscucha } from './audio/escuchaEnVivo'
+import { entradasDeAudio } from './audio/capturaVoz'
 import { useSettingsStore } from '@/shared/store/settingsStore'
+import { useEscuchaStore } from '@/shared/store/escuchaStore'
 import { APP_NAME } from '@/shared/constants'
+
+// La Escucha todavía no tiene sección propia (fase 4). Hasta entonces, la única
+// forma de ejercitarla sobre la app corriendo es desde el depurador, que es
+// como se verifica todo en este proyecto.
+//
+// Se mira MODE y no DEV a propósito: `electron-vite build` deja DEV en false
+// aunque se le pase `--mode development`, así que con DEV este bloque no
+// existía en el único build que se puede manejar por CDP. En el build de
+// verdad —modo production— sigue sin existir, que es lo que importa.
+if (import.meta.env.MODE !== 'production') {
+  Object.assign(window, {
+    __escucha: {
+      iniciar: iniciarEscucha,
+      detener: detenerEscucha,
+      entradasDeAudio,
+      store: useEscuchaStore
+    }
+  })
+}
 
 const navItems = [
   { to: '/', label: 'En Vivo' },
@@ -78,7 +100,7 @@ export default function App() {
                   // La sección activa se marca con una línea abajo, no con un
                   // bloque de color: el relleno fuerte queda reservado para
                   // los estados (al aire / preparado).
-                  `rounded-t px-3 py-1.5 text-sm transition-colors border-b-2 ${
+                  `rounded-t border-b-2 px-3 py-1.5 text-sm transition-colors ${
                     isActive
                       ? 'border-listo bg-listo-suave font-semibold text-listo'
                       : 'border-transparent text-cabina-tinta-dim hover:bg-cabina-alto hover:text-cabina-tinta'

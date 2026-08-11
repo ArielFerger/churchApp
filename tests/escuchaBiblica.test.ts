@@ -246,8 +246,30 @@ describe('fusionar', () => {
     expect(out[0].confianza).toBe(0.9)
   })
 
-  it('distingue capítulo entero de versículo suelto', () => {
+  it('absorbe el capítulo suelto cuando ya hay un versículo de ese capítulo', () => {
+    // La fase 1 hacía lo contrario: los dejaba como dos sugerencias distintas.
+    // La prueba en vivo de la fase 3 mostró por qué no sirve. Decir "abramos en
+    // Juan capítulo tres versículo dieciséis" lleva unos 2,5 s, más que el
+    // solape de 1,5 s, así que SIEMPRE va a haber una ventana que corta en
+    // "Juan capítulo tres". Con la regla vieja, cada cita con versículo sumaba
+    // además una fila con el capítulo pelado. Se pierde poder sugerir el
+    // capítulo entero, que es un caso raro y que igual se resuelve desde la
+    // sección Biblia.
     const out = fusionar([ref('PSA', 23, null)], [ref('PSA', 23, 1)])
+    expect(out).toHaveLength(1)
+    expect(out[0].verse).toBe(1)
+  })
+
+  it('no toca el capítulo entero si nadie nombró un versículo suyo', () => {
+    const out = fusionar([ref('PSA', 23, null)], [ref('JHN', 3, 16)])
+    expect(out.map((r) => `${r.bookId} ${r.chapter}:${r.verse ?? '*'}`)).toEqual([
+      'PSA 23:*',
+      'JHN 3:16'
+    ])
+  })
+
+  it('tampoco lo absorbe si el versículo es de otro capítulo', () => {
+    const out = fusionar([ref('PSA', 23, null)], [ref('PSA', 24, 1)])
     expect(out).toHaveLength(2)
   })
 

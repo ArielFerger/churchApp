@@ -5,6 +5,8 @@ import type { BibleBook } from './bible'
 import type { AudioTrack, AudioPlaylist } from './audio'
 import type { BibleFont } from './fonts'
 import type { DownloadJob, DownloadOptions } from '../utils/downloads'
+import type { EscuchaStatus, Transcripcion } from './escucha'
+import type { WhisperModelId } from '../utils/whisper'
 
 /** Dónde están (o no) yt-dlp y ffmpeg. */
 export interface DownloadTools {
@@ -120,6 +122,14 @@ export interface ControlElectronAPI {
       jobs?: DownloadJob[]
       install?: { step: string; ratio: number | null }
     }) => void
+  ) => () => void
+
+  getEscuchaStatus: () => Promise<EscuchaStatus>
+  installEscucha: (modelo?: WhisperModelId) => Promise<EscuchaStatus>
+  /** Manda una ventana de PCM 16 bits mono. `null` = se descartó por saturación. */
+  transcribirVentana: (pcm: Uint8Array, tasa: number) => Promise<Transcripcion | null>
+  onEscuchaProgress: (
+    callback: (p: { step: string; ratio: number | null }) => void
   ) => () => void
 }
 

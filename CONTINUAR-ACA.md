@@ -14,7 +14,7 @@ y Linux solo, al recibir el tag).
 La app es un **proyector para iglesia**: dos ventanas Electron (control + proyección),
 React + TypeScript. `npm run dev` para levantarla.
 
-**253 tests**, typecheck, lint y build en verde. Verificar siempre con:
+**280 tests**, typecheck, lint y build en verde. Verificar siempre con:
 
 ```bash
 npm run typecheck && npm run lint && npm test && npm run build
@@ -36,8 +36,10 @@ npm run typecheck && npm run lint && npm test && npm run build
 
 ### Lo que se hizo en esta sesión
 
-**Escucha fase 2: whisper como herramienta.** La app ya baja whisper.cpp y su modelo,
-y transcribe. Verificado de verdad, no sólo con tests unitarios.
+**Escucha fases 2 y 3.** La app baja whisper, escucha por la entrada de audio, transcribe
+en vivo y arma la lista de citas detectadas. Falta ponerle pantalla (fase 4).
+
+Las dos fases se verificaron sobre la app corriendo, no sólo con tests.
 
 ---
 
@@ -142,29 +144,79 @@ lo que salió está en `docs/PLAN-escucha.md`, sección Verificación.
   los nombres propios. En la prueba sólo corrigió acentos y no costó latencia; el beneficio
   grande, si lo hay, se va a ver con libros raros (Habacuc, Sofonías).
 
-### Fase 3 — SIGUIENTE: captura en vivo
+### Fase 3 — HECHA ✅
 
-getUserMedia con el dispositivo elegido → AudioWorklet a 16 kHz mono → ventanas de ~6 s con
-~1,5 s de solapamiento → PCM16 por IPC al main → WAV temporal → whisper → texto de vuelta.
+El camino completo anda: entrada de audio → worklet → ventanas de 6 s con 1,5 s de solape →
+puerta por energía → IPC → WAV temporal → whisper → detector → sugerencias.
 
-Del lado del main ya está todo: `transcribirWav()` espera exactamente ese formato (16 kHz,
-mono, 16 bits) y devuelve el texto. Lo que falta es la captura, el troceo, el WAV temporal
-y el IPC (`electron/ipc/escucha.ts`, que todavía no existe).
+```
+capturaVoz.ts      getUserMedia + AudioWorklet, entrega Int16Array a 16 kHz
+audioVentanas.ts   troceo con solape, RMS/VAD, WAV (puro, 15 tests)
+escuchaEnVivo.ts   pega las tres puntas: micrófono, whisper y store
+escuchaStore.ts    estado + sugerencias fusionadas (puro, 10 tests)
+ipc/escucha.ts     estado, instalar, transcribirVentana
+```
 
-**Antes de mandar cada ventana, la puerta por energía**: whisper nunca contesta vacío (ver
-fase 2), así que sin VAD la app va a transcribir silencio todo el tiempo al pedo.
+**Verificado sobre la app corriendo, sin micrófono**: Chromium puede hacerse pasar por una
+placa de sonido y leer un WAV. Es *la* forma de probar esto sin hablarle a la máquina:
 
-Latencia esperada ~7,2 s (6 s de ventana + 1,2 s medido). **Medirla otra vez con un video
-proyectándose**, que es cuando whisper compite por la CPU.
+```bash
+npx electron . --remote-debugging-port=9222 --use-fake-device-for-media-stream --use-file-for-fake-audio-capture=C:/ruta/sermon.wav
+```
+
+Y como todavía no hay pantalla, la Escucha se maneja desde el depurador: `App.tsx` expone
+`window.__escucha` (`iniciar`, `detener`, `entradasDeAudio`, `store`) **sólo cuando el modo
+no es production**. Ojo con esto: `electron-vite build` deja `import.meta.env.DEV` en false
+aunque se le pase `--mode development`, así que el hook mira `MODE`. Para manejarlo por CDP
+hay que compilar con `npx electron-vite build --mode development`.
+
+Resultados (sermón sintetizado de 23 s, repetido, 50 s de escucha):
+- Las tres citas correctas y **ninguna de más**. 0 ventanas descartadas.
+- **875–1006 ms** por ventana. Con un video 1080p decodificando al mismo tiempo: **998 ms
+  de promedio y 0 frames perdidos**. La CPU no era el problema que se temía.
+- Primera sugerencia a los **8,1 s** de arrancar, como estaba estimado.
+
+**Un defecto real que encontró esta prueba** (y que cambió una decisión de la fase 1):
+decir "Juan capítulo tres versículo dieciséis" lleva ~2,5 s, más que el solape de 1,5 s, así
+que **siempre** hay una ventana que corta en "Juan capítulo tres". La lista mostraba `Juan 3`
+y `Juan 3:16` como dos pasajes. Ahora `fusionar()` absorbe el capítulo pelado cuando ya hay
+un versículo de ese mismo capítulo. Se pierde poder sugerir "el capítulo entero", que es raro
+y se resuelve desde la sección Biblia.
+
+**Decisiones de la captura que no son obvias:**
+- Se apagan `echoCancellation`, `noiseSuppression` y `autoGainControl`. Están pensados para
+  videollamadas y sobre una línea limpia de consola sólo bombean el ruido de fondo entre
+  frase y frase, que es justo lo que hace alucinar a whisper.
+- El `AudioContext` se crea directo a 16 kHz y el remuestreo lo hace Chromium. Bajar de 48 a
+  16 kHz a mano, sin filtro previo, mete aliasing y empeora la transcripción.
+- **El worklet tiene que ser un archivo de `public/`**, no un blob ni un data URL: la CSP de
+  `control.html` es `script-src 'self'` y los bloquea. El síntoma es un escueto "Unable to
+  load a worklet's module" que no menciona CSP por ningún lado.
+- Si llega una ventana mientras whisper trabaja, **se descarta** en vez de encolarse: una
+  cola hace que la Escucha se atrase cada vez más del predicador, para siempre. Hay contador
+  (`descartadas`) para que se note si pasa.
 
 No hay `setPermissionRequestHandler` en ningún lado, así que Electron concede el micrófono
 por defecto. `backgroundThrottling: false` ya está puesto en la ventana de control.
 
-### Fase 4 — la sección Escucha
+### Fase 4 — SIGUIENTE: la sección Escucha
 
 `src/control/pages/Escucha.tsx`. Para agregar una sección hacen falta **tres** ediciones en
 `src/control/App.tsx`: el import, la entrada en `navItems`, y el `<Route>` dentro de
-`SeccionesConRed`.
+`SeccionesConRed`. Al hacerlo, sacar el hook `window.__escucha` o dejarlo (sirve igual para
+manejar la Escucha por CDP cuando haya que probar).
+
+Lo que falta, y ya tiene todo lo que necesita abajo:
+- Selector de entrada de audio (`entradasDeAudio()`) y **medidor de nivel** (`store.nivel`,
+  que ya se actualiza ~8 veces por segundo). El medidor no es decorativo: es la única forma
+  de que el operador sepa que la consola está entrando.
+- Botón grande Escuchar/Detener → `iniciarEscucha()` / `detenerEscucha()`.
+- Lista de sugerencias (`store.sugerencias`, ya deduplicadas y en orden del sermón), con
+  `lookup` + `showBibleVerse` al hacer clic. **Nunca proyectar solo.**
+- Panel plegable con `store.ventanas` (la transcripción cruda) para entender por qué algo
+  apareció o no.
+- Guardar el dispositivo elegido en `AppSettings` (hoy sólo está `escuchaModelo`).
+- Si falta whisper, ofrecer `installEscucha()` con el avance de `onEscuchaProgress`.
 
 ---
 
@@ -172,8 +224,9 @@ por defecto. `backgroundThrottling: false` ya está puesto en la ventana de cont
 
 ### Verificación: se hace sobre la app corriendo, no sólo con tests
 
-Hay drivers por CDP en el scratchpad de la sesión anterior (`drive-dl.mjs`,
-`drive-songs.mjs`, `drive-concurrencia.mjs`, `cdp.mjs`). Se levanta con:
+Hay drivers por CDP en el scratchpad de las sesiones anteriores (`drive-dl.mjs`,
+`drive-songs.mjs`, `drive-concurrencia.mjs`, `drive-escucha.mjs`, `drive-con-video.mjs`,
+`cdp.mjs`). Se levanta con:
 
 ```bash
 npx electron . --remote-debugging-port=9222
@@ -202,6 +255,14 @@ un cliente CDP de 60 líneas, fácil de rehacer.
 - **El repo no está formateado con Prettier.** `npm run format` sobre todo reescribiría
   media docena de archivos que nadie tocó y ensuciaría el diff. Formateá sólo lo que
   escribís. Lo que CI mira es `npm run lint`, que sí pasa.
+- **`import.meta.env.DEV` es `false` en cualquier `electron-vite build`**, incluso con
+  `--mode development`. Para código que sólo debe existir en desarrollo, mirar
+  `import.meta.env.MODE !== 'production'`.
+- **La CSP de las ventanas es `script-src 'self'`**: nada de blobs ni data URLs para cargar
+  scripts (worklets, workers). Tiene que ser un archivo de `public/`.
+- **Mandar `showMedia` por fuera de la sección En Vivo deja el video en pausa.** La
+  reproducción la maneja la pantalla. Para probar por CDP, `play()` a mano sobre el
+  `<video>` de la ventana de proyección.
 
 ### Tests
 

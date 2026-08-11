@@ -28,6 +28,11 @@ import {
 import { registerFontsHandlers } from './ipc/fonts'
 import { registerDownloadsHandlers } from './ipc/downloads'
 import { dispose as disposeDownloads } from './services/downloadsService'
+import { registerEscuchaHandlers } from './ipc/escucha'
+import {
+  dispose as disposeEscucha,
+  limpiarTemporales as limpiarTemporalesEscucha
+} from './services/escuchaService'
 import { IPC_CHANNELS } from '../src/shared/constants'
 import log from 'electron-log'
 
@@ -61,6 +66,10 @@ app.whenReady().then(async () => {
   registerAudioHandlers(controlWindow)
   registerFontsHandlers(controlWindow, projectionWindow)
   registerDownloadsHandlers(controlWindow)
+  registerEscuchaHandlers(controlWindow)
+  // Si la app se cerró de golpe con la Escucha andando, pueden haber quedado
+  // ventanas de audio en la carpeta temporal. No se guarda audio: se borran.
+  void limpiarTemporalesEscucha()
 
   registerSettingsHandlers((next, prev) => {
     // La proyección refleja en vivo los cambios de apariencia de versículos.
@@ -139,6 +148,8 @@ app.on('before-quit', () => {
   // yt-dlp lanza ffmpeg como hijo y ambos sobreviven al cierre: sin esto quedan
   // procesos invisibles comiendo ancho de banda y reteniendo el archivo .part.
   disposeDownloads()
+  disposeEscucha()
+  void limpiarTemporalesEscucha()
 })
 
 export { controlWindow, projectionWindow }

@@ -13,6 +13,8 @@ import type { AudioTrack, AudioPlaylist } from '../../src/shared/types/audio'
 import type { BibleFont } from '../../src/shared/types/fonts'
 import type { DownloadJob, DownloadOptions } from '../../src/shared/utils/downloads'
 import type { ToolStatus as DownloadTools } from '../services/downloadsService'
+import type { EscuchaStatus, Transcripcion } from '../../src/shared/types/escucha'
+import type { WhisperModelId } from '../../src/shared/utils/whisper'
 
 contextBridge.exposeInMainWorld('electronAPI', {
   sendProjectionCommand: (cmd: ProjectionCommand) =>
@@ -219,5 +221,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
       callback(payload)
     ipcRenderer.on(IPC_CHANNELS.DOWNLOADS_UPDATED, handler)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.DOWNLOADS_UPDATED, handler)
+  },
+
+  // ─── Escucha ────────────────────────────────────────────────────────────
+  getEscuchaStatus: (): Promise<EscuchaStatus> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_ESCUCHA_STATUS),
+
+  installEscucha: (modelo?: WhisperModelId): Promise<EscuchaStatus> =>
+    ipcRenderer.invoke(IPC_CHANNELS.INSTALL_ESCUCHA, modelo),
+
+  transcribirVentana: (pcm: Uint8Array, tasa: number): Promise<Transcripcion | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.TRANSCRIBE_WINDOW, pcm, tasa),
+
+  onEscuchaProgress: (callback: (p: { step: string; ratio: number | null }) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, p: Parameters<typeof callback>[0]) => callback(p)
+    ipcRenderer.on(IPC_CHANNELS.ESCUCHA_PROGRESS, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.ESCUCHA_PROGRESS, handler)
   }
 })

@@ -1,9 +1,16 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import { existsSync } from 'fs'
-import { mkdir, readdir, rename, rm } from 'fs/promises'
+import { mkdir, readdir, rename, rm, writeFile } from 'fs/promises'
 import { cpus } from 'os'
 import { join, dirname } from 'path'
+import { app } from 'electron'
 import log from 'electron-log'
+import { TASA, wavDesdePcm16 } from '../../src/shared/utils/audioVentanas'
+import type {
+  EscuchaStatus,
+  Transcripcion,
+  WhisperStatus
+} from '../../src/shared/types/escucha'
 import {
   buildWhisperArgs,
   CARPETA_MODELOS,
@@ -44,19 +51,6 @@ import {
  * Entender ese texto (encontrar las citas bíblicas) es trabajo de
  * `src/shared/utils/escuchaBiblica.ts`, que son funciones puras.
  */
-
-export interface WhisperStatus {
-  /** Ruta del ejecutable, o `null` si todavía no está. */
-  binPath: string | null
-  /** Modelo elegido en Ajustes. */
-  modelo: WhisperModelId
-  /** Ruta del `.bin` del modelo elegido, o `null` si falta bajarlo. */
-  modelPath: string | null
-  /** Modelos que ya están en disco, para no ofrecer bajarlos de nuevo. */
-  instalados: WhisperModelId[]
-  /** Dónde se buscó, para poder mostrarlo cuando falta algo. */
-  searched: string[]
-}
 
 /**
  * Whisper no es un ejecutable suelto: necesita sus DLL al lado. Por eso vive en
@@ -110,6 +104,12 @@ export function resolveWhisper(): WhisperStatus {
     instalados: WHISPER_MODELS.filter((m) => buscarModelo(m.id)).map((m) => m.id),
     searched: carpetasWhisper()
   }
+}
+
+/** Todo lo que la pantalla necesita de una: dónde está whisper y qué falta. */
+export function estadoParaLaPantalla(): EscuchaStatus {
+  const estado = resolveWhisper()
+  return { ...estado, falta: queFalta(estado), descartadas: ventanasDescartadas() }
 }
 
 /** Si falta algo, el texto que explica qué. `null` = está todo listo. */
@@ -191,13 +191,6 @@ export interface OpcionesTranscripcion {
   timeoutMs?: number
 }
 
-export interface Transcripcion {
-  texto: string
-  /** Cuánto tardó whisper, en ms. Es el número que hay que vigilar en vivo. */
-  ms: number
-  modelo: WhisperModelId
-}
-
 /**
  * Transcribe un WAV (16 kHz, mono, 16 bits) y devuelve el texto.
  *
@@ -235,6 +228,78 @@ export async function transcribirWav(
     )
   }
   return { texto: parseTranscripcion(out), ms, modelo: estado.modelo }
+}
+
+// ─── Ventanas en vivo ────────────────────────────────────────────────────────
+
+/**
+ * Una transcripción a la vez. Si llega una ventana mientras whisper todavía
+ * está con la anterior, se **descarta** en vez de encolarla: en vivo, una cola
+ * significa que cada ventana sale más tarde que la anterior y la Escucha se va
+ * quedando atrás del predicador para siempre. Perder una ventana duele mucho
+ * menos, y encima las ventanas se solapan, así que lo que se dijo en el borde
+ * igual aparece en la siguiente.
+ */
+let ocupado = false
+let descartadas = 0
+
+/** Cuántas ventanas se descartaron por saturación. La pantalla lo muestra. */
+export function ventanasDescartadas(): number {
+  return descartadas
+}
+
+let seq = 0
+
+/**
+ * Transcribe una ventana de audio crudo (PCM de 16 bits, mono).
+ *
+ * Devuelve `null` si se descartó por saturación.
+ *
+ * El WAV va a la carpeta temporal del sistema y se borra apenas termina, pase
+ * lo que pase. El audio del sermón no se guarda en ningún lado: es una promesa
+ * explícita del módulo, no un detalle de implementación.
+ */
+export async function transcribirVentana(
+  pcm: Uint8Array,
+  tasa: number = TASA,
+  opciones: OpcionesTranscripcion = {}
+): Promise<Transcripcion | null> {
+  if (ocupado) {
+    descartadas += 1
+    log.warn(`escucha: ventana descartada, whisper todavía trabajando (${descartadas} en total)`)
+    return null
+  }
+  ocupado = true
+
+  const dir = join(app.getPath('temp'), 'church-escucha')
+  seq += 1
+  const wav = join(dir, `ventana-${seq}.wav`)
+  try {
+    await mkdir(dir, { recursive: true })
+    // `pcm` llega como bytes desde el renderer; la vista de 16 bits se arma
+    // sobre el mismo buffer, sin copiar los 192 KB de cada ventana.
+    const muestras = new Int16Array(pcm.buffer, pcm.byteOffset, pcm.byteLength >> 1)
+    await writeFile(wav, wavDesdePcm16(muestras, tasa))
+    // Una ventana de 6 s tarda ~1,2 s: si pasaron 30, algo se rompió.
+    return await transcribirWav(wav, { timeoutMs: 30_000, ...opciones })
+  } finally {
+    ocupado = false
+    await rm(wav, { force: true }).catch(() => {
+      /* ya no está, o el antivirus lo tiene tomado */
+    })
+  }
+}
+
+/**
+ * Borra los WAV que puedan haber quedado de una sesión anterior (si la app se
+ * cerró de golpe, el `finally` no llegó a correr). Se llama al arrancar.
+ */
+export async function limpiarTemporales(): Promise<void> {
+  await rm(join(app.getPath('temp'), 'church-escucha'), { recursive: true, force: true }).catch(
+    () => {
+      /* no había nada */
+    }
+  )
 }
 
 function correr(
