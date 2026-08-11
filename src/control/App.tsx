@@ -7,9 +7,11 @@ import Songs from './pages/Songs'
 import Bible from './pages/Bible'
 import Media from './pages/Media'
 import Audio from './pages/Audio'
+import Escucha from './pages/Escucha'
 import Downloads from './pages/Downloads'
 import Settings from './pages/Settings'
 import BarraAlAire from './components/BarraAlAire'
+import IndicadorEscucha from './components/IndicadorEscucha'
 import QuickActions from './components/QuickActions'
 import MiniPlayer from './components/audio/MiniPlayer'
 import { useProjectionBridge } from './hooks/useProjectionBridge'
@@ -45,6 +47,7 @@ const navItems = [
   { to: '/bible', label: 'Biblia' },
   { to: '/media', label: 'Media' },
   { to: '/audio', label: 'Audio' },
+  { to: '/escucha', label: 'Escucha' },
   { to: '/downloads', label: 'Descargar' },
   { to: '/settings', label: 'Ajustes' }
 ]
@@ -67,6 +70,7 @@ function SeccionesConRed() {
         <Route path="/bible" element={<Bible />} />
         <Route path="/media" element={<Media />} />
         <Route path="/audio" element={<Audio />} />
+        <Route path="/escucha" element={<Escucha />} />
         <Route path="/downloads" element={<Downloads />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
@@ -112,6 +116,9 @@ export default function App() {
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
+            {/* Que la app esté tomando audio tiene que verse desde cualquier
+                sección, no sólo desde la de Escucha. */}
+            <IndicadorEscucha />
             <QuickActions />
             <span className="h-5 w-px bg-cabina-linea" />
             <button

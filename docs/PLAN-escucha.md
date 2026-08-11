@@ -205,7 +205,8 @@ contra voz de verdad — ver "Verificación" más abajo.
 puerta por energía + IPC. Verificada sobre la app corriendo con un dispositivo de audio
 falso — ver "Verificación".
 
-**Fase 4 — la sección Escucha** y el enganche con proyección.
+**Fase 4 — HECHA.** La sección Escucha, el indicador en la cabecera y el enganche con
+proyección (lookup + `showBibleVerse` + historial).
 
 Cada fase se puede parar y dejar andando lo anterior.
 
@@ -229,15 +230,18 @@ Cada fase se puede parar y dejar andando lo anterior.
 - `electron/ipc/escucha.ts` — canales ✅
 - `src/control/audio/capturaVoz.ts` — getUserMedia + worklet a 16 kHz ✅
 - `src/shared/store/escuchaStore.ts` — estado de escucha y sugerencias ✅
-- `src/control/pages/Escucha.tsx` — la sección
+- `src/control/pages/Escucha.tsx` — la sección ✅
+- `src/control/components/IndicadorEscucha.tsx` — el aviso de la cabecera ✅
+- `tests/ui/escucha.test.tsx` — que la pantalla no proyecte sola ✅
 
 **Modificados**
 - `src/shared/constants.ts` — canales IPC ✅
 - `electron/preload/control.ts` + `src/shared/types/electronAPI.d.ts` — API ✅
 - `electron/main.ts` — registrar handlers + `dispose()` al cerrar ✅
-- `src/shared/types/ipc.ts` — `AppSettings`: modelo de whisper ✅ (el dispositivo de
-  entrada queda para la fase 4, que es donde se elige)
-- `src/control/App.tsx` — import + `navItems` + `<Route>` (las tres ediciones de siempre)
+- `src/shared/types/ipc.ts` — `AppSettings`: modelo de whisper y dispositivo de entrada ✅
+- `src/control/App.tsx` — import + `navItems` + `<Route>` ✅ (y una cuarta edición que no
+  estaba prevista: el indicador de la cabecera)
+- `docs/USER_GUIDE.md` — la sección Escucha explicada para quien opera ✅
 
 ---
 
@@ -284,8 +288,18 @@ Cada fase se puede parar y dejar andando lo anterior.
    es el problema que se temía, al menos con el modelo `base`.
 
    Falta lo único que no se puede simular: la consola de sonido real y una voz humana.
-4. **Fase 4:** end-to-end por CDP — decir una referencia, ver la sugerencia, clic,
-   y confirmar en la ventana de proyección que salió el versículo correcto.
+4. **Fase 4 — hecha.** End-to-end por CDP manejando la interfaz como el operador (clics y
+   lectura del DOM, sin tocar ningún store): ir a Escucha → apretar Escuchar → esperar →
+   clic en Proyectar → leer la ventana de proyección. Salió:
+
+   ```
+   [8s]  sugerencias: Juan 3:16
+   [16s] sugerencias: 1 Corintios 13, Juan 3:16
+   [22s] sugerencias: Salmos 23, 1 Corintios 13, Juan 3:16
+   proyección → «Salmo de David. JEHOVÁ es mi pastor; nada me faltará. Salmos 23:1 · RVR1909»
+   ```
+
+   Y el indicador de la cabecera aparece al escuchar y se apaga al detener.
 5. `npm run typecheck && npm run lint && npm run build` en cada fase.
 
 ---

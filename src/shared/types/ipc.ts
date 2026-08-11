@@ -126,4 +126,9 @@ export interface AppSettings {
    * bajar otro archivo de cientos de MB: es una decisión, no un botón.
    */
   escuchaModelo: WhisperModelId | null
+  /**
+   * `deviceId` de la entrada de audio que usa la Escucha (la salida de la
+   * consola de sonido). `null` = la entrada por defecto de Windows.
+   */
+  escuchaDispositivoId: string | null
 }

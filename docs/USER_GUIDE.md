@@ -94,6 +94,21 @@ Podés agrupar canciones en **álbumes** para el repertorio del servicio (el des
 - Si reproducís desde una playlist, al terminar cada tema sigue el próximo **de esa playlist**; la cola manual siempre tiene prioridad.
 - El **mini reproductor** (abajo, siempre visible): play/pausa, anterior/siguiente, stop con fade, seek y volumen. Al reabrir la app, retoma donde quedaste.
 
+## Escucha 👂
+
+Mientras el pastor predica, la app oye la entrada de audio y, cuando alguien nombra un pasaje, te lo deja listo para proyectar de un clic. **Nunca proyecta sola**: sugiere, y vos decidís.
+
+- **Elegí la entrada** que trae la voz del predicador. Lo que funciona de verdad es la **salida de la consola de sonido** (el micrófono inalámbrico ya pasa por ahí), no el micrófono de la notebook captando desde el fondo del salón.
+- Apretá **Escuchar**. El medidor te confirma que está entrando señal: si no se mueve, la consola no está llegando y no hay nada que transcribir.
+- Las citas aparecen **unos 7 u 8 segundos después** de que se nombran. No es un retraso que se pueda achicar mucho: el programa transcribe de a pedazos de 6 segundos.
+- Cada sugerencia muestra **el pedazo de lo que se oyó** que la originó, para que puedas juzgar si le creés. Con el lápiz corregís el capítulo o el versículo antes de proyectar.
+- Dos avisos distintos: *no se entendió bien* (el reconocedor dudó) y *se oyó cortada* (la frase quedó partida entre dos pedazos y al número puede faltarle un dígito — un "13" que llega como "3"). En los dos casos, confirmá antes de sacarlo.
+- Mientras escucha, la cabecera lo dice desde cualquier sección. Si no lo ves, no está tomando.
+
+**El audio no se guarda ni sale de tu máquina.** La transcripción la hace un programa que corre en la misma computadora, sin internet; cada pedazo de audio se borra apenas se transcribe, y al detener se descarta todo. La primera vez hay que bajar ese programa y su modelo (~150 MB), con el botón que aparece en la pantalla.
+
+Funciona mejor de lo que uno esperaría con nombres comunes, pero no es magia: los libros que también son palabras corrientes (Hechos, Números, Reyes) sólo se sugieren cuando el contexto es claro, justamente para no llenarte la lista de falsas alarmas en vivo.
+
 ## Descargar 📥
 
 Pegás el enlace de un video, elegís **Video** o **MP3**, y listo. El video cae en tu carpeta de media y el MP3 en la de audio, así que aparecen solos en esas secciones sin mover nada.

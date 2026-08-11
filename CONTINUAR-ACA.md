@@ -14,7 +14,7 @@ y Linux solo, al recibir el tag).
 La app es un **proyector para iglesia**: dos ventanas Electron (control + proyección),
 React + TypeScript. `npm run dev` para levantarla.
 
-**280 tests**, typecheck, lint y build en verde. Verificar siempre con:
+**292 tests**, typecheck, lint y build en verde. Verificar siempre con:
 
 ```bash
 npm run typecheck && npm run lint && npm test && npm run build
@@ -36,10 +36,14 @@ npm run typecheck && npm run lint && npm test && npm run build
 
 ### Lo que se hizo en esta sesión
 
-**Escucha fases 2 y 3.** La app baja whisper, escucha por la entrada de audio, transcribe
-en vivo y arma la lista de citas detectadas. Falta ponerle pantalla (fase 4).
+**Escucha, fases 2, 3 y 4: el módulo está terminado y usable.** La app baja whisper, oye la
+entrada de audio, transcribe en vivo, ofrece las citas que se nombraron y las proyecta de un
+clic. Todo se verificó sobre la app corriendo, no sólo con tests.
 
-Las dos fases se verificaron sobre la app corriendo, no sólo con tests.
+Lo que falta es lo único que no se puede simular desde acá: **probarlo con la consola de
+sonido real y una voz humana**, un domingo. De esa prueba van a salir dos números que hoy
+son suposiciones: el `UMBRAL_VOZ` de la puerta por energía (hoy 0,008, elegido sobre voz
+sintetizada) y si el modelo `base` alcanza o hay que pasar a `small`.
 
 ---
 
@@ -199,24 +203,40 @@ y se resuelve desde la sección Biblia.
 No hay `setPermissionRequestHandler` en ningún lado, así que Electron concede el micrófono
 por defecto. `backgroundThrottling: false` ya está puesto en la ventana de control.
 
-### Fase 4 — SIGUIENTE: la sección Escucha
+### Fase 4 — HECHA ✅
 
-`src/control/pages/Escucha.tsx`. Para agregar una sección hacen falta **tres** ediciones en
-`src/control/App.tsx`: el import, la entrada en `navItems`, y el `<Route>` dentro de
-`SeccionesConRed`. Al hacerlo, sacar el hook `window.__escucha` o dejarlo (sirve igual para
-manejar la Escucha por CDP cuando haya que probar).
+`src/control/pages/Escucha.tsx` + `components/IndicadorEscucha.tsx`. Selector de entrada,
+medidor de nivel con la marca del umbral, botón grande, lista de sugerencias con corrección
+del número y proyección de un clic, panel plegable con la transcripción cruda, e instalación
+de whisper desde la misma pantalla si falta.
 
-Lo que falta, y ya tiene todo lo que necesita abajo:
-- Selector de entrada de audio (`entradasDeAudio()`) y **medidor de nivel** (`store.nivel`,
-  que ya se actualiza ~8 veces por segundo). El medidor no es decorativo: es la única forma
-  de que el operador sepa que la consola está entrando.
-- Botón grande Escuchar/Detener → `iniciarEscucha()` / `detenerEscucha()`.
-- Lista de sugerencias (`store.sugerencias`, ya deduplicadas y en orden del sermón), con
-  `lookup` + `showBibleVerse` al hacer clic. **Nunca proyectar solo.**
-- Panel plegable con `store.ventanas` (la transcripción cruda) para entender por qué algo
-  apareció o no.
-- Guardar el dispositivo elegido en `AppSettings` (hoy sólo está `escuchaModelo`).
-- Si falta whisper, ofrecer `installEscucha()` con el avance de `onEscuchaProgress`.
+`App.tsx` necesitó **cuatro** ediciones, no tres: import, `navItems`, `<Route>` y el
+indicador de la cabecera.
+
+**Verificado manejando la interfaz por CDP** (clics y lectura del DOM, sin tocar ningún
+store): Juan 3:16 a los 8 s, 1 Corintios 13 a los 16 s, Salmos 23 a los 22 s; clic en
+Proyectar y la ventana de proyección mostrando «Salmo de David. JEHOVÁ es mi pastor…
+Salmos 23:1 · RVR1909». El indicador de la cabecera prende y apaga.
+
+**Dos señales distintas en cada sugerencia**, y no hay que confundirlas:
+- *no se entendió bien* → `confianza < 0.6`: el reconocedor dudó del libro o del número.
+- *se oyó cortada* → `cortada`: la cita cayó pegada al borde de todas las ventanas donde
+  apareció, así que puede faltarle un dígito. **Esto salió de la prueba en vivo**: una
+  ventana terminó en "…primera de Corintios capítulo 3." cuando el audio decía "capítulo 13",
+  y la sugerencia salía indistinguible de una buena.
+
+  El primer intento fue bajarle la confianza, y estuvo mal: Juan 3:16 —transcrito
+  perfecto— aparecía en gris como "no se entendió". Son dos cosas distintas y se dicen por
+  separado. Si la cita se oye entera en cualquier ventana posterior, deja de estar cortada
+  (para eso está el solape).
+
+**El hook `window.__escucha` sigue estando** (sólo fuera de modo production): ahora que hay
+pantalla ya no es imprescindible, pero sirve para manejar la Escucha por CDP sin depender de
+los textos de los botones.
+
+**Ojo al manejar la app por CDP**: hay **dos botones "Detener"** —el de la cabecera es el
+paro de pánico— así que hay que acotar la búsqueda a `main`. Perdí un rato creyendo que era
+un bug de la app.
 
 ---
 

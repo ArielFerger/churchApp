@@ -16,7 +16,8 @@ const defaults: AppSettings = {
   videoFadeOut: false,
   videoFadeInSec: 1,
   videoFadeOutSec: 2.5,
-  escuchaModelo: null
+  escuchaModelo: null,
+  escuchaDispositivoId: null
 }
 
 interface Schema {
