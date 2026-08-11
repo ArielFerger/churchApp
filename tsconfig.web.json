@@ -19,5 +19,7 @@
       "@/styles/*": ["src/styles/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"]
+  // `tests/ui` son los tests que tocan código de renderer: van con el proyecto
+  // web, que es el que sabe resolver React y los alias de src/.
+  "include": ["src/**/*.ts", "src/**/*.tsx", "tests/ui/**/*.ts", "tests/ui/**/*.tsx"]
 }

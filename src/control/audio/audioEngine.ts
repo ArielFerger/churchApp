@@ -28,6 +28,8 @@ export class AudioEngine {
   private targetVolume = 0.8
   private fadingOut = false
   private tickHandle: number | null = null
+  /** Fade-out en curso, para poder cancelarlo si el operador cambia de idea. */
+  private fadeHandle: number | null = null
   private listeners = new Set<Listener>()
   private endedListeners = new Set<() => void>()
 
@@ -79,8 +81,11 @@ export class AudioEngine {
    */
   async play(track: AudioTrack, startPosition = 0): Promise<void> {
     if (this.current?.id === track.id && this.howl) {
-      // Resume the same track
+      // Resume the same track. Si venía apagándose, se aborta el fade: sin
+      // esto el timeout lo frenaba igual justo después de reanudarlo.
+      this.cancelFade()
       if (!this.howl.playing()) this.howl.play()
+      this.howl.volume(this.targetVolume)
       this.fadingOut = false
       this.howl.volume(this.targetVolume)
       this.startTicking()
@@ -92,6 +97,10 @@ export class AudioEngine {
   }
 
   private loadTrack(track: AudioTrack, startPosition: number, autoplay: boolean): void {
+    // Cambiar de tema anula cualquier fade-out pendiente del anterior.
+    this.cancelFade()
+    this.fadingOut = false
+
     // Different track — stop current then load
     if (this.howl) {
       this.howl.stop()
@@ -154,16 +163,31 @@ export class AudioEngine {
    */
   stopWithFade(): void {
     if (!this.howl) return
+    // Se guarda a QUIÉN estamos apagando: si en el medio del fade el operador
+    // arranca otro tema, `this.howl` ya es el nuevo y el timeout terminaba
+    // deteniéndolo solo, un segundo después de haberlo puesto.
+    const objetivo = this.howl
     this.fadingOut = true
     this.emit()
-    this.howl.fade(this.howl.volume(), 0, FADE_OUT_MS)
-    setTimeout(() => {
-      if (!this.howl) return
-      this.howl.stop()
-      this.howl.volume(this.targetVolume)
+    objetivo.fade(objetivo.volume(), 0, FADE_OUT_MS)
+
+    this.cancelFade()
+    this.fadeHandle = window.setTimeout(() => {
+      this.fadeHandle = null
+      if (this.howl !== objetivo) return // ya lo reemplazaron: no es asunto nuestro
+      objetivo.stop()
+      objetivo.volume(this.targetVolume)
       this.fadingOut = false
       this.emit()
     }, FADE_OUT_MS + 30)
+  }
+
+  /** Corta un fade-out pendiente. */
+  private cancelFade(): void {
+    if (this.fadeHandle !== null) {
+      window.clearTimeout(this.fadeHandle)
+      this.fadeHandle = null
+    }
   }
 
   seek(position: number): void {
@@ -191,6 +215,7 @@ export class AudioEngine {
 
   dispose(): void {
     this.stopTicking()
+    this.cancelFade()
     if (this.howl) {
       this.howl.unload()
       this.howl = null
