@@ -24,7 +24,8 @@ const DEFAULTS: AppSettings = {
   videoFadeIn: true,
   videoFadeOut: false,
   videoFadeInSec: 1,
-  videoFadeOutSec: 2.5
+  videoFadeOutSec: 2.5,
+  escuchaModelo: null
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({

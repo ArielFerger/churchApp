@@ -1,3 +1,5 @@
+import type { WhisperModelId } from '../utils/whisper'
+
 export type Transition = 'fade' | 'cut'
 
 /**
@@ -118,4 +120,10 @@ export interface AppSettings {
   videoFadeInSec: number
   /** Fade-out duration in seconds (max 10). */
   videoFadeOutSec: number
+  /**
+   * Modelo de whisper que usa la Escucha para transcribir. `null` = el
+   * recomendado. Se guarda acá y no en el módulo porque cambiarlo obliga a
+   * bajar otro archivo de cientos de MB: es una decisión, no un botón.
+   */
+  escuchaModelo: WhisperModelId | null
 }

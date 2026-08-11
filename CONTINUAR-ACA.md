@@ -1,7 +1,6 @@
 # Continuar acá
 
-Estado al **1 de agosto de 2026**. Rama **`feat/media-organizacion`**, todo pusheado a
-`origin` (sin cambios sin commitear). Último commit: `a4c2ba2`.
+Estado al **11 de agosto de 2026**. Rama **`feat/media-organizacion`**.
 
 > Leé este archivo antes de tocar nada.
 
@@ -15,7 +14,7 @@ y Linux solo, al recibir el tag).
 La app es un **proyector para iglesia**: dos ventanas Electron (control + proyección),
 React + TypeScript. `npm run dev` para levantarla.
 
-**226 tests**, typecheck, lint y build en verde. Verificar siempre con:
+**253 tests**, typecheck, lint y build en verde. Verificar siempre con:
 
 ```bash
 npm run typecheck && npm run lint && npm test && npm run build
@@ -34,6 +33,11 @@ npm run typecheck && npm run lint && npm test && npm run build
 | `4945bfc` | ErrorBoundary en la ventana de control + fade-out que frenaba el tema equivocado |
 | `901f65c` | Diseño unificado bajo dirección "cabina" |
 | `a4c2ba2` | **Escucha fase 1**: detector de citas bíblicas habladas |
+
+### Lo que se hizo en esta sesión
+
+**Escucha fase 2: whisper como herramienta.** La app ya baja whisper.cpp y su modelo,
+y transcribe. Verificado de verdad, no sólo con tests unitarios.
 
 ---
 
@@ -89,24 +93,69 @@ rango, una de capítulo entero), fusiona la repartida en dos ventanas, y **no di
    para numerar el libro ya resuelto — eso buscaba `"11 Corintios"`. Acertaba de rebote con
    confianza 0.62 en vez de 1.
 
-### Fase 2 — SIGUIENTE: whisper como herramienta
+### Fase 2 — HECHA ✅
 
-Copiar el patrón de `electron/services/downloadsService.ts`, que ya baja yt-dlp y ffmpeg de
-releases de GitHub: `resolveTools()` busca en varias carpetas + PATH, `installTools()` baja
-con escritura atómica y progreso por IPC.
+`src/shared/utils/whisper.ts` (puro) + `electron/services/escuchaService.ts` +
+`electron/services/toolsPaths.ts`. 26 tests nuevos.
 
-- Binario: `whisper-cli.exe` de whisper.cpp
-- Modelo: `ggml-base` (~148 MB) para arrancar; `ggml-small` (~466 MB) como opción
-- **Va a `D:`** — el `C:` del usuario está al 88%
-- Ya hay herramientas en `D:\churchAPP\tools\` (yt-dlp.exe, ffmpeg.exe, ffprobe.exe)
-- Verificación: transcribir un WAV grabado a propósito con tres referencias
+```ts
+resolveWhisper()                  // { binPath, modelo, modelPath, instalados, searched }
+queFalta(estado?)                 // texto para el operador, o null si está todo
+installWhisper(onProgress, id?)   // baja binario + modelo, atómico y con avance
+transcribirWav(wav, opciones?)    // → { texto, ms, modelo }
+dispose()                         // mata lo que quede corriendo
+```
 
-### Fase 3 — captura en vivo
+Ya está instalado en esta máquina: `D:\churchAPP\tools\whisper\whisper-cli.exe` y
+`D:\churchAPP\tools\whisper\modelos\ggml-base.bin`. Están **fuera del repo**, no hace falta
+volver a bajarlos.
+
+**Verificación real** (transcribió voz castellana sintetizada y el detector de la fase 1
+sacó las tres citas correctas):
+
+```bash
+WHISPER_E2E=1 npx vitest run tests/whisperE2E.test.ts
+```
+
+Ese test está apagado por defecto: baja 150 MB si faltan y tarda un minuto. El detalle de
+lo que salió está en `docs/PLAN-escucha.md`, sección Verificación.
+
+**Números medidos** (modelo `base`, 6 hilos, sin video corriendo):
+- **1,2 s** por ventana de 6 s → ~7,2 s de latencia total, dentro de lo estimado.
+- Falta medirlo **con la proyección al aire**, que es lo que importa.
+
+**Lo que se aprendió, y cambia decisiones de la fase 3:**
+1. **Whisper nunca contesta vacío.** Seis segundos de silencio devuelven `[MÚSICA]`; seis de
+   ruido, `(Cantando)`. `parseTranscripcion` los tira, pero la ventana igual se transcribió
+   y gastó CPU: la puerta por energía (VAD) antes de mandarla no es opcional.
+2. **Escribe los números en dígitos** ("capítulo 3"), no en palabras. El detector ya los
+   lee, pero significa que toda la maquinaria de `leerNumero` con palabras se usa menos de
+   lo esperado en la vida real.
+3. **Se come letras al principio de la frase** ("Habramos" por "abramos"). Lo absorbe el
+   matching difuso mientras el error no caiga sobre el nombre del libro.
+
+**Dos cosas del diseño que no son obvias:**
+- Whisper **no es un ejecutable suelto** como yt-dlp: necesita sus DLL al lado. Por eso vive
+  en su propia carpeta y el instalador sube el contenido de la carpeta donde aparezca el
+  ejecutable, en vez de mover sólo el `.exe` (el zip cambió de forma entre versiones).
+- Se le manda un **prompt con vocabulario bíblico** (`PROMPT_BIBLICO`) para que escriba bien
+  los nombres propios. En la prueba sólo corrigió acentos y no costó latencia; el beneficio
+  grande, si lo hay, se va a ver con libros raros (Habacuc, Sofonías).
+
+### Fase 3 — SIGUIENTE: captura en vivo
 
 getUserMedia con el dispositivo elegido → AudioWorklet a 16 kHz mono → ventanas de ~6 s con
 ~1,5 s de solapamiento → PCM16 por IPC al main → WAV temporal → whisper → texto de vuelta.
 
-Latencia estimada ~8 s. **Medirla de verdad**, no asumirla.
+Del lado del main ya está todo: `transcribirWav()` espera exactamente ese formato (16 kHz,
+mono, 16 bits) y devuelve el texto. Lo que falta es la captura, el troceo, el WAV temporal
+y el IPC (`electron/ipc/escucha.ts`, que todavía no existe).
+
+**Antes de mandar cada ventana, la puerta por energía**: whisper nunca contesta vacío (ver
+fase 2), así que sin VAD la app va a transcribir silencio todo el tiempo al pedo.
+
+Latencia esperada ~7,2 s (6 s de ventana + 1,2 s medido). **Medirla otra vez con un video
+proyectándose**, que es cuando whisper compite por la CPU.
 
 No hay `setPermissionRequestHandler` en ningún lado, así que Electron concede el micrófono
 por defecto. `backgroundThrottling: false` ya está puesto en la ventana de control.
@@ -150,6 +199,9 @@ un cliente CDP de 60 líneas, fácil de rehacer.
   nuevo puede usarlo.
 - **`fil` resuelve a Filemón**, no a Filipenses (colisión de abreviaturas en
   `bibleBooks.ts`).
+- **El repo no está formateado con Prettier.** `npm run format` sobre todo reescribiría
+  media docena de archivos que nadie tocó y ensuciaría el diff. Formateá sólo lo que
+  escribís. Lo que CI mira es `npm run lint`, que sí pasa.
 
 ### Tests
 

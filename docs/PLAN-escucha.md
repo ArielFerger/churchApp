@@ -60,6 +60,10 @@ con ~1,5 s de solapamiento (para no cortar palabras al medio). Latencia total es
 aceptable para el caso de uso: entre que el pastor anuncia el pasaje y la gente lo busca
 pasan 15-20 s.
 
+> **Medido en la fase 2** (modelo `base`, 6 hilos, máquina del usuario, sin video
+> corriendo): **1,2 s** por ventana de 6 s — o sea ~7,2 s de latencia total, dentro de lo
+> estimado. Falta medirlo otra vez con la proyección al aire, que es la prueba que importa.
+
 ---
 
 ## Arquitectura
@@ -189,12 +193,13 @@ micrófono está tomando.
 
 ## Fases
 
-**Fase 1 — el detector, sin micrófono ni modelo.** `escuchaBiblica.ts` completo con su
-batería de tests sobre frases reales de predicación. Es el grueso de la innovación y se
-verifica entero con `npm test`. Si el detector no es bueno, no vale la pena seguir.
+**Fase 1 — HECHA.** El detector, sin micrófono ni modelo: `escuchaBiblica.ts` completo con
+su batería de tests sobre frases reales de predicación. Es el grueso de la innovación y se
+verifica entero con `npm test`.
 
-**Fase 2 — whisper como herramienta.** Extender el patrón de `downloadsService`: detectar/
-bajar `whisper-cli.exe` + modelo, y transcribir un WAV de prueba de punta a punta.
+**Fase 2 — HECHA.** whisper como herramienta: `whisper.ts` (puro) + `escuchaService.ts`
+bajan `whisper-cli.exe` y el modelo, y transcriben un WAV. Verificado de punta a punta
+contra voz de verdad — ver "Verificación" más abajo.
 
 **Fase 3 — captura en vivo.** getUserMedia + worklet + troceo con solapamiento + IPC.
 
@@ -207,9 +212,13 @@ Cada fase se puede parar y dejar andando lo anterior.
 ## Archivos
 
 **Nuevos**
-- `src/shared/utils/escuchaBiblica.ts` — el detector (puro)
-- `tests/escuchaBiblica.test.ts` — batería sobre frases de predicación
-- `electron/services/escuchaService.ts` — whisper: resolver binario, trocear, transcribir
+- `src/shared/utils/escuchaBiblica.ts` — el detector (puro) ✅
+- `tests/escuchaBiblica.test.ts` — batería sobre frases de predicación ✅
+- `src/shared/utils/whisper.ts` — modelos, argumentos y parseo de la salida (puro) ✅
+- `electron/services/toolsPaths.ts` — lo común a las herramientas externas ✅
+- `electron/services/escuchaService.ts` — whisper: resolver binario, bajar, transcribir ✅
+- `tests/whisper.test.ts`, `tests/escuchaService.test.ts` ✅
+- `tests/whisperE2E.test.ts` — punta a punta, apagado salvo que se pida ✅
 - `electron/ipc/escucha.ts` — canales
 - `src/control/pages/Escucha.tsx` — la sección
 - `src/control/audio/capturaVoz.ts` — getUserMedia + downsample a 16 kHz
@@ -228,8 +237,27 @@ Cada fase se puede parar y dejar andando lo anterior.
 
 1. **Fase 1:** `npm test` — el detector contra frases reales, incluyendo los casos
    ambiguos ("los hechos de ese hombre" NO debe disparar Hechos).
-2. **Fase 2:** transcribir un WAV grabado a propósito diciendo tres referencias, y
-   comprobar que salen las tres.
+2. **Fase 2 — hecha.** `WHISPER_E2E=1 npx vitest run tests/whisperE2E.test.ts` sintetiza un
+   sermón de 23 s con la voz castellana de Windows, lo transcribe con el modelo `base` y le
+   pasa el resultado al detector de la fase 1. Salió:
+
+   > «Buenos días, hermanos. **Habramos** nuestras Biblias en **Juan capítulo 3 versículo
+   > 16**. ¿Por qué de tal manera amodió Salmundo? Y ahora vamos a **primera de Corintios
+   > capítulo 13**, donde Pablo nos habla del amor. Terminamos leyendo el **Salmo 23**. El
+   > Seinio Ures mi pastor, nada me faltara.»
+
+   → `JHN 3:16` (1.0), `1CO 13` (1.0), `PSA 23` (0.95). Las tres, y ninguna de más.
+
+   Dos cosas que enseñó y que hay que tener presentes:
+   - **Whisper escribe los números en dígitos**, no en palabras ("capítulo 3"). El detector
+     ya los lee, pero significa que los casos de `leerNumero` con palabras se ejercitan
+     menos de lo que uno supondría en la vida real.
+   - **Se come letras al principio** ("Habramos" por "abramos", "Seinio Ures" por "Señor
+     es"). El matching difuso lo absorbe mientras el error no caiga sobre el nombre del
+     libro.
+
+   Es una voz sintética: prueba que la cañería anda, no cuánta precisión va a haber el
+   domingo. Eso se mide en la fase 3.
 3. **Fase 3:** con la consola conectada, hablar al micrófono y ver la transcripción
    aparecer; medir la latencia real contra los 8 s estimados.
 4. **Fase 4:** end-to-end por CDP — decir una referencia, ver la sugerencia, clic,
@@ -240,8 +268,11 @@ Cada fase se puede parar y dejar andando lo anterior.
 
 ## Lo que puede salir mal
 
-- **Whisper alucina sobre silencio** — inventa texto cuando no hay voz. Mitigación: puerta
-  por energía (VAD simple) antes de mandar la ventana a transcribir.
+- **Whisper alucina sobre silencio** — **confirmado en la fase 2**: seis segundos de
+  silencio devuelven `[MÚSICA]`, y seis de ruido de fondo, `(Cantando)`. Nunca contesta
+  vacío. `parseTranscripcion` tira esas anotaciones, pero eso no alcanza: la ventana igual
+  se transcribió y gastó CPU. Falta la puerta por energía (VAD simple) antes de mandarla,
+  que es trabajo de la fase 3.
 - **CPU** — whisper compite con la decodificación de video de la proyección. Con el modelo
   `base` debería andar, pero hay que medirlo con un video corriendo. El interruptor de
   apagado es la válvula de escape.
