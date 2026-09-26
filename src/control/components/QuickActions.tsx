@@ -7,44 +7,51 @@ function send(cmd: ProjectionCommand) {
 }
 
 /**
- * Always-visible projection controls, mounted in the app header so they're one
- * click away from any tab. "Detener todo" mirrors the Esc panic-stop.
+ * Controles de proyección siempre visibles, en la cabecera: a un clic desde
+ * cualquier sección. "Detener" es la misma parada de pánico que Esc.
+ *
+ * En ventanas angostas quedan sólo los íconos (con su nombre accesible): son
+ * los botones que no pueden desaparecer nunca.
  */
 export default function QuickActions() {
   const { isLive, isBlackout } = useLiveStore()
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5" role="group" aria-label="Controles de la proyección">
       <button
         type="button"
         onClick={() => send({ type: 'stopAll' })}
-        className="inline-flex items-center gap-1.5 rounded-md bg-red-600/90 px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-600"
+        className="inline-flex items-center gap-1.5 rounded-md bg-aire px-2.5 py-1.5 text-xs font-semibold text-white transition-[filter] hover:brightness-110"
         title="Detener todo (Esc) — corta contenido, fondo y presentaciones"
+        aria-label="Detener todo"
+        aria-keyshortcuts="Escape"
       >
-        <CircleStop className="h-3.5 w-3.5" />
-        Detener
+        <CircleStop className="h-3.5 w-3.5" aria-hidden />
+        <span className="hidden md:inline">Detener</span>
       </button>
 
       <button
         type="button"
         onClick={() => send({ type: 'blackout' })}
         disabled={isBlackout}
-        className="inline-flex items-center gap-1.5 rounded-md bg-slate-800 px-2.5 py-1.5 text-xs text-slate-100 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+        className="inline-flex items-center gap-1.5 rounded-md border border-cabina-linea bg-cabina-alto px-2.5 py-1.5 text-xs text-cabina-tinta transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
         title="Blackout — tapa la proyección con negro"
+        aria-label="Blackout"
       >
-        <EyeOff className="h-3.5 w-3.5" />
-        Blackout
+        <EyeOff className="h-3.5 w-3.5" aria-hidden />
+        <span className="hidden md:inline">Blackout</span>
       </button>
 
       <button
         type="button"
         onClick={() => send({ type: 'clear' })}
         disabled={!isLive}
-        className="inline-flex items-center gap-1.5 rounded-md bg-slate-800 px-2.5 py-1.5 text-xs text-slate-100 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-        title="Clear — saca el contenido actual"
+        className="inline-flex items-center gap-1.5 rounded-md border border-cabina-linea bg-cabina-alto px-2.5 py-1.5 text-xs text-cabina-tinta transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+        title="Limpiar — saca el contenido actual"
+        aria-label="Limpiar la pantalla"
       >
-        <Power className="h-3.5 w-3.5" />
-        Clear
+        <Power className="h-3.5 w-3.5" aria-hidden />
+        <span className="hidden md:inline">Limpiar</span>
       </button>
     </div>
   )

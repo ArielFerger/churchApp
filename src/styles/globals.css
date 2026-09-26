@@ -8,8 +8,7 @@
   }
 
   body {
-    @apply bg-slate-900 text-slate-100 antialiased;
-    font-family: 'Inter', system-ui, sans-serif;
+    @apply bg-slate-900 font-sans text-slate-100 antialiased;
   }
 }
 
@@ -31,6 +30,11 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
   cursor: pointer;
   margin-top: 0; /* track is centered via flex */
+  transition: transform 120ms ease;
+}
+.seek-range:hover::-webkit-slider-thumb,
+.seek-range:focus-visible::-webkit-slider-thumb {
+  transform: scale(1.15);
 }
 .seek-range::-moz-range-thumb {
   width: 14px;

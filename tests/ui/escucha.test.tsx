@@ -20,17 +20,23 @@ vi.mock('../../src/control/audio/capturaVoz', () => ({
   ]
 }))
 
-const iniciarEscucha = vi.fn(async (_deviceId?: string | null) => {})
+const iniciarEscucha = vi.fn(async (_o?: { deviceId?: string | null; sensibilidad?: number }) => {})
 const detenerEscucha = vi.fn(async () => {})
 vi.mock('../../src/control/audio/escuchaEnVivo', () => ({
-  iniciarEscucha: (id?: string | null) => iniciarEscucha(id),
-  detenerEscucha: () => detenerEscucha()
+  iniciarEscucha: (o?: { deviceId?: string | null; sensibilidad?: number }) => iniciarEscucha(o),
+  detenerEscucha: () => detenerEscucha(),
+  cambiarSensibilidad: () => {}
 }))
 
 let enviados: ProjectionCommand[] = []
 let versiculoExiste = true
 
-const NOMBRES: Record<string, string> = { JHN: 'Juan', '1CO': '1 Corintios', PSA: 'Salmos' }
+const NOMBRES: Record<string, string> = {
+  JHN: 'Juan',
+  '1CO': '1 Corintios',
+  PSA: 'Salmos',
+  ROM: 'Romanos'
+}
 
 const RESULTADO = {
   version: { version: 'RVR1909', name: 'Reina Valera', language: 'es', bookCount: 66 },
@@ -51,14 +57,21 @@ beforeEach(() => {
   window.electronAPI = {
     getEscuchaStatus: async () => ({
       binPath: 'C:/tools/whisper-cli.exe',
+      serverPath: 'C:/tools/whisper-server.exe',
       modelo: 'base',
       modelPath: 'C:/tools/ggml-base.bin',
       instalados: ['base'],
       searched: [],
+      instalable: true,
       falta: null,
-      descartadas: 0
+      descartadas: 0,
+      motor: 'servidor',
+      servidor: 'apagado',
+      errorServidor: null
     }),
     onEscuchaProgress: () => () => {},
+    onEscuchaStatus: () => () => {},
+    getBibleBookStats: async () => ({}),
     getBibleVersions: async () => [RESULTADO.version],
     // Devuelve lo que le piden, como haría la Biblia de verdad: si el mock
     // contestara siempre el mismo libro, un error de la pantalla al armar la
@@ -162,5 +175,38 @@ describe('sección Escucha', () => {
     render(<Escucha />)
     fireEvent.click(await screen.findByRole('button', { name: /Escuchar/ }))
     expect(iniciarEscucha).toHaveBeenCalledTimes(1)
+  })
+
+  it('muestra el texto del versículo para confirmarlo antes de proyectar', async () => {
+    oyó('abramos en Juan 3:16')
+    render(<Escucha />)
+    expect(await screen.findByText(/Porque de tal manera amó Dios/)).toBeTruthy()
+    expect(enviados).toHaveLength(0)
+  })
+
+  it('Ctrl+Enter proyecta la más nueva, y sólo con Ctrl', async () => {
+    oyó('abramos en Juan 3:16')
+    oyó('y ahora vamos a Romanos 8:28')
+    render(<Escucha />)
+    await screen.findByRole('listitem', { name: 'Romanos 8:28' })
+
+    fireEvent.keyDown(window, { key: 'Enter' })
+    expect(enviados).toHaveLength(0)
+
+    fireEvent.keyDown(window, { key: 'Enter', ctrlKey: true })
+    await waitFor(() => expect(enviados).toHaveLength(1))
+    expect(enviados[0]).toMatchObject({ reference: 'Romanos 8:28' })
+  })
+
+  it('después de proyectar, "Siguiente" avanza un versículo', async () => {
+    oyó('abramos en Juan 3:16')
+    render(<Escucha />)
+    await screen.findByRole('listitem', { name: 'Juan 3:16' })
+    fireEvent.click(screen.getByRole('button', { name: /Proyectar/ }))
+    await waitFor(() => expect(enviados).toHaveLength(1))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Versículo siguiente' }))
+    await waitFor(() => expect(enviados).toHaveLength(2))
+    expect(enviados[1]).toMatchObject({ reference: 'Juan 3:17' })
   })
 })
