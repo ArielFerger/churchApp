@@ -12,7 +12,12 @@ import type { BibleBook } from '../../src/shared/types/bible'
 import type { AudioTrack, AudioPlaylist } from '../../src/shared/types/audio'
 import type { BibleFont } from '../../src/shared/types/fonts'
 import type { DownloadJob, DownloadOptions } from '../../src/shared/utils/downloads'
-import type { ToolStatus as DownloadTools } from '../services/downloadsService'
+import type {
+  AppInfo,
+  CarpetaAbrible,
+  DownloadTools,
+  ToolsUpdateResult
+} from '../../src/shared/types/electronAPI'
 import type { EscuchaStatus, Transcripcion } from '../../src/shared/types/escucha'
 import type { WhisperModelId } from '../../src/shared/utils/whisper'
 
@@ -31,6 +36,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     options: Electron.OpenDialogOptions
   ): Promise<Electron.OpenDialogReturnValue> =>
     ipcRenderer.invoke(IPC_CHANNELS.SHOW_OPEN_DIALOG, options),
+
+  getAppInfo: (): Promise<AppInfo> => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_INFO),
+
+  openFolder: (cual: CarpetaAbrible): Promise<boolean> =>
+    ipcRenderer.invoke(IPC_CHANNELS.OPEN_FOLDER, cual),
 
   getMedia: (): Promise<MediaItem[]> => ipcRenderer.invoke(IPC_CHANNELS.GET_MEDIA),
 
@@ -197,6 +207,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   cancelDownload: (id: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.CANCEL_DOWNLOAD, id),
+
+  retryDownload: (id: string): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.RETRY_DOWNLOAD, id),
+
+  showDownloadInFolder: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SHOW_DOWNLOAD_IN_FOLDER, id),
+
+  updateYtDlp: (): Promise<ToolsUpdateResult> => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_YTDLP),
 
   removeDownload: (id: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.REMOVE_DOWNLOAD, id),

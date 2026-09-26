@@ -22,6 +22,32 @@ export interface DownloadTools {
   instalable: boolean
 }
 
+/** Versión y entorno, para la sección "Acerca de" y para pedir ayuda. */
+export interface AppInfo {
+  version: string
+  electron: string
+  chrome: string
+  node: string
+  /** `win32-x64`, `linux-arm64`… */
+  plataforma: string
+  sistema: string
+  /** Carpeta de datos de la app (userData). */
+  datos: string
+  /** Archivo del registro de errores. */
+  registro: string | null
+}
+
+/** Carpetas que la ventana puede pedir abrir, por nombre (nunca por ruta). */
+export type CarpetaAbrible =
+  | 'datos'
+  | 'registro'
+  | 'mediaFolder'
+  | 'audioFolder'
+  | 'songsFolder'
+  | 'liveLoopFolder'
+  | 'bibleBackgroundsFolder'
+  | 'toolsFolder'
+
 /** Resultado de actualizar yt-dlp. */
 export interface ToolsUpdateResult {
   ok: boolean
@@ -73,6 +99,9 @@ export interface ControlElectronAPI {
   showOpenDialog: (
     options: Electron.OpenDialogOptions
   ) => Promise<Electron.OpenDialogReturnValue>
+  getAppInfo: () => Promise<AppInfo>
+  /** Abre una carpeta en el explorador. `false` si no existe o no está configurada. */
+  openFolder: (cual: CarpetaAbrible) => Promise<boolean>
   getMedia: () => Promise<MediaItem[]>
   onMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
   getLiveMedia: () => Promise<MediaItem[]>

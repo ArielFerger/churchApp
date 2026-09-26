@@ -86,3 +86,13 @@
 .saltar-al-contenido:focus {
   top: 8px;
 }
+
+/* Red de seguridad: la ventana de control es una app, no un documento. El
+   scroll vive dentro de cada sección; el body nunca debería desplazarse (si
+   algo se sale de ancho, se corta en vez de sumar una barra a toda la app). */
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}

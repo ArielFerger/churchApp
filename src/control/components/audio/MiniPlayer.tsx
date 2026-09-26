@@ -47,7 +47,10 @@ export default function MiniPlayer() {
   }
 
   return (
-    <footer className="flex h-16 shrink-0 items-center gap-3 border-t border-slate-700 bg-slate-900/80 px-3 backdrop-blur">
+    <footer
+      className="flex h-16 shrink-0 items-center gap-3 border-t border-cabina-linea bg-cabina-panel px-3"
+      aria-label="Reproductor de música"
+    >
       {/* Track info */}
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-slate-800">
@@ -58,7 +61,7 @@ export default function MiniPlayer() {
               className="h-full w-full object-cover"
             />
           ) : (
-            <Music className="h-4 w-4 text-slate-600" />
+            <Music className="h-4 w-4 text-slate-600" aria-hidden />
           )}
         </div>
         <div className="min-w-0 flex-1">
@@ -72,7 +75,7 @@ export default function MiniPlayer() {
               </p>
             </>
           ) : (
-            <p className="text-xs text-slate-600">
+            <p className="truncate text-xs text-slate-500">
               {library.length === 0
                 ? 'No hay tracks cargados — configurá la carpeta de audio en Ajustes'
                 : 'Ningún track seleccionado'}
@@ -89,17 +92,23 @@ export default function MiniPlayer() {
           disabled={library.length === 0}
           className="rounded p-1.5 text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-30"
           title="Anterior"
+          aria-label="Tema anterior"
         >
-          <SkipBack className="h-4 w-4" />
+          <SkipBack className="h-4 w-4" aria-hidden />
         </button>
         <button
           type="button"
           onClick={onPlayPause}
           disabled={!track}
-          className="rounded-full bg-white p-2 text-slate-900 transition-colors hover:bg-slate-200 disabled:bg-slate-700 disabled:text-slate-500"
+          className="rounded-full bg-cabina-tinta p-2 text-cabina-negro transition-colors hover:bg-white disabled:bg-slate-700 disabled:text-slate-500"
           title={isPlaying ? 'Pausar' : 'Reproducir'}
+          aria-label={isPlaying ? 'Pausar la música' : 'Reproducir la música'}
         >
-          {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 pl-0.5" />}
+          {isPlaying ? (
+            <Pause className="h-4 w-4" aria-hidden />
+          ) : (
+            <Play className="h-4 w-4 pl-0.5" aria-hidden />
+          )}
         </button>
         <button
           type="button"
@@ -107,8 +116,9 @@ export default function MiniPlayer() {
           disabled={!isPlaying && !isFadingOut}
           className="rounded p-1.5 text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-30"
           title="Stop con fade-out"
+          aria-label="Detener la música con fundido"
         >
-          <Square className="h-4 w-4" />
+          <Square className="h-4 w-4" aria-hidden />
         </button>
         <button
           type="button"
@@ -116,18 +126,20 @@ export default function MiniPlayer() {
           disabled={library.length === 0}
           className="relative rounded p-1.5 text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-30"
           title={queue.length > 0 ? `Siguiente (${queue.length} en cola)` : 'Siguiente'}
+          aria-label={queue.length > 0 ? `Siguiente tema, ${queue.length} en cola` : 'Siguiente tema'}
         >
-          <SkipForward className="h-4 w-4" />
+          <SkipForward className="h-4 w-4" aria-hidden />
           {queue.length > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-blue-500 px-1 text-[9px] font-semibold text-white">
+            <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-listo px-1 text-[9px] font-semibold text-cabina-negro">
               {queue.length}
             </span>
           )}
         </button>
       </div>
 
-      {/* Progress + volume — fixed width so transport stays centered */}
-      <div className="flex w-80 shrink-0 items-center gap-3">
+      {/* Progreso + volumen: ancho fijo para que el transporte quede centrado,
+          más angosto en ventanas chicas. */}
+      <div className="flex w-52 shrink-0 items-center gap-3 lg:w-80">
         <ProgressBar position={position} duration={duration} onSeek={(p) => audioEngine.seek(p)} />
         <VolumeControl value={volume} onChange={(v) => audioEngine.setVolume(v)} />
       </div>
@@ -153,7 +165,7 @@ function ProgressBar({ position, duration, onSeek }: ProgressBarProps) {
   const shown = scrub ?? position
   const pct = duration > 0 ? Math.min(100, (shown / duration) * 100) : 0
   return (
-    <div className="flex flex-1 items-center gap-2 text-[10px] text-slate-500">
+    <div className="flex min-w-0 flex-1 items-center gap-2 text-[10px] text-slate-500">
       <span className="w-9 text-right font-mono">{formatTime(shown)}</span>
       <input
         type="range"
@@ -168,9 +180,15 @@ function ProgressBar({ position, duration, onSeek }: ProgressBarProps) {
         }}
         onPointerUp={() => setScrub(null)}
         onPointerCancel={() => setScrub(null)}
-        className="seek-range h-1.5 flex-1 cursor-pointer appearance-none rounded-full"
+        // min-w-0: un range de Chromium mide ~130 px por defecto y, como ítem
+        // flex, no se achica por debajo de eso. En ventanas angostas empujaba
+        // el reproductor fuera de la pantalla (scroll horizontal en toda la app).
+        className="seek-range h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full"
+        aria-label="Posición del tema"
+        aria-valuetext={`${formatTime(shown)} de ${formatTime(duration)}`}
         style={{
-          background: `linear-gradient(to right, rgb(59 130 246) 0%, rgb(59 130 246) ${pct}%, rgb(51 65 85) ${pct}%, rgb(51 65 85) 100%)`
+          // Ámbar (listo) sobre el gris de cabina: el azul no significa nada acá.
+          background: `linear-gradient(to right, #f5b342 0%, #f5b342 ${pct}%, #332e29 ${pct}%, #332e29 100%)`
         }}
       />
       <span className="w-9 font-mono">{formatTime(duration)}</span>
@@ -185,8 +203,8 @@ interface VolumeControlProps {
 
 function VolumeControl({ value, onChange }: VolumeControlProps) {
   return (
-    <div className="flex items-center gap-1.5">
-      <Volume2 className="h-3.5 w-3.5 text-slate-500" />
+    <div className="flex shrink-0 items-center gap-1.5">
+      <Volume2 className="h-3.5 w-3.5 text-slate-500" aria-hidden />
       <input
         type="range"
         min={0}
@@ -194,8 +212,10 @@ function VolumeControl({ value, onChange }: VolumeControlProps) {
         step={0.02}
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="h-1 w-20 cursor-pointer appearance-none rounded-full bg-slate-700 accent-blue-500"
+        className="h-1 w-14 cursor-pointer rounded-full accent-listo lg:w-20"
         title={`Volumen: ${Math.round(value * 100)}%`}
+        aria-label="Volumen de la música"
+        aria-valuetext={`${Math.round(value * 100)} por ciento`}
       />
     </div>
   )

@@ -6,10 +6,14 @@ export function createControlWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
-    minWidth: 1024,
-    minHeight: 600,
+    // Con la navegación en un riel vertical, la interfaz entra en notebooks
+    // chicas o con la ventana al lado de otra: antes el mínimo era 1024 y aun
+    // así la cabecera no entraba.
+    minWidth: 880,
+    minHeight: 580,
     title: 'Church Projector — Control',
-    backgroundColor: '#0f172a',
+    // El negro de cabina: sin esto, la ventana parpadea en azul mientras carga.
+    backgroundColor: '#0e0d0c',
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/control.mjs'),

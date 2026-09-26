@@ -187,7 +187,7 @@ export default function Audio() {
               }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="w-full rounded-md border border-slate-700 bg-slate-900 py-1.5 pl-8 pr-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
+              className="w-full rounded-md border border-slate-700 bg-slate-900 py-1.5 pl-8 pr-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-listo-borde focus:outline-none"
             />
           </div>
           <span className="text-xs text-slate-500">
@@ -198,7 +198,7 @@ export default function Audio() {
             onClick={() => setShowQueue((v) => !v)}
             className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors ${
               showQueue
-                ? 'bg-blue-600 text-white'
+                ? 'bg-listo text-cabina-negro'
                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'
             }`}
             title="Mostrar/ocultar cola"
@@ -206,7 +206,7 @@ export default function Audio() {
             <ListMusic className="h-3.5 w-3.5" />
             Cola
             {queue.length > 0 && (
-              <span className="rounded-full bg-blue-500 px-1.5 text-[10px] font-semibold text-white">
+              <span className="rounded-full bg-listo px-1.5 text-[10px] font-semibold text-cabina-negro">
                 {queue.length}
               </span>
             )}
@@ -232,7 +232,7 @@ export default function Audio() {
                   <li key={track.id} className="relative">
                     <div
                       className={`group flex w-full items-center gap-3 px-4 py-2 text-left transition-colors ${
-                        isCurrent ? 'bg-blue-600/10' : 'hover:bg-slate-800/60'
+                        isCurrent ? 'bg-listo-suave' : 'hover:bg-slate-800/60'
                       }`}
                     >
                       <button
@@ -273,8 +273,9 @@ export default function Audio() {
 
                       {/* Reordenar / quitar — solo dentro de una playlist sin filtro */}
                       {activePlaylist && !query.trim() && (
-                        <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                        <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100">
                           <button
+                            aria-label="Subir"
                             type="button"
                             onClick={() => void moveTrackInPlaylist(activePlaylist.id, track.id, -1)}
                             disabled={rowIndex === 0}
@@ -284,6 +285,7 @@ export default function Audio() {
                             <ChevronUp className="h-3.5 w-3.5" />
                           </button>
                           <button
+                            aria-label="Bajar"
                             type="button"
                             onClick={() => void moveTrackInPlaylist(activePlaylist.id, track.id, 1)}
                             disabled={rowIndex === filtered.length - 1}
@@ -293,9 +295,10 @@ export default function Audio() {
                             <ChevronDown className="h-3.5 w-3.5" />
                           </button>
                           <button
+                            aria-label="Quitar de la playlist"
                             type="button"
                             onClick={() => void removeTrackFromPlaylist(activePlaylist.id, track.id)}
-                            className="rounded p-1 text-slate-500 hover:bg-slate-700 hover:text-red-400"
+                            className="rounded p-1 text-slate-500 hover:bg-slate-700 hover:text-falla"
                             title="Quitar de la playlist"
                           >
                             <X className="h-3.5 w-3.5" />
@@ -305,21 +308,23 @@ export default function Audio() {
 
                       {/* Agregar a playlist */}
                       <button
+                        aria-label="Agregar a una playlist"
                         type="button"
                         onClick={() => setMenuFor(menuFor === track.id ? null : track.id)}
-                        className={`shrink-0 rounded p-1 transition-opacity hover:bg-slate-700 hover:text-emerald-300 ${
+                        className={`shrink-0 rounded p-1 transition-opacity hover:bg-slate-700 hover:text-ok ${
                           menuFor === track.id
-                            ? 'text-emerald-300 opacity-100'
-                            : 'text-slate-500 opacity-0 group-hover:opacity-100'
+                            ? 'text-ok opacity-100'
+                            : 'text-slate-500 opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
                         }`}
                         title="Agregar a una playlist"
                       >
                         <Plus className="h-4 w-4" />
                       </button>
                       <button
+                        aria-label="Agregar a la cola"
                         type="button"
                         onClick={() => enqueue(track.id)}
-                        className="shrink-0 rounded p-1 text-slate-500 opacity-0 transition-opacity hover:bg-slate-700 hover:text-blue-300 group-hover:opacity-100"
+                        className="shrink-0 rounded p-1 text-slate-500 opacity-0 transition-opacity hover:bg-slate-700 hover:text-listo group-hover:opacity-100 focus-visible:opacity-100"
                         title="Agregar a la cola"
                       >
                         <ListPlus className="h-4 w-4" />
@@ -327,11 +332,11 @@ export default function Audio() {
                       <button
                         type="button"
                         onClick={() => playTrack(track)}
-                        className="shrink-0 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
+                        className="shrink-0 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                         title={isCurrent && isPlaying ? 'Pausar' : 'Reproducir'}
                       >
                         {isCurrent && isPlaying ? (
-                          <Pause className="h-4 w-4 text-blue-400" />
+                          <Pause className="h-4 w-4 text-listo" />
                         ) : (
                           <Play className="h-4 w-4 text-slate-300" />
                         )}
@@ -373,7 +378,7 @@ function Tab({
       onClick={onClick}
       className={`inline-flex shrink-0 items-center gap-1.5 rounded-t-md border-b-2 px-3 py-1.5 text-xs transition-colors ${
         active
-          ? 'border-blue-500 bg-slate-800/60 font-medium text-white'
+          ? 'border-listo bg-slate-800/60 font-medium text-white'
           : 'border-transparent text-slate-400 hover:bg-slate-800/40 hover:text-slate-100'
       }`}
       title={label}
@@ -382,7 +387,7 @@ function Tab({
       <span className="max-w-[140px] truncate">{label}</span>
       <span
         className={`rounded-full px-1.5 text-[10px] ${
-          active ? 'bg-blue-500/20 text-blue-300' : 'bg-slate-800 text-slate-500'
+          active ? 'bg-listo-suave text-listo' : 'bg-slate-800 text-slate-500'
         }`}
       >
         {count}
@@ -417,7 +422,7 @@ function InlineNameInput({
         else if (e.key === 'Escape') onCancel()
       }}
       onBlur={() => (value.trim() ? onSubmit(value) : onCancel())}
-      className="mb-1.5 ml-1 w-44 shrink-0 rounded-md border border-blue-500 bg-slate-900 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none"
+      className="mb-1.5 ml-1 w-44 shrink-0 rounded-md border border-listo bg-slate-900 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none"
     />
   )
 }
@@ -447,7 +452,7 @@ function PlaylistHeader({
 
   return (
     <div className="flex items-center gap-2 border-b border-slate-700 bg-slate-800/30 px-4 py-2">
-      <ListMusic className="h-4 w-4 shrink-0 text-blue-400" />
+      <ListMusic className="h-4 w-4 shrink-0 text-listo" />
       {editing ? (
         <InlineNameInput
           placeholder="Nombre…"
@@ -462,6 +467,7 @@ function PlaylistHeader({
         <>
           <h2 className="truncate text-sm font-medium text-slate-100">{playlist.name}</h2>
           <button
+            aria-label="Renombrar playlist"
             type="button"
             onClick={() => setEditing(true)}
             className="rounded p-1 text-slate-500 hover:bg-slate-700 hover:text-white"
@@ -480,7 +486,7 @@ function PlaylistHeader({
           type="button"
           onClick={onPlay}
           disabled={trackCount === 0}
-          className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 rounded-md bg-listo px-3 py-1 text-xs font-semibold text-cabina-negro hover:brightness-110 disabled:opacity-40"
           title="Reproducir la playlist desde el principio"
         >
           <Play className="h-3.5 w-3.5" />
@@ -494,8 +500,8 @@ function PlaylistHeader({
           }}
           className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors ${
             confirmDelete
-              ? 'bg-red-600 font-medium text-white hover:bg-red-500'
-              : 'text-slate-400 hover:bg-slate-700 hover:text-red-300'
+              ? 'bg-falla font-semibold text-cabina-negro hover:brightness-110'
+              : 'text-slate-400 hover:bg-slate-700 hover:text-falla'
           }`}
           title="Eliminar la playlist (los archivos de música no se tocan)"
         >
@@ -541,7 +547,7 @@ function PlaylistMenu({ trackId, onClose }: { trackId: string; onClose: () => vo
                   <span
                     className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
                       included
-                        ? 'border-emerald-500 bg-emerald-500/20 text-emerald-300'
+                        ? 'border-ok bg-ok-suave text-ok'
                         : 'border-slate-600 text-transparent'
                     }`}
                   >
@@ -591,24 +597,26 @@ function QueuePanel({ onClose }: { onClose: () => void }) {
     .filter((x): x is { track: AudioTrack; index: number } => x.track !== null)
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-l border-slate-700 bg-slate-900/60">
+    <aside className="flex w-64 shrink-0 flex-col border-l border-slate-700 bg-slate-900/60 xl:w-80" aria-label="Cola de reproducción">
       <div className="flex items-center justify-between border-b border-slate-700 px-3 py-2">
         <h3 className="flex items-center gap-1.5 text-sm font-medium text-slate-200">
-          <ListMusic className="h-4 w-4 text-blue-400" />
+          <ListMusic className="h-4 w-4 text-listo" />
           Cola ({tracks.length})
         </h3>
         <div className="flex items-center gap-1">
           {tracks.length > 0 && (
             <button
+              aria-label="Vaciar cola"
               type="button"
               onClick={clearQueue}
-              className="rounded p-1 text-slate-500 hover:bg-slate-700 hover:text-red-400"
+              className="rounded p-1 text-slate-500 hover:bg-slate-700 hover:text-falla"
               title="Vaciar cola"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           )}
           <button
+            aria-label="Cerrar"
             type="button"
             onClick={onClose}
             className="rounded p-1 text-slate-500 hover:bg-slate-700 hover:text-slate-200"
@@ -642,9 +650,10 @@ function QueuePanel({ onClose }: { onClose: () => void }) {
                   </p>
                 </div>
                 <button
+                  aria-label="Quitar de la cola"
                   type="button"
                   onClick={() => removeFromQueue(index)}
-                  className="shrink-0 rounded p-0.5 text-slate-600 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+                  className="shrink-0 rounded p-0.5 text-slate-600 opacity-0 transition-opacity hover:text-falla group-hover:opacity-100 focus-visible:opacity-100"
                   title="Quitar de la cola"
                 >
                   <X className="h-3.5 w-3.5" />

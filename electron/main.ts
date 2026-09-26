@@ -27,7 +27,8 @@ import {
 } from './services/fontProtocol'
 import { registerFontsHandlers } from './ipc/fonts'
 import { registerDownloadsHandlers } from './ipc/downloads'
-import { dispose as disposeDownloads } from './services/downloadsService'
+import { dispose as disposeDownloads, YT_PARTITION } from './services/downloadsService'
+import { instalarPermisos } from './services/permisos'
 import { registerEscuchaHandlers } from './ipc/escucha'
 import {
   dispose as disposeEscucha,
@@ -38,6 +39,34 @@ import log from 'electron-log'
 
 log.initialize()
 
+/**
+ * Una sola instancia. Abrir la app dos veces (doble clic de más en el acceso
+ * directo, algo que pasa) creaba DOS ventanas de proyección peleándose por el
+ * mismo monitor, y dos procesos queriendo la misma entrada de audio. La
+ * segunda instancia se cierra y trae al frente la ventana de la primera.
+ */
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+  process.exit(0)
+}
+
+/**
+ * Linux: preferir X11 (vía XWayland) cuando está disponible. En Wayland puro
+ * una app no puede elegir en qué posición de qué monitor abre una ventana, y
+ * la de proyección TIENE que caer en el proyector. Electron 36 ya arranca en
+ * X11 por defecto, pero las versiones siguientes pasan a Wayland: esto deja
+ * fijada la decisión. Si alguien la quiere cambiar, alcanza con definir
+ * ELECTRON_OZONE_PLATFORM_HINT o pasar --ozone-platform.
+ */
+if (
+  process.platform === 'linux' &&
+  process.env.DISPLAY &&
+  !process.env.ELECTRON_OZONE_PLATFORM_HINT &&
+  !app.commandLine.hasSwitch('ozone-platform')
+) {
+  app.commandLine.appendSwitch('ozone-platform', 'x11')
+}
+
 // MUST run before app is ready.
 registerMediaSchemeAsPrivileged()
 registerAudioSchemeAsPrivileged()
@@ -46,7 +75,16 @@ registerFontSchemeAsPrivileged()
 let controlWindow: BrowserWindow | null = null
 let projectionWindow: BrowserWindow | null = null
 
+app.on('second-instance', () => {
+  if (controlWindow && !controlWindow.isDestroyed()) {
+    if (controlWindow.isMinimized()) controlWindow.restore()
+    controlWindow.show()
+    controlWindow.focus()
+  }
+})
+
 app.whenReady().then(async () => {
+  instalarPermisos(YT_PARTITION)
   registerMediaProtocolHandler()
   registerAudioProtocolHandler()
   registerFontProtocolHandler()

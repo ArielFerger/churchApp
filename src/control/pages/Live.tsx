@@ -152,7 +152,7 @@ export default function Live() {
         <h1 className="text-xl font-semibold">En Vivo</h1>
         <p className="mt-1 text-sm text-slate-400">
           Editá el slide de prueba, ponele un fondo en loop o armá una presentación de imágenes. Las
-          acciones rápidas (Detener, Blackout, Clear) están siempre arriba a la derecha.
+          acciones rápidas (Detener, Blackout, Limpiar) están siempre arriba a la derecha.
         </p>
 
         {/* Editable test slide */}
@@ -174,14 +174,14 @@ export default function Live() {
             onChange={(e) => setTestSlideText(e.target.value)}
             rows={Math.max(3, testSlideText.split('\n').length)}
             placeholder="Escribí el texto del slide — una línea por renglón"
-            className="mt-2 w-full resize-y rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-blue-500 focus:outline-none"
+            className="mt-2 w-full resize-y rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-listo-borde focus:outline-none"
           />
           <div className="mt-3 flex gap-2">
             <button
               type="button"
               onClick={projectTestSlide}
               disabled={!testSlideText.trim()}
-              className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-40"
+              className="flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold border border-aire-borde bg-cabina-alto text-cabina-tinta transition-colors hover:bg-aire hover:text-white disabled:opacity-40"
             >
               <Eye className="h-4 w-4" />
               Proyectar slide
@@ -200,7 +200,7 @@ export default function Live() {
               <button
                 type="button"
                 onClick={() => setSingleBackground(null)}
-                className="text-xs text-slate-400 hover:text-red-400"
+                className="text-xs text-slate-400 hover:text-falla"
               >
                 Quitar fondo
               </button>
@@ -271,16 +271,16 @@ export default function Live() {
                     <button
                       type="button"
                       onClick={() => setBgPath(folderPath)}
-                      className="group relative block w-full overflow-hidden rounded-md border border-slate-700 bg-slate-800/60 text-left transition-colors hover:border-amber-500/60"
+                      className="group relative block w-full overflow-hidden rounded-md border border-slate-700 bg-slate-800/60 text-left transition-colors hover:border-listo"
                       title={`Abrir carpeta "${name}"`}
                     >
                       <div className="flex aspect-video flex-col items-center justify-center gap-1">
-                        <Folder className="h-7 w-7 text-amber-400/80 transition-transform group-hover:scale-110" />
+                        <Folder className="h-7 w-7 text-listo/80 transition-transform group-hover:scale-110" />
                         <span className="max-w-full truncate px-1 text-[10px] text-slate-300">
                           {name}
                         </span>
                       </div>
-                      <span className="absolute right-1 top-1 rounded bg-amber-500/20 px-1 text-[9px] font-medium text-amber-300">
+                      <span className="absolute right-1 top-1 rounded bg-listo-suave px-1 text-[9px] font-medium text-listo">
                         {countInFolder(bgSource, folderPath)}
                       </span>
                     </button>
@@ -294,7 +294,7 @@ export default function Live() {
                     onClick={() => setSingleBackground(item.id)}
                     className={`group relative block w-full overflow-hidden rounded-md border bg-black text-left transition-colors ${
                       backgroundId === item.id
-                        ? 'border-blue-500 ring-2 ring-blue-500/40'
+                        ? 'border-listo ring-2 ring-listo-borde'
                         : 'border-slate-700 hover:border-slate-500'
                     }`}
                     title={item.fileName}
@@ -325,7 +325,7 @@ export default function Live() {
                       )}
                     </span>
                     {backgroundId === item.id && item.type === 'video' && (
-                      <span className="absolute right-1 top-1 rounded bg-blue-600 p-0.5 text-white">
+                      <span className="absolute right-1 top-1 rounded bg-listo p-0.5 text-cabina-negro">
                         <Repeat className="h-3 w-3" />
                       </span>
                     )}
@@ -343,7 +343,7 @@ export default function Live() {
               <Images className="h-3.5 w-3.5" />
               Presentación de fondo
               {slideshowActive && (
-                <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                <span className="rounded-full bg-ok-suave px-2 py-0.5 text-[10px] font-semibold text-ok">
                   EN VIVO
                 </span>
               )}
@@ -359,7 +359,7 @@ export default function Live() {
                   onChange={(e) =>
                     setSlideshowInterval(Math.max(1, Math.min(120, Number(e.target.value) || 1)))
                   }
-                  className="w-16 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 focus:border-blue-500 focus:outline-none"
+                  className="w-16 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 focus:border-listo-borde focus:outline-none"
                 />
                 <span className="text-slate-500">seg</span>
               </label>
@@ -388,7 +388,7 @@ export default function Live() {
                       onClick={() => toggleSlideshowItem(item.id)}
                       className={`group relative block w-full overflow-hidden rounded-md border bg-black text-left transition-colors ${
                         selected
-                          ? 'border-emerald-500 ring-2 ring-emerald-500/40'
+                          ? 'border-ok ring-2 ring-ok-borde'
                           : 'border-slate-700 hover:border-slate-500'
                       }`}
                       title={item.fileName}
@@ -402,7 +402,7 @@ export default function Live() {
                         />
                       </div>
                       {selected && (
-                        <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[11px] font-bold text-white">
+                        <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-listo text-[11px] font-bold text-cabina-negro">
                           {order + 1}
                         </span>
                       )}
@@ -419,7 +419,7 @@ export default function Live() {
                 type="button"
                 onClick={startSlideshow}
                 disabled={slideshowIds.length === 0}
-                className="flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40"
+                className="flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold border border-aire-borde bg-cabina-alto text-cabina-tinta transition-colors hover:bg-aire hover:text-white disabled:opacity-40"
               >
                 <Play className="h-4 w-4" />
                 Iniciar presentación
@@ -428,7 +428,7 @@ export default function Live() {
               <button
                 type="button"
                 onClick={stopSlideshow}
-                className="flex items-center gap-2 rounded-md bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600"
+                className="flex items-center gap-2 rounded-md bg-slate-700 px-4 py-2 text-sm font-medium text-cabina-negro hover:bg-slate-600"
               >
                 <Square className="h-4 w-4" />
                 Detener

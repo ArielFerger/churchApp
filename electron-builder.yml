@@ -21,6 +21,16 @@ extraResources:
     to: data
     filter:
       - "**/*"
+  # Los scripts de herramientas (Python, sin dependencias) viajan con la app:
+  # quien la instala puede instalar/actualizar yt-dlp, ffmpeg y whisper, o
+  # bajar videos, sin clonar el repositorio. Ver scripts/herramientas/README.md.
+  - from: scripts/herramientas
+    to: scripts/herramientas
+    filter:
+      - "*.py"
+      - "*.md"
+      - "*.cmd"
+      - "*.sh"
 
 # Windows
 win:

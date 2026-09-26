@@ -42,6 +42,9 @@ export const IPC_CHANNELS = {
   ENQUEUE_DOWNLOAD: 'downloads:enqueue',
   ENQUEUE_PLAYLIST: 'downloads:enqueuePlaylist',
   CANCEL_DOWNLOAD: 'downloads:cancel',
+  RETRY_DOWNLOAD: 'downloads:retry',
+  SHOW_DOWNLOAD_IN_FOLDER: 'downloads:showInFolder',
+  UPDATE_YTDLP: 'downloads:updateYtDlp',
   REMOVE_DOWNLOAD: 'downloads:remove',
   CLEAR_DOWNLOADS: 'downloads:clear',
   DOWNLOADS_UPDATED: 'downloads:updated',
@@ -68,5 +71,7 @@ export const IPC_CHANNELS = {
   GET_BIBLE_BOOKS: 'bible:getBooks',
   GET_BIBLE_BOOK_STATS: 'bible:getBookStats',
   SEARCH_VERSE: 'bible:searchVerse',
-  SHOW_OPEN_DIALOG: 'dialog:showOpen'
+  SHOW_OPEN_DIALOG: 'dialog:showOpen',
+  GET_APP_INFO: 'app:info',
+  OPEN_FOLDER: 'app:openFolder'
 } as const

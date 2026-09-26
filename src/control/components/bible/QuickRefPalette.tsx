@@ -219,7 +219,7 @@ export default function QuickRefPalette({
       >
         {/* Reference being built */}
         <div className="flex items-center gap-3 border-b border-slate-700 px-6 py-5">
-          <BookOpen className="h-6 w-6 shrink-0 text-blue-400" />
+          <BookOpen className="h-6 w-6 shrink-0 text-listo" />
           <div className="flex flex-1 items-baseline gap-2 text-3xl">
             <Field active={stage === 'book'} muted={stage !== 'book'}>
               {book ? book.name : bookQuery || 'libro…'}
@@ -272,13 +272,13 @@ export default function QuickRefPalette({
                       }}
                       onMouseEnter={() => setHighlight(i)}
                       className={`flex w-full items-center justify-between rounded px-4 py-2 text-left text-base transition-colors ${
-                        isActive ? 'bg-blue-600 text-white' : 'text-slate-300'
+                        isActive ? 'bg-listo text-cabina-negro' : 'text-slate-300'
                       }`}
                     >
                       <span className="truncate">{b.name}</span>
                       <span
                         className={`ml-2 shrink-0 font-mono text-xs ${
-                          isActive ? 'text-blue-200' : 'text-slate-600'
+                          isActive ? 'text-listo' : 'text-slate-600'
                         }`}
                       >
                         {b.chapters} cap.
@@ -337,7 +337,7 @@ function Field({
   return (
     <span
       className={`${active ? 'font-semibold text-white' : muted ? 'text-slate-400' : 'text-slate-200'} ${
-        active ? 'border-b-2 border-blue-500' : ''
+        active ? 'border-b-2 border-listo' : ''
       }`}
     >
       {children}

@@ -60,8 +60,8 @@ export default class ErrorBoundary extends Component<Props, State> {
 
     return (
       <div className="flex h-full items-center justify-center overflow-y-auto bg-slate-900 p-8">
-        <div className="w-full max-w-lg rounded-lg border border-red-800/60 bg-red-950/30 p-6">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-red-300">
+        <div className="w-full max-w-lg rounded-lg border border-falla-borde bg-falla-suave p-6">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-falla">
             <AlertTriangle className="h-5 w-5" />
             Se rompió {this.props.scope ?? 'esta sección'}
           </h2>
@@ -70,7 +70,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             cambiar de sección desde el menú de arriba, o reintentar acá.
           </p>
 
-          <p className="mt-3 rounded bg-slate-950/70 p-2 font-mono text-xs text-red-300">
+          <p className="mt-3 rounded bg-slate-950/70 p-2 font-mono text-xs text-falla">
             {this.state.message}
           </p>
 

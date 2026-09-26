@@ -322,7 +322,7 @@ export default function Bible() {
             placeholder='Referencia rápida — ej. "Juan 3:16" o "Jn 3:16-17"'
             value={search}
             onChange={(e) => void runSearch(e.target.value)}
-            className="w-full rounded-md border border-slate-700 bg-slate-900 py-1.5 pl-8 pr-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
+            className="w-full rounded-md border border-slate-700 bg-slate-900 py-1.5 pl-8 pr-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-listo-borde focus:outline-none"
           />
         </div>
         <button
@@ -353,7 +353,7 @@ export default function Bible() {
               <div
                 key={v.version}
                 className={`flex items-stretch overflow-hidden rounded ${
-                  isActive ? 'ring-1 ring-blue-500' : ''
+                  isActive ? 'ring-1 ring-listo' : ''
                 }`}
               >
                 <button
@@ -361,7 +361,7 @@ export default function Bible() {
                   onClick={() => setSelectedVersion(v.version)}
                   className={`px-2.5 py-1 text-xs font-medium transition-colors ${
                     isActive
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-listo text-cabina-negro'
                       : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   }`}
                   title={v.name}
@@ -369,10 +369,15 @@ export default function Bible() {
                   {v.version}
                 </button>
                 <button
+                  aria-label={
+                    isDefault
+                      ? 'Versión predeterminada — clic para quitar'
+                      : 'Fijar como versión predeterminada'
+                  }
                   type="button"
                   onClick={() => setDefaultVersion(v.version)}
                   className={`flex items-center px-1.5 transition-colors ${
-                    isActive ? 'bg-blue-600' : 'bg-slate-800 hover:bg-slate-700'
+                    isActive ? 'bg-listo' : 'bg-slate-800 hover:bg-slate-700'
                   }`}
                   title={
                     isDefault
@@ -382,7 +387,7 @@ export default function Bible() {
                 >
                   <Star
                     className={`h-3.5 w-3.5 ${
-                      isDefault ? 'fill-yellow-400 text-yellow-400' : 'text-slate-500'
+                      isDefault ? 'fill-yellow-400 text-listo' : 'text-slate-500'
                     }`}
                   />
                 </button>
@@ -394,7 +399,7 @@ export default function Bible() {
 
       {/* Aviso de referencia inválida (capítulo/versículo inexistente) */}
       {searchNotice && (
-        <div className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-300">
+        <div className="flex items-center gap-2 border-b border-listo-borde bg-listo-suave px-4 py-2 text-xs text-listo">
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
           {searchNotice}
         </div>
@@ -434,9 +439,10 @@ export default function Bible() {
                   {e.endVerse ? `-${e.endVerse}` : ''}
                 </button>
                 <button
+                  aria-label="Quitar del historial"
                   type="button"
                   onClick={() => removeHistory(historyKey(e))}
-                  className="pr-1.5 text-slate-600 hover:text-red-400"
+                  className="pr-1.5 text-slate-600 hover:text-falla"
                   title="Quitar del historial"
                 >
                   <X className="h-3 w-3" />
@@ -447,7 +453,7 @@ export default function Bible() {
           <button
             type="button"
             onClick={() => clearHistory()}
-            className="shrink-0 rounded px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-700 hover:text-red-400"
+            className="shrink-0 rounded px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-700 hover:text-falla"
             title="Limpiar todo el historial"
           >
             Limpiar
@@ -478,7 +484,7 @@ export default function Bible() {
                   <button
                     type="button"
                     onClick={() => projectVerse(hit)}
-                    className="inline-flex items-center gap-1 rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-500"
+                    className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold border border-aire-borde bg-cabina-alto text-cabina-tinta transition-colors hover:bg-aire hover:text-white"
                   >
                     <Eye className="h-3 w-3" />
                     Proyectar
@@ -522,7 +528,7 @@ export default function Bible() {
                       }}
                       className={`rounded text-xs leading-7 transition-colors ${
                         isActive
-                          ? 'bg-blue-600 text-white'
+                          ? 'bg-listo text-cabina-negro'
                           : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                       }`}
                     >
@@ -551,13 +557,13 @@ export default function Bible() {
                         onClick={() => projectChapterVerse(v.number)}
                         className={`group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
                           isActive
-                            ? 'bg-red-500/10 ring-1 ring-red-500/40'
+                            ? 'bg-falla-suave ring-1 ring-falla-borde'
                             : 'hover:bg-slate-800'
                         }`}
                       >
                         <span
                           className={`shrink-0 font-mono text-xs ${
-                            isActive ? 'text-red-300' : 'text-slate-500'
+                            isActive ? 'text-falla' : 'text-slate-500'
                           }`}
                         >
                           {v.number}
@@ -565,7 +571,7 @@ export default function Bible() {
                         <span className="text-sm text-slate-200">{v.text}</span>
                         <Eye
                           className={`mt-0.5 ml-auto h-3 w-3 shrink-0 ${
-                            isActive ? 'text-red-400' : 'text-slate-700 group-hover:text-slate-400'
+                            isActive ? 'text-falla' : 'text-slate-700 group-hover:text-slate-400'
                           }`}
                         />
                       </button>
@@ -628,7 +634,7 @@ function BookGroup({ label, books, selectedId, onSelect, className }: BookGroupP
                 onClick={() => onSelect(b.id)}
                 className={`flex w-full items-center justify-between rounded px-2 py-1 text-left text-sm transition-colors ${
                   isActive
-                    ? 'bg-blue-600/20 text-white'
+                    ? 'bg-listo-suave text-white'
                     : 'text-slate-300 hover:bg-slate-800'
                 }`}
               >
