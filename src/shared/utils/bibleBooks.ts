@@ -76,7 +76,7 @@ export const BIBLE_BOOKS: BookMeta[] = [
   { id: '1TI', name: '1 Timoteo', abbreviations: ['1ti', '1tim', '1timoteo'], chapters: 6, testament: 'NT' },
   { id: '2TI', name: '2 Timoteo', abbreviations: ['2ti', '2tim', '2timoteo'], chapters: 4, testament: 'NT' },
   { id: 'TIT', name: 'Tito', abbreviations: ['tit', 'tito'], chapters: 3, testament: 'NT' },
-  { id: 'PHM', name: 'Filemón', abbreviations: ['flm', 'fil', 'filemon'], chapters: 1, testament: 'NT' },
+  { id: 'PHM', name: 'Filemón', abbreviations: ['flm', 'filem', 'filemon'], chapters: 1, testament: 'NT' },
   { id: 'HEB', name: 'Hebreos', abbreviations: ['heb', 'hebreos'], chapters: 13, testament: 'NT' },
   { id: 'JAS', name: 'Santiago', abbreviations: ['stg', 'san', 'sant', 'santiago'], chapters: 5, testament: 'NT' },
   { id: '1PE', name: '1 Pedro', abbreviations: ['1p', '1pe', '1ped', '1pedro'], chapters: 5, testament: 'NT' },

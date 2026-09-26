@@ -20,6 +20,13 @@ describe('parseReference', () => {
     expect(parseReference('GENESIS 1:1')?.book.id).toBe('GEN')
   })
 
+  it('"Fil" es Filipenses, no Filemón (la abreviatura de Filemón es "Flm")', () => {
+    // Las dos tenían "fil" y ganaba la última cargada: "Fil 4:13" abría Filemón,
+    // que tiene un solo capítulo, y la búsqueda fallaba.
+    expect(parseReference('Fil 4:13')?.book.id).toBe('PHP')
+    expect(parseReference('Flm 1:6')?.book.id).toBe('PHM')
+  })
+
   it('maneja libros con número al principio', () => {
     const ref = parseReference('1 Cor 13:4-7')
     expect(ref?.book.id).toBe('1CO')

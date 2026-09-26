@@ -5,6 +5,7 @@ import {
   fusionar,
   leerNumero,
   leerOrdinal,
+  tokenizar,
   type ReferenciaDetectada
 } from '../src/shared/utils/escuchaBiblica'
 
@@ -281,5 +282,152 @@ describe('fusionar', () => {
 
   it('fusionar con listas vacías no rompe', () => {
     expect(fusionar([], [])).toEqual([])
+  })
+})
+
+describe('detectarReferencias — como las escribe whisper', () => {
+  // Whisper casi nunca deletrea: escribe "Juan 3:16". La primera versión del
+  // detector limpiaba el ":" y leía "316", un capítulo que Juan no tiene, así
+  // que perdía casi todas las citas reales.
+
+  it('capítulo y versículo con dos puntos', () => {
+    expect(corta(primera('Abramos en Juan 3:16.'))).toBe('JHN 3:16')
+    expect(corta(primera('Vamos a Romanos 8:28, donde Pablo'))).toBe('ROM 8:28')
+  })
+
+  it('con punto o con coma, como en algunas Biblias', () => {
+    expect(corta(primera('en Romanos 8.28'))).toBe('ROM 8:28')
+    expect(corta(primera('en Juan 3,16'))).toBe('JHN 3:16')
+  })
+
+  it('rangos con guion', () => {
+    expect(corta(primera('leamos Mateo 5:3-12'))).toBe('MAT 5:3-12')
+    expect(corta(primera('en Juan 3:16–18'))).toBe('JHN 3:16-18')
+  })
+
+  it('"versículos 16 y 17" es un rango; "16 y 5 hermanos" no', () => {
+    expect(corta(primera('Juan 3:16 y 17'))).toBe('JHN 3:16-17')
+    expect(corta(primera('en Juan 3:16 y 5 hermanos más'))).toBe('JHN 3:16')
+  })
+
+  it('un ":" cuenta como marcador y destraba los libros ambiguos', () => {
+    expect(corta(primera('Leemos Hechos 2:38'))).toBe('ACT 2:38')
+    expect(corta(primera('lo que dice Números 6:24'))).toBe('NUM 6:24')
+  })
+
+  it('los ordinales escritos', () => {
+    expect(corta(primera('en 1ª de Corintios 13'))).toBe('1CO 13')
+    expect(corta(primera('en 2da de Timoteo 3:16'))).toBe('2TI 3:16')
+    expect(corta(primera('en II Reyes 5'))).toBe('2KI 5')
+    expect(primera('en 1ª de Corintios 13')!.confianza).toBe(1)
+  })
+
+  it('"primer libro de Reyes" y "primera carta a los Corintios"', () => {
+    expect(corta(primera('el primer libro de Reyes capítulo 18'))).toBe('1KI 18')
+    expect(corta(primera('en la primera carta a los Corintios 13:4'))).toBe('1CO 13:4')
+  })
+
+  it('un ordinal con el nombre mal escrito se corrige dentro de los numerados', () => {
+    const r = primera('vamos a primera de corintos trece')
+    expect(corta(r)).toBe('1CO 13')
+    expect(r!.confianza).toBeLessThan(1)
+  })
+
+  it('no confunde una hora con un versículo', () => {
+    expect(detectarReferencias('nos vemos a las 10:30 en el templo')).toEqual([])
+  })
+
+  it('el fragmento y el span salen del texto original, con su puntuación', () => {
+    const texto = 'Hoy abramos en Juan 3:16, porque de tal manera'
+    const r = primera(texto)!
+    expect(r.fragmento).toBe('en Juan 3:16')
+    expect(texto.slice(r.span![0], r.span![1])).toBe('Juan 3:16')
+  })
+
+  it('el sermón de prueba transcrito por whisper (modelo base)', () => {
+    // Salida literal de whisper-server sobre un sermón sintetizado con voz
+    // neural argentina. De acá salió el bug de los dos puntos.
+    const texto =
+      'Buenos días, hermanos, que alegría estar juntos otra vez. Hoy quiero que abramos ' +
+      'nuestras Biblias en Juan 3:16, porque de tal manera amódios al mundo, que ha dado a ' +
+      'su hijo ni genito. Ahora pensemos un momento en lo que esto significa para nuestra ' +
+      'vida diaria. Muchas veces nos sentimos solos, pero la palabra dice otra cosa. Vamos a ' +
+      'Romanos 8:28, donde Pablo nos recuerda que todas las cosas ayudan a bien. Y quiero que ' +
+      'también leamos el versículo 31. Si Dios es por nosotros, ¿quién contra nosotros? Los ' +
+      'hechos de aquel hombre fueron grandes, pero no se comparan con la gracia. Para ' +
+      'terminar, busquemos hechos capítulos 2, versículo 38. Y cerramos con el Salmo 23. Amén.'
+    expect(detectarReferencias(texto).map(corta)).toEqual([
+      'JHN 3:16',
+      'ROM 8:28',
+      'ROM 8:31',
+      'ACT 2:38',
+      'PSA 23'
+    ])
+  })
+})
+
+describe('detectarReferencias — por contexto', () => {
+  it('"el versículo 31" sigue en el pasaje anterior de la misma frase', () => {
+    const rs = detectarReferencias('Romanos 8:28 y ahora el versículo 31')
+    expect(rs.map(corta)).toEqual(['ROM 8:28', 'ROM 8:31'])
+    expect(rs[1].inferida).toBe(true)
+    expect(rs[1].confianza).toBeLessThan(rs[0].confianza)
+  })
+
+  it('usa el contexto que viene de antes (otra ventana, o lo que se proyectó)', () => {
+    const rs = detectarReferencias('leamos los versículos 31 al 35', {
+      contexto: { bookId: 'ROM', chapter: 8 }
+    })
+    expect(rs.map(corta)).toEqual(['ROM 8:31-35'])
+  })
+
+  it('"en el capítulo 5, versículo 1" cambia de capítulo en el mismo libro', () => {
+    const rs = detectarReferencias('pasemos al capítulo 5, versículo 1', {
+      contexto: { bookId: 'ROM', chapter: 8 }
+    })
+    expect(rs.map(corta)).toEqual(['ROM 5:1'])
+  })
+
+  it('"el capítulo 13 de primera de Corintios": el libro viene después', () => {
+    const r = primera('leamos el capítulo 13 de primera de Corintios versículo 4')
+    expect(corta(r)).toBe('1CO 13:4')
+    expect(r!.inferida).toBeUndefined()
+  })
+
+  it('sin contexto, "el versículo 31" no inventa nada', () => {
+    expect(detectarReferencias('y ahora el versículo 31')).toEqual([])
+  })
+
+  it('un ":" suelto no alcanza para resolver por contexto', () => {
+    expect(
+      detectarReferencias('a las 10:30', { contexto: { bookId: 'ROM', chapter: 8 } })
+    ).toEqual([])
+  })
+})
+
+describe('detectarReferencias — con la cantidad real de versículos', () => {
+  const estadisticas = { JHN: [51, 25, 36], PSA: Array(150).fill(10) }
+
+  it('descarta un versículo que no existe', () => {
+    expect(detectarReferencias('Juan 3:99', { estadisticas })).toEqual([])
+    expect(corta(primera('Juan 3:36'))).toBe('JHN 3:36')
+  })
+
+  it('recorta un rango que se pasa del final del capítulo', () => {
+    const [r] = detectarReferencias('Juan 3:34-40', { estadisticas })
+    expect(corta(r)).toBe('JHN 3:34-36')
+  })
+})
+
+describe('tokenizar', () => {
+  it('separa los números pegados y recuerda las posiciones', () => {
+    const ts = tokenizar('Juan 3:16-18.')
+    expect(ts.map((t) => t.norm)).toEqual(['juan', '3', '§v', '16', '§r', '18'])
+    expect(ts[3]).toMatchObject({ inicio: 7, fin: 9 })
+  })
+
+  it('funde "1ra" y deja "1ª" como el dígito solo', () => {
+    expect(tokenizar('1ra de Juan').map((t) => t.norm)).toEqual(['1ra', 'de', 'juan'])
+    expect(tokenizar('1ª de Juan').map((t) => t.norm)).toEqual(['1', 'de', 'juan'])
   })
 })
