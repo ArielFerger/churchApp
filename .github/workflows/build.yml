@@ -6,15 +6,30 @@ on:
   pull_request:
 
 jobs:
-  typecheck-lint:
-    runs-on: ubuntu-latest
+  verificar:
+    # En las dos plataformas que se entregan: rutas, procesos y formatos de
+    # archivo se comportan distinto en Windows y en Linux.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+      - run: npm run build
+      - name: Scripts de herramientas (sintaxis y ayuda)
+        run: |
+          python -m py_compile scripts/herramientas/comun.py scripts/herramientas/instalar_herramientas.py scripts/herramientas/descargar_youtube.py
+          python scripts/herramientas/instalar_herramientas.py --help
+          python scripts/herramientas/descargar_youtube.py --help

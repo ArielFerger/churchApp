@@ -212,6 +212,35 @@ Cada fase se puede parar y dejar andando lo anterior.
 
 ---
 
+**Fase 5 — HECHA (26/09/2026).** Motor nuevo, medido sobre la app corriendo:
+
+- **El detector no leía el formato de whisper.** Whisper escribe "Juan 3:16"; el
+  detector limpiaba el ":" y leía "316". Con un sermón de 52 s sintetizado con
+  voz neural argentina encontraba 1 de 5 citas. Ahora un tokenizador separa
+  `3:16`, `8.28`, `5:3-12`, `3,16` y recuerda las posiciones: 5 de 5.
+- **Contexto**: "y ahora el versículo 31" resuelve con la cita anterior (o con
+  lo proyectado), vigente 3 minutos; "el capítulo 13 de primera de Corintios"
+  toma el libro de después. Se marcan como inferidas.
+- **whisper-server persistente** (CLI de respaldo): ~3,4 s → ~1,3 s por
+  fragmento; con `audio_ctx` ≥ 768, ~0,78 s sin perder citas.
+- **Cortes por frase** (`segmentadorVoz.ts`) en vez de ventanas de 6 s: piso de
+  ruido por mínimo en 3 s, corte en pausas de 650 ms, forzado a 12 s con
+  solape. El umbral fijo de 0,008 desapareció; queda una sensibilidad.
+- **Costura** entre fragmentos (las últimas 8 palabras se re-analizan con el
+  nuevo) y **validación** contra la cantidad real de versículos.
+- **Pantalla**: texto del versículo en cada sugerencia, Ctrl+Enter, panel "al
+  aire" con Anterior/Siguiente (Ctrl+←/→), transcripción con las citas
+  resaltadas, gestión de modelos cuantizados.
+- **Instalación**: la URL de whisper daba 404 (la release "latest" sin
+  binarios); ahora se resuelve por la API de GitHub. Instala también en Linux.
+
+En la app (dispositivo de audio falso, manejada por CDP): 5/5 citas en orden,
+~660 ms por frase, ningún falso positivo con "los hechos de aquel hombre".
+
+Lo que sigue sin poder simularse: **la consola real y una voz humana un
+domingo**. De esa prueba sale si la sensibilidad por defecto (0,5) y el modelo
+Base alcanzan, o conviene Small comprimido.
+
 ## Archivos
 
 **Nuevos**

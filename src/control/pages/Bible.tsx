@@ -314,14 +314,15 @@ export default function Bible() {
       )}
 
       {/* Search bar */}
-      <div className="flex items-center gap-3 border-b border-slate-700 px-4 py-2">
-        <div className="relative max-w-md flex-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-700 px-4 py-2">
+        <div className="relative min-w-[220px] max-w-md flex-1">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
           <input
             type="search"
             placeholder='Referencia rápida — ej. "Juan 3:16" o "Jn 3:16-17"'
             value={search}
             onChange={(e) => void runSearch(e.target.value)}
+            aria-label="Referencia rápida"
             className="w-full rounded-md border border-slate-700 bg-slate-900 py-1.5 pl-8 pr-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-listo-borde focus:outline-none"
           />
         </div>
@@ -359,6 +360,7 @@ export default function Bible() {
                 <button
                   type="button"
                   onClick={() => setSelectedVersion(v.version)}
+                  aria-pressed={isActive}
                   className={`px-2.5 py-1 text-xs font-medium transition-colors ${
                     isActive
                       ? 'bg-listo text-cabina-negro'
@@ -386,8 +388,15 @@ export default function Bible() {
                   }
                 >
                   <Star
+                    aria-hidden
                     className={`h-3.5 w-3.5 ${
-                      isDefault ? 'fill-yellow-400 text-listo' : 'text-slate-500'
+                      isDefault
+                        ? isActive
+                          ? 'fill-cabina-negro text-cabina-negro'
+                          : 'fill-listo text-listo'
+                        : isActive
+                          ? 'text-cabina-negro/60'
+                          : 'text-slate-500'
                     }`}
                   />
                 </button>
@@ -526,6 +535,8 @@ export default function Bible() {
                         setSelectedChapter(c)
                         setChosenVerse(null)
                       }}
+                      aria-pressed={isActive}
+                      aria-label={`Capítulo ${c}`}
                       className={`rounded text-xs leading-7 transition-colors ${
                         isActive
                           ? 'bg-listo text-cabina-negro'
@@ -557,22 +568,26 @@ export default function Bible() {
                         onClick={() => projectChapterVerse(v.number)}
                         className={`group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
                           isActive
-                            ? 'bg-falla-suave ring-1 ring-falla-borde'
+                            ? 'bg-aire-suave ring-1 ring-aire-borde'
                             : 'hover:bg-slate-800'
                         }`}
+                        aria-current={isActive ? 'true' : undefined}
+                        aria-label={`${isActive ? 'Al aire: ' : 'Proyectar '}versículo ${v.number}`}
                       >
                         <span
                           className={`shrink-0 font-mono text-xs ${
-                            isActive ? 'text-falla' : 'text-slate-500'
+                            isActive ? 'text-aire' : 'text-slate-500'
                           }`}
+                          aria-hidden
                         >
                           {v.number}
                         </span>
-                        <span className="text-sm text-slate-200">{v.text}</span>
+                        <span className="font-letra text-[15px] leading-snug text-slate-200">{v.text}</span>
                         <Eye
                           className={`mt-0.5 ml-auto h-3 w-3 shrink-0 ${
-                            isActive ? 'text-falla' : 'text-slate-700 group-hover:text-slate-400'
+                            isActive ? 'text-aire' : 'text-slate-600 group-hover:text-slate-400'
                           }`}
+                          aria-hidden
                         />
                       </button>
                     </li>
@@ -634,9 +649,10 @@ function BookGroup({ label, books, selectedId, onSelect, className }: BookGroupP
                 onClick={() => onSelect(b.id)}
                 className={`flex w-full items-center justify-between rounded px-2 py-1 text-left text-sm transition-colors ${
                   isActive
-                    ? 'bg-listo-suave text-white'
+                    ? 'bg-listo-suave font-medium text-listo'
                     : 'text-slate-300 hover:bg-slate-800'
                 }`}
+                aria-current={isActive ? 'true' : undefined}
               >
                 <span className="truncate">{b.name}</span>
                 <span className="ml-2 shrink-0 font-mono text-[10px] text-slate-600">

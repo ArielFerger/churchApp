@@ -187,6 +187,7 @@ export default function Audio() {
               }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              aria-label="Buscar en la música"
               className="w-full rounded-md border border-slate-700 bg-slate-900 py-1.5 pl-8 pr-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-listo-borde focus:outline-none"
             />
           </div>
@@ -196,6 +197,7 @@ export default function Audio() {
           <button
             type="button"
             onClick={() => setShowQueue((v) => !v)}
+            aria-pressed={showQueue}
             className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors ${
               showQueue
                 ? 'bg-listo text-cabina-negro'
@@ -238,9 +240,11 @@ export default function Audio() {
                       <button
                         type="button"
                         onClick={() => playTrack(track)}
+                        aria-current={isCurrent ? 'true' : undefined}
                         className="flex min-w-0 flex-1 items-center gap-3 text-left"
                       >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-slate-800">
+                        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-slate-800">
+                          {isCurrent && isPlaying && <Ecualizador />}
                           {track.artworkPath ? (
                             <img
                               src={`audio://${track.id}/artwork`}
@@ -334,6 +338,7 @@ export default function Audio() {
                         onClick={() => playTrack(track)}
                         className="shrink-0 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                         title={isCurrent && isPlaying ? 'Pausar' : 'Reproducir'}
+                        aria-label={`${isCurrent && isPlaying ? 'Pausar' : 'Reproducir'} ${track.title}`}
                       >
                         {isCurrent && isPlaying ? (
                           <Pause className="h-4 w-4 text-listo" />
@@ -356,6 +361,27 @@ export default function Audio() {
 
       {showQueue && <QueuePanel onClose={() => setShowQueue(false)} />}
     </div>
+  )
+}
+
+/**
+ * Tres barras que suben y bajan sobre la tapa del tema que está sonando: se
+ * ve de lejos cuál es, sin leer. Con "reducir movimiento" quedan quietas.
+ */
+function Ecualizador() {
+  return (
+    <span
+      className="absolute inset-0 z-10 flex items-end justify-center gap-[3px] bg-black/55 pb-2"
+      aria-hidden
+    >
+      {[0, 0.2, 0.4].map((retraso) => (
+        <span
+          key={retraso}
+          className="w-[3px] origin-bottom rounded-full bg-listo motion-safe:animate-[ecualizador_0.9s_ease-in-out_infinite]"
+          style={{ height: 14, animationDelay: `${retraso}s` }}
+        />
+      ))}
+    </span>
   )
 }
 

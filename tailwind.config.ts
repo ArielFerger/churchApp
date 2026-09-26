@@ -114,6 +114,10 @@ export default {
         'latido-suave': {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.55' }
+        },
+        ecualizador: {
+          '0%, 100%': { transform: 'scaleY(0.3)' },
+          '50%': { transform: 'scaleY(1)' }
         }
       },
       animation: {
