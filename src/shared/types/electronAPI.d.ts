@@ -102,6 +102,11 @@ export interface ControlElectronAPI {
   getAppInfo: () => Promise<AppInfo>
   /** Abre una carpeta en el explorador. `false` si no existe o no está configurada. */
   openFolder: (cual: CarpetaAbrible) => Promise<boolean>
+  /**
+   * Muestra un archivo de la biblioteca en su carpeta, por id (la pantalla no
+   * maneja rutas). `false` si el id no existe.
+   */
+  showItemInFolder: (tipo: 'media' | 'audio', id: string) => Promise<boolean>
   getMedia: () => Promise<MediaItem[]>
   onMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
   getLiveMedia: () => Promise<MediaItem[]>
@@ -181,13 +186,16 @@ export interface ControlElectronAPI {
   /** La Escucha se detuvo: el modelo se descarga de memoria si no se vuelve a usar. */
   idleEscucha: () => Promise<void>
   /**
-   * Manda un fragmento de PCM 16 bits mono. `null` = se descartó por
-   * saturación. `prompt` = contexto para el reconocedor (null = ninguno).
+   * Manda un fragmento de PCM 16 bits mono. `null` = se descartó (saturación,
+   * o provisional con whisper ocupado). `prompt` = contexto para el
+   * reconocedor (null = ninguno). `provisional` = lo que va de una frase que
+   * todavía no terminó: cede el paso a las completas.
    */
   transcribirVentana: (
     pcm: Uint8Array,
     tasa: number,
-    prompt?: string | null
+    prompt?: string | null,
+    provisional?: boolean
   ) => Promise<Transcripcion | null>
   onEscuchaProgress: (
     callback: (p: { step: string; ratio: number | null }) => void

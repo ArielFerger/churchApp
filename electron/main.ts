@@ -1,6 +1,7 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, dialog, nativeTheme } from 'electron'
 import { createControlWindow } from './windows/controlWindow'
 import { createProjectionWindow, moveProjectionToDisplay } from './windows/projectionWindow'
+import { instalarMenuEdicion } from './windows/menuEdicion'
 import { registerProjectionHandlers } from './ipc/projection'
 import { registerSettingsHandlers } from './ipc/settings'
 import { registerDisplayHandlers } from './ipc/displays'
@@ -43,7 +44,8 @@ log.initialize()
  * Una sola instancia. Abrir la app dos veces (doble clic de más en el acceso
  * directo, algo que pasa) creaba DOS ventanas de proyección peleándose por el
  * mismo monitor, y dos procesos queriendo la misma entrada de audio. La
- * segunda instancia se cierra y trae al frente la ventana de la primera.
+ * segunda instancia se cierra en el acto; la primera se trae al frente y
+ * avisa que ya estaba abierta (ver 'second-instance').
  */
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -75,12 +77,33 @@ registerFontSchemeAsPrivileged()
 let controlWindow: BrowserWindow | null = null
 let projectionWindow: BrowserWindow | null = null
 
+/**
+ * Alguien intentó abrir la app otra vez. Se trae al frente la que ya está y se
+ * le dice por qué no apareció una ventana nueva: sin el aviso, parecía que el
+ * doble clic "no había hecho nada".
+ */
+let avisandoInstancia = false
 app.on('second-instance', () => {
-  if (controlWindow && !controlWindow.isDestroyed()) {
-    if (controlWindow.isMinimized()) controlWindow.restore()
-    controlWindow.show()
-    controlWindow.focus()
-  }
+  if (!controlWindow || controlWindow.isDestroyed()) return
+  if (controlWindow.isMinimized()) controlWindow.restore()
+  controlWindow.show()
+  controlWindow.focus()
+  if (avisandoInstancia) return
+  avisandoInstancia = true
+  void dialog
+    .showMessageBox(controlWindow, {
+      type: 'info',
+      title: 'Church Projector',
+      message: 'Church Projector ya está abierto',
+      detail:
+        'Sólo puede haber una copia abierta a la vez: dos juntas se pelearían por la ' +
+        'pantalla del proyector y por la entrada de audio. Te traje la que ya estaba.',
+      buttons: ['Entendido'],
+      noLink: true
+    })
+    .finally(() => {
+      avisandoInstancia = false
+    })
 })
 
 app.whenReady().then(async () => {
@@ -91,8 +114,21 @@ app.whenReady().then(async () => {
 
   const settings = getSettings()
 
+  // Menús y diálogos nativos en oscuro, como el resto de la cabina.
+  nativeTheme.themeSource = 'dark'
+
   controlWindow = createControlWindow()
   projectionWindow = createProjectionWindow(settings.projectionDisplayId)
+  instalarMenuEdicion(controlWindow)
+
+  // Cerrar la ventana de control es cerrar la app. La de proyección no tiene
+  // marco ni botón de cerrar, y 'window-all-closed' nunca llegaba porque ella
+  // seguía abierta: quedaba la pantalla del proyector colgada, sin forma de
+  // cerrarla salvo desde el administrador de tareas.
+  controlWindow.on('closed', () => {
+    controlWindow = null
+    app.quit()
+  })
 
   registerProjectionHandlers(controlWindow, projectionWindow)
   registerDisplayHandlers()

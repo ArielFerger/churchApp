@@ -151,6 +151,31 @@ describe('SegmentadorVoz', () => {
   })
 })
 
+describe('SegmentadorVoz — frases y parciales', () => {
+  it('numera las frases, y el corte forzado sigue en la misma', () => {
+    const seg = new SegmentadorVoz({ maxSegMs: 4000, blandoMs: 99_000 })
+    const fs = correr(seg, unir(ruido(800, -60), frase(6000), ruido(1000, -60), frase(2000), ruido(1200, -60)))
+    expect(fs.map((f) => f.frase)).toEqual([1, 1, 2])
+    expect(fs[0].forzado).toBe(true)
+  })
+
+  it('da lo que va de la frase mientras se sigue hablando', () => {
+    const seg = new SegmentadorVoz()
+    correr(seg, unir(ruido(800, -60), frase(1000)), false)
+    expect(seg.parcial(1800)).toBeNull() // todavía muy corta
+    correr(seg, frase(2000), false)
+    const p = seg.parcial(1800)
+    expect(p?.frase).toBe(1)
+    expect((p!.pcm.length / 16000) * 1000).toBeGreaterThan(2500)
+  })
+
+  it('en silencio no hay parcial', () => {
+    const seg = new SegmentadorVoz()
+    correr(seg, ruido(3000, -60), false)
+    expect(seg.parcial()).toBeNull()
+  })
+})
+
 describe('margenDb', () => {
   it('más sensibilidad = menos margen sobre el ruido', () => {
     expect(margenDb(0)).toBe(16)

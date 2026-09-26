@@ -1,6 +1,6 @@
 {
   "name": "church-projector",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "App de proyección para iglesia — letras, versículos, media y audio",
   "type": "module",
   "main": "out/main/index.js",

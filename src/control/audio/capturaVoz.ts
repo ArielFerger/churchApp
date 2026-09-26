@@ -1,4 +1,4 @@
-import { floatAPcm16, TASA } from '@/shared/utils/audioVentanas'
+import { dbAGanancia, floatAPcm16, TASA } from '@/shared/utils/audioVentanas'
 import { SegmentadorVoz } from '@/shared/utils/segmentadorVoz'
 
 /**
@@ -20,8 +20,18 @@ export interface OpcionesCaptura {
   deviceId?: string | null
   /** 0..1, ver `SegmentadorVoz`. */
   sensibilidad?: number
+  /**
+   * Volumen de entrada, en dB (0 = como llega). Para un micrófono lejano o una
+   * placa con poca salida: sube la señal ANTES de medirla y de transcribirla.
+   */
+  gananciaDb?: number
   /** Una frase lista para transcribir (PCM 16 bits mono a 16 kHz). */
-  onFragmento: (pcm: Int16Array, forzado: boolean) => void
+  onFragmento: (pcm: Int16Array, forzado: boolean, frase: number) => void
+  /**
+   * Lo que va de la frase en curso, cada ~2 s mientras se sigue hablando.
+   * Para mostrar una cita antes de que el predicador termine la frase.
+   */
+  onParcial?: (pcm: Int16Array, frase: number) => void
   /** Nivel, umbral vigente y si hay voz, varias veces por segundo. */
   onNivel?: (nivel: number, umbral: number, hablando: boolean) => void
   /** Se llama si la captura se cae sola (se desenchufó la placa, por ejemplo). */
@@ -31,6 +41,7 @@ export interface OpcionesCaptura {
 export interface Captura {
   detener: () => Promise<void>
   setSensibilidad: (s: number) => void
+  setGanancia: (db: number) => void
   /** El dispositivo que efectivamente quedó tomando. */
   etiqueta: string
 }
@@ -73,8 +84,14 @@ export async function iniciarCaptura(opciones: OpcionesCaptura): Promise<Captura
   }
 
   const fuente = contexto.createMediaStreamSource(stream)
+  // Ganancia antes de todo: el medidor, el detector de voz y whisper ven la
+  // señal ya amplificada. Un micrófono de notebook a dos metros llega tan bajo
+  // que había que hablarle encima.
+  const ganancia = contexto.createGain()
+  ganancia.gain.value = dbAGanancia(opciones.gananciaDb ?? 0)
   const nodo = new AudioWorkletNode(contexto, 'recolector')
 
+  let ultimoParcial = 0
   nodo.port.onmessage = (e: MessageEvent<Float32Array>): void => {
     if (!vivo) return
     const lectura = segmentador.alimentar(floatAPcm16(e.data))
@@ -82,10 +99,23 @@ export async function iniciarCaptura(opciones: OpcionesCaptura): Promise<Captura
     // La decisión de qué es voz va acá y no en el main: mandar audio por IPC
     // para que del otro lado se decida tirarlo es trabajo al pedo, y el main
     // ya está ocupado con whisper.
-    for (const f of lectura.fragmentos) opciones.onFragmento(f.pcm, f.forzado)
+    for (const f of lectura.fragmentos) opciones.onFragmento(f.pcm, f.forzado, f.frase)
+    if (lectura.fragmentos.length > 0) ultimoParcial = performance.now()
+
+    // Mientras se sigue hablando, cada 2 s, lo que va de la frase.
+    if (opciones.onParcial && lectura.hablando) {
+      const ahora = performance.now()
+      if (ahora - ultimoParcial >= 2000) {
+        const p = segmentador.parcial(1800)
+        if (p) {
+          ultimoParcial = ahora
+          opciones.onParcial(p.pcm, p.frase)
+        }
+      }
+    }
   }
 
-  fuente.connect(nodo)
+  fuente.connect(ganancia).connect(nodo)
   // El worklet no produce salida, pero sin un destino Chromium puede dormir el
   // grafo. Un nodo de ganancia en cero lo mantiene despierto sin que se
   // escuche nada por los parlantes del salón.
@@ -101,14 +131,20 @@ export async function iniciarCaptura(opciones: OpcionesCaptura): Promise<Captura
   return {
     etiqueta: pista?.label ?? 'entrada de audio',
     setSensibilidad: (s) => segmentador.setSensibilidad(s),
+    setGanancia: (db) => {
+      // Rampa corta: un salto brusco de ganancia se oye como un chasquido y el
+      // detector de voz lo toma como el comienzo de una frase.
+      ganancia.gain.setTargetAtTime(dbAGanancia(db), contexto.currentTime, 0.05)
+    },
     detener: async (): Promise<void> => {
       vivo = false
       nodo.port.onmessage = null
       // Lo que quedó a medio decir todavía puede tener una cita adentro.
       const cola = segmentador.cerrar()
-      if (cola) opciones.onFragmento(cola.pcm, cola.forzado)
+      if (cola) opciones.onFragmento(cola.pcm, cola.forzado, cola.frase)
 
       nodo.disconnect()
+      ganancia.disconnect()
       fuente.disconnect()
       for (const t of stream.getTracks()) t.stop()
       await contexto.close()

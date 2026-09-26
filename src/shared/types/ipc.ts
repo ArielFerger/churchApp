@@ -137,6 +137,11 @@ export interface AppSettings {
    * señal. Más alto toma voz más floja (y más ruido).
    */
   escuchaSensibilidad: number
+  /**
+   * Volumen de entrada de la Escucha, en dB (0 = como llega, hasta +30). Para
+   * un micrófono lejano o una placa con salida baja.
+   */
+  escuchaGananciaDb: number
 }
 
 /**
@@ -162,5 +167,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   videoFadeOutSec: 2.5,
   escuchaModelo: null,
   escuchaDispositivoId: null,
-  escuchaSensibilidad: 0.5
+  escuchaSensibilidad: 0.5,
+  escuchaGananciaDb: 0
 }

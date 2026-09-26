@@ -42,6 +42,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openFolder: (cual: CarpetaAbrible): Promise<boolean> =>
     ipcRenderer.invoke(IPC_CHANNELS.OPEN_FOLDER, cual),
 
+  showItemInFolder: (tipo: 'media' | 'audio', id: string): Promise<boolean> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SHOW_ITEM_IN_FOLDER, tipo, id),
+
   getMedia: (): Promise<MediaItem[]> => ipcRenderer.invoke(IPC_CHANNELS.GET_MEDIA),
 
   onMediaUpdated: (callback: (items: MediaItem[]) => void) => {
@@ -257,9 +260,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   transcribirVentana: (
     pcm: Uint8Array,
     tasa: number,
-    prompt?: string | null
+    prompt?: string | null,
+    provisional?: boolean
   ): Promise<Transcripcion | null> =>
-    ipcRenderer.invoke(IPC_CHANNELS.TRANSCRIBE_WINDOW, pcm, tasa, prompt),
+    ipcRenderer.invoke(IPC_CHANNELS.TRANSCRIBE_WINDOW, pcm, tasa, prompt, provisional),
 
   onEscuchaStatus: (callback: (s: EscuchaStatus) => void) => {
     const handler = (_: Electron.IpcRendererEvent, s: EscuchaStatus) => callback(s)

@@ -1,7 +1,7 @@
 # Continuar acá
 
-Estado al **26 de septiembre de 2026**. Rama **`feat/mejoras-integrales`** (sale de
-`feat/media-organizacion`, que tenía la versión 1.2.0).
+Estado al **26 de septiembre de 2026**. Rama **`feat/mejoras-integrales`**, versión
+**1.3.0** (tag `v1.3.0` → GitHub Actions arma los instaladores de Windows y Linux).
 
 > Leé este archivo antes de tocar nada.
 
@@ -32,6 +32,20 @@ npm run typecheck && npm run lint && npm test && npm run build
 | Plataforma | Una sola instancia, permisos explícitos (micrófono sólo audio y sólo el control), X11 en Linux, fuentes empaquetadas |
 | Diseño | Riel de navegación (Ctrl+1…8), kit de componentes, token `falla`, colores con significado en todas las secciones, animaciones con "reducir movimiento", Ajustes rediseñado, barra AL AIRE que incluye el fondo |
 | Accesibilidad | Nombres accesibles, foco visible, anuncios, contraste AA, botones de hover visibles con teclado |
+
+### Ajustes después de la primera prueba del usuario (1.3.0)
+
+| Pedido | Qué se hizo |
+|---|---|
+| "No reconoce Job, escucha *hop*" | Clave fonética castellana (h muda, j↔h, v↔b, z/c↔s) + alias para nombres cortos + libros cortos en el prompt |
+| "Reacciona 12 s después" | Transcripción **provisional** de la frase en curso cada 2 s (prioridad para las completas en el main); cortes más cortos (pausa 550 ms, blando 5 s, máximo 10 s). Medido: una cita aparece ~2–2,5 s después de nombrarse |
+| "Me tuve que acercar mucho al micro" | **Volumen de entrada** (−6 a +30 dB, en vivo) + normalización de cada frase antes de whisper |
+| "Al cerrar no se cierra la proyección" | Cerrar la ventana de control cierra la app |
+| "No se debería poder abrir otra" | Ya había instancia única; ahora la primera avisa con un diálogo |
+| "Clic derecho con opciones" | Menú contextual propio en Media, En Vivo, Audio, Canciones, Biblia, Escucha y Descargas; menú nativo de edición en los campos de texto |
+
+De paso: **crear y renombrar álbumes nunca funcionó** (usaban `prompt()`, que Electron no
+soporta: devuelve `null` en silencio). Ahora es un campo en el lugar.
 
 Detalle técnico en `docs/ARCHITECTURE.md` (secciones *Escucha*, *External tools*,
 *Platform*, *design system*) y en `docs/PLAN-escucha.md` (fase 5).
@@ -87,6 +101,14 @@ npx electron . --remote-debugging-port=9222 --user-data-dir=<carpeta-de-prueba> 
 ## Trampas ya conocidas
 
 ### Nuevas (26/09)
+
+- **`prompt()` no existe en Electron** (devuelve `null` sin avisar). `confirm()` y
+  `alert()` sí. Para pedir un texto, un campo en el lugar.
+- **Los menús contextuales NO se cierran con Esc**: Esc es la parada de pánico en el
+  main (`before-input-event`) y no hay forma de que un menú lo intercepte antes.
+- **Captura de pantalla por CDP con `Emulation.setDeviceMetricsOverride`** dispara un
+  `resize`, y el menú contextual se cierra al redimensionar: para capturar un menú
+  abierto, capturar sin cambiar el tamaño.
 
 - **whisper escribe "Juan 3:16"**, no "Juan tres dieciséis". Cualquier cambio al
   detector tiene que pasar el test `el sermón de prueba transcrito por whisper`, que

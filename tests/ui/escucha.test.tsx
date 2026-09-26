@@ -25,7 +25,8 @@ const detenerEscucha = vi.fn(async () => {})
 vi.mock('../../src/control/audio/escuchaEnVivo', () => ({
   iniciarEscucha: (o?: { deviceId?: string | null; sensibilidad?: number }) => iniciarEscucha(o),
   detenerEscucha: () => detenerEscucha(),
-  cambiarSensibilidad: () => {}
+  cambiarSensibilidad: () => {},
+  cambiarGanancia: () => {}
 }))
 
 let enviados: ProjectionCommand[] = []

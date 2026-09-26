@@ -1,4 +1,6 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMenuContextual } from '../components/ui/MenuContextual'
+import { FolderInput, Pencil, Play, Trash2 } from 'lucide-react'
 import { useTransientMessage } from '../hooks/useTransientMessage'
 import { useLibraryStore } from '@/shared/store/libraryStore'
 import { useLiveStore } from '@/shared/store/liveStore'
@@ -66,6 +68,15 @@ export default function Songs() {
   const [currentSongId, setCurrentSongId] = useState<string | null>(null)
   const [view, setView] = useState<View>('perform')
   const [albumFilter, setAlbumFilter] = useState<string>('all') // 'all' | 'none' | albumId
+  /**
+   * Nombre de álbum que se está escribiendo (nuevo o renombrado). Antes se
+   * pedía con prompt(), que Electron NO soporta: devolvía null en silencio y
+   * no había forma de crear ni renombrar un álbum.
+   */
+  const [nombrandoAlbum, setNombrandoAlbum] = useState<
+    { modo: 'nuevo' } | { modo: 'renombrar'; id: string; actual: string } | null
+  >(null)
+  const abrirMenu = useMenuContextual()
   const [query, setQuery] = useState('')
   const [showChords, setShowChords] = useState(true)
   const [density, setDensity] = useState<DensityId>(loadDensity)
@@ -298,20 +309,79 @@ export default function Songs() {
     setCurrentSongId(null)
   }
 
-  async function handleCreateAlbum() {
-    const name = prompt('Nombre del nuevo álbum:')
-    if (!name || !name.trim()) return
-    const saved = await saveAlbum({ name: name.trim() })
-    if (saved) setAlbumFilter(saved.id)
+  function handleCreateAlbum() {
+    setNombrandoAlbum({ modo: 'nuevo' })
   }
 
-  async function handleRenameAlbum() {
+  function handleRenameAlbum() {
     if (albumFilter === 'all' || albumFilter === 'none') return
     const current = albums.find((a) => a.id === albumFilter)
     if (!current) return
-    const name = prompt('Nuevo nombre:', current.name)
-    if (!name || !name.trim() || name === current.name) return
-    await saveAlbum({ id: current.id, name: name.trim() })
+    setNombrandoAlbum({ modo: 'renombrar', id: current.id, actual: current.name })
+  }
+
+  async function confirmarNombreAlbum(nombre: string) {
+    const n = nombre.trim()
+    const pedido = nombrandoAlbum
+    setNombrandoAlbum(null)
+    if (!n || !pedido) return
+    if (pedido.modo === 'nuevo') {
+      const saved = await saveAlbum({ name: n })
+      if (saved) setAlbumFilter(saved.id)
+    } else if (n !== pedido.actual) {
+      await saveAlbum({ id: pedido.id, name: n })
+    }
+  }
+
+  /** Clic derecho sobre una canción. */
+  function menuDeCancion(song: (typeof songs)[number]) {
+    return [
+      { titulo: song.title || 'Sin título' },
+      {
+        etiqueta: 'Tocar',
+        icono: <Play className="h-4 w-4" />,
+        onSelect: () => {
+          selectSong(song.id)
+          setView('perform')
+        }
+      },
+      {
+        etiqueta: 'Editar',
+        icono: <Pencil className="h-4 w-4" />,
+        onSelect: () => {
+          selectSong(song.id)
+          setView('editor')
+        }
+      },
+      {
+        etiqueta: 'Mover a álbum',
+        icono: <FolderInput className="h-4 w-4" />,
+        submenu: [
+          ...albums.map((a) => ({
+            etiqueta: a.name,
+            marcado: song.albumId === a.id,
+            onSelect: () => void saveSong({ ...song, albumId: a.id })
+          })),
+          ...(albums.length ? ['separador' as const] : []),
+          {
+            etiqueta: 'Sin álbum',
+            marcado: !song.albumId,
+            onSelect: () => void saveSong({ ...song, albumId: null })
+          }
+        ]
+      },
+      'separador' as const,
+      {
+        etiqueta: 'Eliminar',
+        icono: <Trash2 className="h-4 w-4" />,
+        variante: 'peligro' as const,
+        onSelect: async () => {
+          if (!confirm(`¿Eliminar "${song.title}"?`)) return
+          await deleteSong(song.id)
+          if (song.id === currentSongId) setCurrentSongId(null)
+        }
+      }
+    ]
   }
 
   async function handleDeleteAlbum() {
@@ -479,8 +549,17 @@ export default function Songs() {
                 count={albumCounts.byAlbum.get(a.id) ?? 0}
               />
             ))}
-            <ActionChip onClick={handleCreateAlbum}>＋ Nuevo álbum</ActionChip>
-            {albumFilter !== 'all' && albumFilter !== 'none' && (
+            {nombrandoAlbum ? (
+              <NombreEnLinea
+                inicial={nombrandoAlbum.modo === 'renombrar' ? nombrandoAlbum.actual : ''}
+                etiqueta={nombrandoAlbum.modo === 'nuevo' ? 'Nombre del álbum nuevo' : 'Nuevo nombre del álbum'}
+                onListo={(n) => void confirmarNombreAlbum(n)}
+                onCancelar={() => setNombrandoAlbum(null)}
+              />
+            ) : (
+              <ActionChip onClick={handleCreateAlbum}>＋ Nuevo álbum</ActionChip>
+            )}
+            {albumFilter !== 'all' && albumFilter !== 'none' && !nombrandoAlbum && (
               <>
                 <ActionChip onClick={handleRenameAlbum}>✎ Renombrar</ActionChip>
                 <ActionChip danger onClick={handleDeleteAlbum}>
@@ -549,6 +628,7 @@ export default function Songs() {
                 key={s.id}
                 selected={s.id === currentSongId}
                 onClick={() => selectSong(s.id)}
+                onContextMenu={(e) => abrirMenu(e, menuDeCancion(s))}
                 label={s.title || 'Sin título'}
               />
             ))}
@@ -959,23 +1039,71 @@ function Chip({
   count,
   selected,
   variant,
-  onClick
+  onClick,
+  onContextMenu
 }: {
   label: string
   count?: number
   selected?: boolean
   variant?: 'default' | 'album'
   onClick: () => void
+  onContextMenu?: (e: React.MouseEvent) => void
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      onContextMenu={onContextMenu}
+      aria-pressed={selected}
       className={`chip ${selected ? 'selected' : ''} ${variant === 'album' ? 'is-album' : ''}`}
     >
       {label}
       {count !== undefined && <span className="chip-count">{count}</span>}
     </button>
+  )
+}
+
+/**
+ * Un nombre que se escribe en el lugar, con forma de chip. Enter guarda;
+ * salir del campo sin escribir nada o tocar ✕ cancela. (Esc no: en esta app
+ * es la parada de pánico.)
+ */
+function NombreEnLinea({
+  inicial,
+  etiqueta,
+  onListo,
+  onCancelar
+}: {
+  inicial: string
+  etiqueta: string
+  onListo: (nombre: string) => void
+  onCancelar: () => void
+}) {
+  const [valor, setValor] = useState(inicial)
+  return (
+    <span className="chip selected inline-flex items-center gap-1 !py-1">
+      <input
+        autoFocus
+        value={valor}
+        onChange={(e) => setValor(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') onListo(valor)
+        }}
+        onBlur={() => (valor.trim() && valor !== inicial ? onListo(valor) : onCancelar())}
+        aria-label={etiqueta}
+        placeholder={etiqueta}
+        className="w-44 border-0 bg-transparent p-0 text-sm text-inherit placeholder:text-current placeholder:opacity-50 focus:ring-0"
+      />
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={onCancelar}
+        aria-label="Cancelar"
+        className="opacity-70 hover:opacity-100"
+      >
+        ✕
+      </button>
+    </span>
   )
 }
 

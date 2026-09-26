@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useMenuContextual } from '../components/ui/MenuContextual'
+import { copiar, iconos } from '../menus'
+import { ListOrdered } from 'lucide-react'
 import {
   Search,
   BookOpen,
@@ -32,6 +35,7 @@ function send(cmd: ProjectionCommand) {
 }
 
 export default function Bible() {
+  const abrirMenu = useMenuContextual()
   const [versions, setVersions] = useState<BibleVersionSummary[]>([])
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null)
   const [selectedBookId, setSelectedBookId] = useState<string>('JHN')
@@ -251,6 +255,71 @@ export default function Bible() {
       version: result.version.version,
       text: result.text
     })
+  }
+
+  /**
+   * Proyecta varios versículos seguidos (del `desde` al `hasta`), como un solo
+   * pasaje. Es lo que se hace cuando el predicador va a leer de corrido.
+   */
+  function projectVerseRange(desde: number, hasta: number): void {
+    if (!selectedVersion || !book) return
+    const tramo = verses.filter((v) => v.number >= desde && v.number <= hasta)
+    if (tramo.length === 0) return
+    setChosenVerse(desde)
+    const texto = tramo.map((v) => v.text).join(' ')
+    send({
+      type: 'showBibleVerse',
+      reference: `${book.name} ${selectedChapter}:${desde}-${hasta}`,
+      text: texto,
+      version: selectedVersion
+    })
+    record({
+      bookId: book.id,
+      bookName: book.name,
+      chapter: selectedChapter,
+      verse: desde,
+      endVerse: hasta,
+      version: selectedVersion,
+      text: texto
+    })
+  }
+
+  function menuDeVersiculo(n: number, texto: string) {
+    const ref = `${book?.name ?? ''} ${selectedChapter}:${n}`
+    const desde = chosenVerse !== null && chosenVerse < n ? chosenVerse : null
+    return [
+      { titulo: `${ref} · ${selectedVersion ?? ''}` },
+      {
+        etiqueta: 'Proyectar este versículo',
+        icono: <iconos.Eye className="h-4 w-4" />,
+        variante: 'aire' as const,
+        onSelect: () => projectChapterVerse(n)
+      },
+      desde !== null && {
+        etiqueta: `Proyectar del ${desde} al ${n}`,
+        icono: <ListOrdered className="h-4 w-4" />,
+        variante: 'aire' as const,
+        detalle: `${n - desde + 1} vers.`,
+        onSelect: () => projectVerseRange(desde, n)
+      },
+      n < verses.length && {
+        etiqueta: `Proyectar del ${n} al ${n + 1}`,
+        icono: <ListOrdered className="h-4 w-4" />,
+        variante: 'aire' as const,
+        onSelect: () => projectVerseRange(n, n + 1)
+      },
+      'separador' as const,
+      {
+        etiqueta: 'Copiar el texto',
+        icono: <iconos.Copy className="h-4 w-4" />,
+        onSelect: () => copiar(`${texto}\n— ${ref} (${selectedVersion})`, 'Versículo copiado')
+      },
+      {
+        etiqueta: 'Copiar la referencia',
+        icono: <iconos.Copy className="h-4 w-4" />,
+        onSelect: () => copiar(ref, 'Referencia copiada')
+      }
+    ]
   }
 
   function projectChapterVerse(n: number): void {
@@ -566,6 +635,7 @@ export default function Bible() {
                       <button
                         type="button"
                         onClick={() => projectChapterVerse(v.number)}
+                        onContextMenu={(e) => abrirMenu(e, menuDeVersiculo(v.number, v.text))}
                         className={`group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
                           isActive
                             ? 'bg-aire-suave ring-1 ring-aire-borde'

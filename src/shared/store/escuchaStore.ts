@@ -34,6 +34,18 @@ export interface Sugerencia extends ReferenciaDetectada {
   t: number
   /** Cuántas veces se nombró. Un pasaje que vuelve es el del sermón. */
   veces: number
+  /**
+   * Salió de lo que va de una frase que todavía no terminó. Se muestra para
+   * no hacer esperar, pero puede cambiar cuando llegue la frase completa.
+   */
+  provisional?: boolean
+}
+
+/** Lo que va de la frase en curso: su texto y las citas que ya se ven. */
+export interface FraseProvisional {
+  frase: number
+  texto: string
+  sugerencias: Sugerencia[]
 }
 
 /** Un fragmento transcrito, para el panel "lo que se está oyendo". */
@@ -96,6 +108,8 @@ interface EscuchaState {
   enPantalla: PasajeEnPantalla | null
   /** Claves de las sugerencias que ya salieron a la pantalla. */
   proyectadas: string[]
+  /** Lo que se va oyendo de la frase en curso, antes de que termine. */
+  provisional: FraseProvisional | null
 
   setEstado: (estado: EstadoEscucha) => void
   setNivel: (nivel: number, umbral?: number, hablando?: boolean) => void
@@ -104,7 +118,18 @@ interface EscuchaState {
   setEstadisticas: (e: EstadisticasBiblia | null) => void
   fragmentoEnviado: () => void
   /** Suma lo que devolvió un fragmento y actualiza las sugerencias. */
-  aplicarVentana: (texto: string, ms?: number, opciones?: { forzado?: boolean }) => void
+  aplicarVentana: (
+    texto: string,
+    ms?: number,
+    opciones?: { forzado?: boolean; frase?: number }
+  ) => void
+  /**
+   * Lo que va de una frase que todavía no terminó. Sus citas se muestran ya,
+   * pero no pasan a la lista hasta que llega la frase completa (que las
+   * reemplaza): lo provisional puede haber oído "Juan 3:1" de un "Juan 3:16"
+   * a medio decir.
+   */
+  aplicarProvisional: (texto: string, frase: number) => void
   ventanaDescartada: () => void
   /** Saca una sugerencia de la lista (ya se proyectó, o no servía). */
   descartarSugerencia: (clave: string) => void
@@ -138,6 +163,9 @@ let vistasEnteras = new Set<string>()
 
 let siguienteId = 1
 
+/** La última frase que se cerró con una pausa: lo provisional de antes llega tarde. */
+let ultimaFraseCerrada = 0
+
 /** ¿La cita toca el final del texto? Lo que sigue es sólo puntuación. */
 function tocaElFinal(texto: string, r: ReferenciaDetectada): boolean {
   if (!r.span) return false
@@ -159,7 +187,8 @@ const inicial = {
   error: null as string | null,
   contexto: null as (ContextoCita & { t: number }) | null,
   enPantalla: null as PasajeEnPantalla | null,
-  proyectadas: [] as string[]
+  proyectadas: [] as string[],
+  provisional: null as FraseProvisional | null
 }
 
 export const useEscuchaStore = create<EscuchaState>((set, get) => ({
@@ -184,7 +213,14 @@ export const useEscuchaStore = create<EscuchaState>((set, get) => ({
     set((s) => {
       const pendientes = Math.max(0, s.pendientes - 1)
       const limpio = texto.trim()
-      if (!limpio) return { ultimaLatenciaMs: ms ?? s.ultimaLatenciaMs, pendientes }
+      if (!limpio) {
+        const cierra = opciones.frase === undefined || (s.provisional?.frase ?? 0) <= opciones.frase
+        return {
+          ultimaLatenciaMs: ms ?? s.ultimaLatenciaMs,
+          pendientes,
+          provisional: cierra ? null : s.provisional
+        }
+      }
       const ahora = Date.now()
       const forzado = Boolean(opciones.forzado)
 
@@ -235,6 +271,16 @@ export const useEscuchaStore = create<EscuchaState>((set, get) => ({
         ? { bookId: ultima.bookId, chapter: ultima.chapter, t: ahora }
         : s.contexto
 
+      // La frase completa reemplaza a lo que se había oído de ella a medias. Un
+      // corte forzado no cierra la frase: sigue, con el mismo número.
+      if (opciones.frase !== undefined && !forzado) {
+        ultimaFraseCerrada = Math.max(ultimaFraseCerrada, opciones.frase)
+      }
+      const provisional =
+        s.provisional && (opciones.frase === undefined || s.provisional.frase <= opciones.frase)
+          ? null
+          : s.provisional
+
       return {
         pendientes,
         fragmentos: [
@@ -243,8 +289,45 @@ export const useEscuchaStore = create<EscuchaState>((set, get) => ({
         ].slice(-MAX_FRAGMENTOS),
         sugerencias,
         contexto,
+        provisional,
         ultimaLatenciaMs: ms ?? s.ultimaLatenciaMs
       }
+    }),
+
+  aplicarProvisional: (texto, frase) =>
+    set((s) => {
+      // Llegó tarde: esa frase ya se cerró y su versión completa ya está.
+      if (frase <= ultimaFraseCerrada) return s
+      const limpio = texto.trim()
+      if (!limpio) return s
+      const ahora = Date.now()
+
+      // Misma costura y mismo contexto que una frase completa.
+      const anterior = s.fragmentos[s.fragmentos.length - 1]?.texto ?? ''
+      const colaTokens = tokenizar(anterior).slice(-PALABRAS_COSTURA)
+      const cola = colaTokens.length ? anterior.slice(colaTokens[0].inicio) : ''
+      const analizado = cola ? `${cola} ${limpio}` : limpio
+      const borde = cola ? cola.length + 1 : 0
+      const vigente =
+        s.contexto && ahora - s.contexto.t < CONTEXTO_VIGENCIA_MS ? s.contexto : null
+
+      const yaEstan = new Set(s.sugerencias.map(claveSugerencia))
+      const sugerencias: Sugerencia[] = detectarReferencias(analizado, {
+        contexto: vigente,
+        estadisticas: s.estadisticas ?? undefined
+      })
+        .filter((r) => (!r.span || r.span[1] > borde) && !yaEstan.has(claveSugerencia(r)))
+        .map((r) => ({
+          ...r,
+          offset: palabrasPrevias + r.offset,
+          t: ahora,
+          veces: 1,
+          // La frase sigue: lo que toca el final puede estar a medio decir.
+          cortada: tocaElFinal(analizado, r),
+          provisional: true
+        }))
+
+      return { provisional: { frase, texto: limpio, sugerencias } }
     }),
 
   ventanaDescartada: () =>
@@ -272,6 +355,7 @@ export const useEscuchaStore = create<EscuchaState>((set, get) => ({
 
   limpiar: () => {
     palabrasPrevias = 0
+    ultimaFraseCerrada = 0
     vistasEnteras = new Set()
     // Las estadísticas son de la Biblia, no del culto: se conservan.
     set({ ...inicial })

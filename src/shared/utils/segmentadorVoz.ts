@@ -60,10 +60,14 @@ export const OPCIONES_POR_DEFECTO: OpcionesSegmentador = {
   tasa: 16000,
   cuadroMs: 30,
   sensibilidad: 0.5,
-  pausaMs: 650,
+  // Afinados después de la primera prueba con gente: con 650/7000/12000 una
+  // cita dicha en medio de una frase larga tardaba ~12 s en aparecer. La
+  // transcripción provisional (ver `parcial`) resuelve la mayor parte; esto
+  // acorta además el peor caso.
+  pausaMs: 550,
   pausaCortaMs: 240,
-  blandoMs: 7000,
-  maxSegMs: 12000,
+  blandoMs: 5000,
+  maxSegMs: 10000,
   minVozMs: 350,
   cuadrosInicio: 3,
   prerollMs: 300,
@@ -75,6 +79,8 @@ export const OPCIONES_POR_DEFECTO: OpcionesSegmentador = {
 const CUADROS_CALIBRACION = 10
 
 export interface Fragmento {
+  /** Número de la frase a la que pertenece (crece con cada frase nueva). */
+  frase: number
   pcm: Int16Array
   /** Se cortó por largo y no por una pausa: puede terminar a mitad de palabra. */
   forzado: boolean
@@ -147,6 +153,8 @@ export class SegmentadorVoz {
   private previos: Int16Array[] = []
   private actual = new Acumulador()
   private enVoz = false
+  /** Número de la frase en curso. Una frase forzada sigue con el mismo número. */
+  private frase = 0
   private seguidosSobre = 0
   private silencioMs = 0
   private vozMs = 0
@@ -197,6 +205,19 @@ export class SegmentadorVoz {
     return { fragmentos, nivel, umbral: dbARms(this.umbralDb()), hablando: this.enVoz }
   }
 
+  /**
+   * Lo que va de la frase en curso, sin cerrarla. Sirve para la transcripción
+   * provisional: si el predicador nombra una cita al principio de una frase
+   * larga, no hay por qué esperar a que termine de hablar para mostrarla.
+   *
+   * `null` si no hay voz en curso o si todavía es muy corta para transcribir.
+   */
+  parcial(minMs = 1800): { frase: number; pcm: Int16Array } | null {
+    if (!this.enVoz || this.vozMs < this.op.minVozMs) return null
+    if ((this.actual.largo / this.op.tasa) * 1000 < minMs) return null
+    return { frase: this.frase, pcm: this.actual.unir() }
+  }
+
   /** Al detener: lo que estaba en curso, si tiene voz suficiente. */
   cerrar(): Fragmento | null {
     const f = this.enVoz ? this.emitir(false) : null
@@ -233,6 +254,7 @@ export class SegmentadorVoz {
         // Empezó a hablar: el fragmento arranca con el pre-roll (que ya
         // incluye los cuadros que dispararon el inicio).
         this.enVoz = true
+        this.frase++
         this.actual.limpiar()
         for (const p of this.previos) this.actual.push(p)
         this.previos = []
@@ -313,6 +335,11 @@ export class SegmentadorVoz {
       const sobrante = Math.round((this.silencioMs / 1000) * this.op.tasa) - cola
       if (sobrante > 0) pcm = pcm.slice(0, Math.max(0, pcm.length - sobrante))
     }
-    return { pcm, forzado, duracionMs: Math.round((pcm.length / this.op.tasa) * 1000) }
+    return {
+      frase: this.frase,
+      pcm,
+      forzado,
+      duracionMs: Math.round((pcm.length / this.op.tasa) * 1000)
+    }
   }
 }

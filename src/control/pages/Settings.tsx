@@ -57,6 +57,7 @@ const ATAJOS: { teclas: string[]; que: string }[] = [
   { teclas: ['Ctrl', '1…8'], que: 'Ir a cada sección, en el orden del menú' },
   { teclas: ['Ctrl', 'Enter'], que: 'Escucha: proyectar la cita más nueva' },
   { teclas: ['Ctrl', '← / →'], que: 'Escucha: versículo anterior / siguiente' },
+  { teclas: ['Shift', 'F10'], que: 'Menú de opciones del elemento enfocado (lo mismo que el clic derecho)' },
   { teclas: ['Tab'], que: 'Moverse con el teclado; el primer Tab ofrece saltar al contenido' }
 ]
 

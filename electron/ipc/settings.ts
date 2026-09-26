@@ -5,6 +5,8 @@ import { dirname } from 'path'
 import log from 'electron-log'
 import { IPC_CHANNELS } from '../../src/shared/constants'
 import { getSettings, updateSettings } from '../services/settingsService'
+import { mediaScanner, liveMediaScanner, bibleMediaScanner } from '../services/mediaScanner'
+import { audioScanner } from '../services/audioScanner'
 import type { AppSettings } from '../../src/shared/types/ipc'
 import type { AppInfo, CarpetaAbrible } from '../../src/shared/types/electronAPI'
 
@@ -56,6 +58,24 @@ export function registerSettingsHandlers(
       datos: app.getPath('userData'),
       registro: archivoDeRegistro()
     })
+  )
+
+  /**
+   * Muestra un archivo de la biblioteca en el explorador, con el archivo
+   * seleccionado. Se pide por id y la ruta la resuelven los escáneres: la
+   * ventana nunca maneja rutas del disco.
+   */
+  ipcMain.handle(
+    IPC_CHANNELS.SHOW_ITEM_IN_FOLDER,
+    (_event, tipo: 'media' | 'audio', id: string): boolean => {
+      const item =
+        tipo === 'audio'
+          ? audioScanner.getById(id)
+          : (mediaScanner.getById(id) ?? liveMediaScanner.getById(id) ?? bibleMediaScanner.getById(id))
+      if (!item || !existsSync(item.filePath)) return false
+      shell.showItemInFolder(item.filePath)
+      return true
+    }
   )
 
   /**

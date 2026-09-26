@@ -155,7 +155,9 @@ export const NOMBRES_SERVIDOR = ['whisper-server', 'server']
  *
  * Los ejemplos con dos puntos no son decoración: empujan a whisper a escribir
  * TODAS las citas igual ("Juan 3:16"), que es la forma que el detector lee con
- * más seguridad. Los libros listados son los que más se escriben mal.
+ * más seguridad. Los libros listados son los que más se escriben mal: los de
+ * nombre raro y los cortos (Job, Rut, Tito), que whisper confunde con palabras
+ * de otro idioma — "Job" llegó como "hop" en una prueba real.
  *
  * Es corto a propósito. Un prompt largo se come parte de la ventana de
  * contexto del modelo y, cuando el audio es corto o hay silencio, whisper
@@ -163,9 +165,10 @@ export const NOMBRES_SERVIDOR = ['whisper-server', 'server']
  */
 export const PROMPT_BIBLICO =
   'Predicación cristiana. Citas: Juan 3:16, Romanos 8:28, 1 Corintios 13:4, Salmo 23, ' +
-  'Hechos 2:38. Libros: Génesis, Éxodo, Deuteronomio, Isaías, Ezequiel, Habacuc, Sofonías, ' +
-  'Hageo, Malaquías, Mateo, Efesios, Filipenses, Colosenses, Tesalonicenses, Hebreos, ' +
-  'Santiago, Apocalipsis.'
+  'Hechos 2:38, Job 19:25. Libros: Génesis, Éxodo, Deuteronomio, Rut, Job, Isaías, ' +
+  'Ezequiel, Joel, Amós, Jonás, Habacuc, Sofonías, Hageo, Malaquías, Mateo, Efesios, ' +
+  'Filipenses, Colosenses, Tesalonicenses, Tito, Filemón, Hebreos, Santiago, Judas, ' +
+  'Apocalipsis.'
 
 /**
  * El prompt de cada fragmento: el vocabulario bíblico más el final de lo que

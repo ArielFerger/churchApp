@@ -30,6 +30,8 @@ const TarjetaSugerencia = forwardRef<
     correccion: Correccion | undefined
     editando: boolean
     yaSalio: boolean
+    /** Salió de una frase que todavía no terminó: puede cambiar. */
+    provisional?: boolean
     esLaMasNueva: boolean
     version: string | null
     previa: EstadoVersiculo | undefined
@@ -37,6 +39,8 @@ const TarjetaSugerencia = forwardRef<
     onDescartar: () => void
     onEditar: () => void
     onCorregir: (c: Correccion) => void
+    /** Clic derecho: las mismas acciones, más copiar. */
+    onMenu?: (e: React.MouseEvent) => void
   }
 >(function TarjetaSugerencia(
   {
@@ -44,13 +48,15 @@ const TarjetaSugerencia = forwardRef<
     correccion,
     editando,
     yaSalio,
+    provisional = false,
     esLaMasNueva,
     version,
     previa,
     onProyectar,
     onDescartar,
     onEditar,
-    onCorregir
+    onCorregir,
+    onMenu
   },
   ref
 ) {
@@ -69,6 +75,7 @@ const TarjetaSugerencia = forwardRef<
       animate="visible"
       exit="salida"
       aria-labelledby={idTitulo}
+      onContextMenu={onMenu}
       className={`group relative rounded-xl border p-3.5 transition-colors ${
         yaSalio
           ? 'border-cabina-linea bg-cabina-panel/60'
@@ -90,10 +97,20 @@ const TarjetaSugerencia = forwardRef<
         </span>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          {esLaMasNueva && !yaSalio && (
-            <span className="rounded bg-listo-suave px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-rotulo text-listo">
-              Nueva
+          {provisional ? (
+            <span
+              className="animate-latido rounded border border-listo-borde px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-rotulo text-listo"
+              title="Se oyó mientras el predicador sigue hablando: se confirma cuando termina la frase"
+            >
+              Oyendo…
             </span>
+          ) : (
+            esLaMasNueva &&
+            !yaSalio && (
+              <span className="rounded bg-listo-suave px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-rotulo text-listo">
+                Nueva
+              </span>
+            )
           )}
           {r.veces > 1 && (
             <span
@@ -120,7 +137,7 @@ const TarjetaSugerencia = forwardRef<
           {/* Distinto de "no se entendió": esto se entendió bien, pero llegó
               pegada a un corte forzado y el número puede estar cortado (un
               "13" que llega como "3"). */}
-          {r.cortada && !dudosa && (
+          {r.cortada && !dudosa && !provisional && (
             <span
               className="rounded border border-listo-borde px-1.5 py-0.5 text-[11px] text-listo"
               title="La frase quedó cortada por el largo máximo de un fragmento: puede faltarle un dígito al número."

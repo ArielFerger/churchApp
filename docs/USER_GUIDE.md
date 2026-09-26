@@ -1,6 +1,8 @@
 # Guía de uso — Church Projector
 
-La app abre **dos ventanas**: la de **Control** (donde trabajás vos) y la de **Proyección** (la que ve la congregación, en la segunda pantalla). La de proyección nunca se cierra; si la perdés de vista, botón **Proyección** arriba a la derecha (doble clic la recarga). Si abrís la app dos veces, la segunda sólo trae al frente la que ya estaba abierta.
+La app abre **dos ventanas**: la de **Control** (donde trabajás vos) y la de **Proyección** (la que ve la congregación, en la segunda pantalla). La de proyección no se cierra sola; si la perdés de vista, botón **Proyección** arriba a la derecha (doble clic la recarga). **Cerrar la ventana de Control cierra la app entera**, proyección incluida.
+
+Sólo puede haber una copia abierta: si la abrís otra vez, te trae la que ya estaba y te avisa que ya estaba abierta (dos copias se pelearían por el proyector y por el micrófono).
 
 ## Cómo está organizada la pantalla
 
@@ -9,6 +11,8 @@ La app abre **dos ventanas**: la de **Control** (donde trabajás vos) y la de **
 - **La franja AL AIRE**, debajo: dice **qué** ve la congregación ahora (el versículo, la canción, el video, el fondo en loop). Si está en rojo, se está viendo. Si dice *SIN SEÑAL*, la pantalla está vacía. Si hay un fondo detrás de un versículo, lo menciona aparte (*+ fondo: …*).
 - **Abajo**, el reproductor de música, siempre visible.
 - **Avisos**: cuando termina una descarga, falla algo, o la Escucha oye una cita mientras estás en otra sección, aparece un aviso abajo a la derecha que se va solo.
+
+**Clic derecho** sobre casi cualquier cosa abre un menú con lo que se puede hacer con ella (ver *Menús de clic derecho* más abajo). En los campos de texto, el clic derecho da Cortar, Copiar y Pegar.
 
 **El rojo significa "al aire"** en toda la app: los botones que mandan algo a la pantalla (*Proyectar*, *Mostrar en proyección*, *Iniciar presentación*) se ponen rojos al pasar el mouse, y lo que está saliendo se marca en rojo. El **ámbar** es lo elegido o lo que sigue; el **verde**, lo que salió bien; el **salmón**, los errores.
 
@@ -119,8 +123,11 @@ Mientras el pastor predica, la app oye la entrada de audio y, cuando alguien nom
 ### Durante la predicación
 
 - Apretá **Escuchar**. La primera vez tarda uno o dos segundos en cargar el modelo.
-- El **medidor** está en decibeles, como el de la consola. La rayita blanca es el **umbral**: por debajo se considera silencio y no se transcribe. Se ajusta sola al ruido de fondo; si igual se pierde voz floja, subí la **Sensibilidad**, y si transcribe ruido, bajala.
-- La app corta el audio **en las pausas del predicador**, frase por frase. Una cita aparece **uno o dos segundos después de que termina la frase** donde se nombró.
+- El **medidor** está en decibeles, como el de la consola. La rayita blanca es el **umbral**: por debajo se considera silencio y no se transcribe. Se ajusta sola al ruido de fondo.
+- **Volumen de entrada**: si la voz llega baja (el medidor apenas se mueve, o tenés que acercarte mucho al micrófono), subilo. Con la línea de la consola suele alcanzar con 0 dB; con el micrófono de una notebook a unos metros, entre +12 y +24 dB. Se ajusta en vivo, sin detener.
+- **Sensibilidad**: si igual se pierde voz floja, subila; si transcribe ruido o música, bajala.
+- Además, cada frase se lleva sola a un volumen cómodo antes de transcribirla: whisper entiende mucho peor el audio bajo.
+- La app corta el audio **en las pausas del predicador**, frase por frase. Mientras el pastor sigue hablando, cada un par de segundos transcribe **lo que va de la frase**: una cita aparece **unos 2 segundos después de nombrarse**, marcada *Oyendo…*, y se confirma sola cuando termina la frase (si el número se había oído a medias, se corrige).
 - Cada sugerencia muestra **el texto del versículo**: si es lo que el pastor está leyendo, no hay duda. También el pedazo de lo que se oyó, cuántas veces se nombró (×2) y, si el libro no se dijo en esa frase, de qué cita anterior se tomó (*"y ahora el versículo 31"* → sigue en Romanos 8).
 - **Proyectar** la manda a la pantalla. **Ctrl+Enter** proyecta la más nueva sin el mouse.
 - Una vez proyectada, el panel **Al aire desde la Escucha** tiene *Anterior* y *Siguiente* (**Ctrl+←** / **Ctrl+→**) para seguir versículo por versículo mientras el pastor lee, cruzando de capítulo si hace falta.
@@ -128,6 +135,8 @@ Mientras el pastor predica, la app oye la entrada de audio y, cuando alguien nom
 - Avisos: *no se entendió bien* (el reconocedor dudó) y *se oyó cortada* (el pastor habló de corrido más de lo que entra en un pedazo y al número puede faltarle un dígito). En los dos casos, confirmá antes de sacarlo.
 - *Lo que se está oyendo* muestra la transcripción en vivo con las citas resaltadas: sirve para entender por qué apareció (o no) algo.
 - Mientras escucha, la cabecera lo dice desde cualquier sección, con cuántas citas esperan. Si oye una cita mientras estás en otra sección, te avisa.
+
+Nombres que el reconocedor escribe raro —"hop" por *Job*, "Ageo" por *Hageo*, "Ebreos" por *Hebreos*, "Sacarías" por *Zacarías*— se entienden igual: la app compara cómo suenan, no cómo se escriben.
 
 ### Privacidad
 
@@ -168,6 +177,21 @@ Qué se puede hacer, en orden:
 
 Lo que **no** hay es forma de saltear el control sin identificarse. Si te encontrás con eso justo antes de una reunión, lo práctico es tener el video ya bajado de antes: por eso conviene no depender de descargar en el momento.
 
+## Menús de clic derecho 🖱️
+
+El clic derecho (o la tecla de menú, o **Shift+F10** con el teclado) abre lo que se puede hacer con cada cosa. Las opciones que mandan algo a la pantalla se ponen rojas al pasar el mouse. Se cierra tocando afuera.
+
+- **Media y fondos de En Vivo**: Mostrar en proyección, Mostrar en loop, Poner/Quitar de fondo, Añadir a la cola de videos o **Reproducir a continuación** (suena después del que está al aire), agregar a la presentación, Marcar para hoy, **Categoría ▸**, Mostrar en la carpeta, Copiar el nombre.
+- **Música**: Reproducir, **Reproducir a continuación**, Agregar a la cola, **Playlists ▸** (con tilde en las que ya lo tienen: tocás para agregar o sacar), Quitar de la playlist abierta, Mostrar en la carpeta, Copiar el título.
+- **Canciones**: Tocar, Editar, **Mover a álbum ▸**, Eliminar.
+- **Biblia** (sobre un versículo): Proyectar este, **Proyectar del N al M** (del que está al aire hasta ese, para leer de corrido), Copiar el texto, Copiar la referencia.
+- **Escucha** (sobre una cita): Proyectar, Corregir el número, Copiar la referencia, Descartar.
+- **Descargas**: Mostrar en la carpeta, Reintentar, Abrir en el navegador, Copiar el enlace o el detalle del error, Cancelar o Sacar de la lista.
+
+Con el teclado: flechas para moverse, **Enter** para elegir, **→** abre un submenú y **←** vuelve. **Esc no cierra el menú**: en esta app Esc es siempre la parada de pánico.
+
+En Canciones, *Nuevo álbum* y *Renombrar* ahora abren un campo en el lugar (antes no hacían nada).
+
 ## Herramientas desde la terminal 🧰
 
 Con la app vienen dos scripts de Python (en la carpeta de instalación, `resources/scripts/herramientas`, o en el repositorio en `scripts/herramientas`). Sólo necesitan Python 3.8 o más nuevo:
@@ -188,6 +212,7 @@ Están todos también en *Ajustes → Atajos de teclado*.
 - En Biblia, **cualquier letra** abre el buscador rápido.
 - En Canciones → Tocar: **← →** o **espacio** pasan de slide, **1–9** saltan directo, **Inicio/Fin** van al primero/último.
 - En Escucha: **Ctrl+Enter** proyecta la cita más nueva; **Ctrl+← / Ctrl+→**, versículo anterior / siguiente.
+- **Shift+F10** o la tecla de menú — el menú de clic derecho del elemento enfocado.
 - En Media, **Esc** limpia la búsqueda.
 
 Si el sistema tiene activado *reducir movimiento* (accesibilidad), la ventana de control deja las animaciones al mínimo. La proyección no se toca.

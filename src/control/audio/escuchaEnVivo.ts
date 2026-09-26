@@ -21,7 +21,11 @@ export function escuchando(): boolean {
 export interface OpcionesEscucha {
   deviceId?: string | null
   sensibilidad?: number
+  gananciaDb?: number
 }
+
+/** Pedidos a whisper que todavía no volvieron (completos y provisionales). */
+let enVuelo = 0
 
 export async function iniciarEscucha(opciones: OpcionesEscucha = {}): Promise<void> {
   if (captura) return
@@ -47,13 +51,15 @@ export async function iniciarEscucha(opciones: OpcionesEscucha = {}): Promise<vo
     captura = await iniciarCaptura({
       deviceId: opciones.deviceId,
       sensibilidad: opciones.sensibilidad,
+      gananciaDb: opciones.gananciaDb,
       onNivel: (nivel, umbral, hablando) =>
         useEscuchaStore.getState().setNivel(nivel, umbral, hablando),
       onError: (e) => {
         void detenerEscucha()
         useEscuchaStore.getState().setError(e.message)
       },
-      onFragmento: enviar
+      onFragmento: enviar,
+      onParcial: enviarParcial
     })
 
     useEscuchaStore.getState().setEstado('escuchando')
@@ -68,7 +74,7 @@ export async function iniciarEscucha(opciones: OpcionesEscucha = {}): Promise<vo
  * audio mientras whisper trabaja. Si llega otra antes de que termine, el main
  * la descarta —eso es mejor que atrasarse cada vez más.
  */
-function enviar(pcm: Int16Array, forzado: boolean): void {
+function enviar(pcm: Int16Array, forzado: boolean, frase: number): void {
   const api = window.electronAPI
   if (!api) return
   const s = useEscuchaStore.getState()
@@ -76,18 +82,54 @@ function enviar(pcm: Int16Array, forzado: boolean): void {
   // El final de lo que se venía diciendo va como contexto: whisper mantiene
   // los nombres y la forma de escribir las citas entre una frase y la otra.
   const prompt = promptConContexto(s.textoReciente())
+  enVuelo++
   void api
     .transcribirVentana(new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength), TASA, prompt)
     .then((r) => {
       const st = useEscuchaStore.getState()
       if (!r) return st.ventanaDescartada()
-      st.aplicarVentana(r.texto, r.ms, { forzado })
+      st.aplicarVentana(r.texto, r.ms, { forzado, frase })
     })
     .catch((e: unknown) => {
       const st = useEscuchaStore.getState()
       st.ventanaDescartada()
       st.setError(mensaje(e))
     })
+    .finally(() => {
+      enVuelo--
+    })
+}
+
+/**
+ * Lo que va de una frase que todavía no terminó. Sólo si whisper está libre:
+ * lo provisional nunca puede demorar una frase completa (el main además le da
+ * prioridad a las completas). Si se pierde, en dos segundos llega otra.
+ */
+function enviarParcial(pcm: Int16Array, frase: number): void {
+  const api = window.electronAPI
+  if (!api || enVuelo > 0) return
+  const prompt = promptConContexto(useEscuchaStore.getState().textoReciente())
+  enVuelo++
+  void api
+    .transcribirVentana(
+      new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength),
+      TASA,
+      prompt,
+      true
+    )
+    .then((r) => {
+      if (r) useEscuchaStore.getState().aplicarProvisional(r.texto, frase)
+    })
+    .catch(() => {
+      /* lo provisional es un adelanto: si falla, llega la frase completa */
+    })
+    .finally(() => {
+      enVuelo--
+    })
+}
+
+export function cambiarGanancia(db: number): void {
+  captura?.setGanancia(db)
 }
 
 export function cambiarSensibilidad(s: number): void {

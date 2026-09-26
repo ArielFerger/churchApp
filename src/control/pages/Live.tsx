@@ -32,6 +32,8 @@ import type { MediaItem } from '@/shared/types/media'
 import Boton from '../components/ui/Boton'
 import { EncabezadoPagina, Panel, Rotulo } from '../components/ui/Panel'
 import { fundido } from '../components/ui/movimiento'
+import { useMenuContextual } from '../components/ui/MenuContextual'
+import { menuParaMedia } from '../menus'
 
 function send(cmd: ProjectionCommand) {
   window.electronAPI?.sendProjectionCommand(cmd)
@@ -70,6 +72,7 @@ export default function Live() {
 
   // Carpeta actual dentro del picker de fondo ('' = raíz).
   const [bgPath, setBgPath] = useState('')
+  const abrirMenu = useMenuContextual()
 
   useEffect(() => {
     void loadMedia()
@@ -315,6 +318,7 @@ export default function Live() {
                         <button
                           type="button"
                           onClick={() => setSingleBackground(item.id)}
+                          onContextMenu={(e) => abrirMenu(e, menuParaMedia(item))}
                           aria-pressed={alAire}
                           aria-label={`${alAire ? 'Fondo al aire: ' : 'Poner de fondo: '}${item.fileName}`}
                           title={item.fileName}
@@ -406,6 +410,7 @@ export default function Live() {
                       <button
                         type="button"
                         onClick={() => toggleSlideshowItem(item.id)}
+                        onContextMenu={(e) => abrirMenu(e, menuParaMedia(item))}
                         aria-pressed={selected}
                         aria-label={
                           selected ? `${item.fileName}, número ${order + 1} de la presentación` : item.fileName

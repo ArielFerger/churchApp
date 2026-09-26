@@ -209,3 +209,40 @@ describe('estado', () => {
     expect(store().descartadas).toBe(2)
   })
 })
+
+describe('frase provisional', () => {
+  it('muestra la cita antes de que termine la frase, sin sumarla a la lista', () => {
+    store().aplicarProvisional('y ahora vamos a abrir en Juan 3:16 porque', 1)
+    expect(store().provisional?.sugerencias.map((r) => r.bookId)).toEqual(['JHN'])
+    expect(store().provisional?.sugerencias[0].provisional).toBe(true)
+    expect(store().sugerencias).toHaveLength(0)
+  })
+
+  it('la frase completa la reemplaza (lo provisional pudo oír un número a medias)', () => {
+    // Provisional cortado justo en el medio del número.
+    store().aplicarProvisional('abramos en Juan 3:1', 1)
+    expect(store().provisional?.sugerencias[0]).toMatchObject({ verse: 1, cortada: true })
+
+    store().aplicarVentana('abramos en Juan 3:16 porque de tal manera', 800, { frase: 1 })
+    expect(store().provisional).toBeNull()
+    expect(store().sugerencias.map((r) => `${r.chapter}:${r.verse}`)).toEqual(['3:16'])
+  })
+
+  it('una provisional que llega después de su frase completa se ignora', () => {
+    store().aplicarVentana('leamos Romanos 8:28', 800, { frase: 3 })
+    store().aplicarProvisional('leamos Romanos 8', 3)
+    expect(store().provisional).toBeNull()
+  })
+
+  it('un corte forzado no cierra la frase: sigue llegando lo provisional', () => {
+    store().aplicarVentana('una frase larguísima sin pausas', 800, { frase: 2, forzado: true })
+    store().aplicarProvisional('que termina en Salmo 23', 2)
+    expect(store().provisional?.sugerencias.map((r) => r.bookId)).toEqual(['PSA'])
+  })
+
+  it('no repite en provisional lo que ya está en la lista', () => {
+    store().aplicarVentana('abramos en Juan 3:16', 800, { frase: 1 })
+    store().aplicarProvisional('como dice Juan 3:16 y además', 2)
+    expect(store().provisional?.sugerencias).toEqual([])
+  })
+})

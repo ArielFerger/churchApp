@@ -22,6 +22,9 @@ import {
 import Boton from '../ui/Boton'
 import BarraProgreso from '../ui/BarraProgreso'
 import { filaLista } from '../ui/movimiento'
+import { useMenuContextual } from '../ui/MenuContextual'
+import { copiar } from '../../menus'
+import { ExternalLink } from 'lucide-react'
 
 /** Una descarga de la cola, con sus acciones según en qué etapa esté. */
 const FilaDescarga = forwardRef<HTMLLIElement, { job: DownloadJob }>(function FilaDescarga(
@@ -29,6 +32,7 @@ const FilaDescarga = forwardRef<HTMLLIElement, { job: DownloadJob }>(function Fi
   ref
 ) {
   const api = window.electronAPI
+  const abrirMenu = useMenuContextual()
   const p = job.progress
   const pct = p?.ratio != null ? Math.round(p.ratio * 100) : null
   const activo = ACTIVOS.includes(job.stage)
@@ -56,6 +60,51 @@ const FilaDescarga = forwardRef<HTMLLIElement, { job: DownloadJob }>(function Fi
             : 'border-cabina-linea'
       }`}
       aria-label={nombre}
+      onContextMenu={(e) =>
+        abrirMenu(e, [
+          { titulo: nombre },
+          job.stage === 'done' && {
+            etiqueta: 'Mostrar en la carpeta',
+            icono: <FolderOpen className="h-4 w-4" />,
+            onSelect: () => void api?.showDownloadInFolder(job.id)
+          },
+          (job.stage === 'error' || job.stage === 'canceled') && {
+            etiqueta: 'Reintentar',
+            icono: <RotateCcw className="h-4 w-4" />,
+            onSelect: () => void api?.retryDownload(job.id)
+          },
+          {
+            etiqueta: 'Abrir en el navegador',
+            icono: <ExternalLink className="h-4 w-4" />,
+            onSelect: () => window.open(job.url, '_blank')
+          },
+          {
+            etiqueta: 'Copiar el enlace',
+            icono: <Copy className="h-4 w-4" />,
+            onSelect: () => copiar(job.url, 'Enlace copiado')
+          },
+          Boolean(job.errorDetail) && {
+            etiqueta: 'Copiar el detalle del error',
+            icono: <Copy className="h-4 w-4" />,
+            onSelect: () => copiar(job.errorDetail ?? '', 'Detalle copiado')
+          },
+          'separador',
+          activo
+            ? {
+                etiqueta: 'Cancelar',
+                icono: <X className="h-4 w-4" />,
+                variante: 'peligro',
+                onSelect: () => void api?.cancelDownload(job.id)
+              }
+            : {
+                etiqueta: 'Sacar de la lista',
+                detalle: 'el archivo queda',
+                icono: <Trash2 className="h-4 w-4" />,
+                variante: 'peligro',
+                onSelect: () => void api?.removeDownload(job.id)
+              }
+        ])
+      }
     >
       <div className="flex items-start gap-3">
         <div className="relative h-14 w-24 shrink-0 overflow-hidden rounded-md bg-cabina-negro">

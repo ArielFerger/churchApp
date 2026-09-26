@@ -77,3 +77,47 @@ export function floatAPcm16(muestras: Float32Array): Int16Array {
   }
   return out
 }
+
+// ─── Nivel para whisper ──────────────────────────────────────────────────────
+
+/**
+ * Sube el volumen de una frase hasta un nivel cómodo para el reconocedor.
+ *
+ * Whisper reconoce bastante peor el audio bajo: con el micrófono de una
+ * notebook a un par de metros, la voz llega a -40 dBFS y había que hablarle
+ * encima para que entendiera. Esto lleva la frase a `objetivoDb` de RMS, sin
+ * pasar de `maxGananciaDb` (subir 40 dB un silencio sólo amplifica ruido) y
+ * sin que el pico pase de `techo` (una frase que satura se entiende peor que
+ * una baja). Nunca baja el volumen: una frase fuerte queda como está.
+ */
+export function normalizarVoz(
+  pcm: Int16Array,
+  objetivoDb = -20,
+  maxGananciaDb = 24,
+  techo = 0.9
+): Int16Array {
+  if (pcm.length === 0) return pcm
+  let suma = 0
+  let pico = 0
+  for (let i = 0; i < pcm.length; i++) {
+    const v = pcm[i] / 32768
+    suma += v * v
+    const a = Math.abs(v)
+    if (a > pico) pico = a
+  }
+  const nivel = Math.sqrt(suma / pcm.length)
+  if (nivel === 0 || pico === 0) return pcm
+  const objetivo = Math.pow(10, objetivoDb / 20)
+  const ganancia = Math.min(objetivo / nivel, Math.pow(10, maxGananciaDb / 20), techo / pico)
+  if (ganancia <= 1.05) return pcm
+  const out = new Int16Array(pcm.length)
+  for (let i = 0; i < pcm.length; i++) {
+    out[i] = Math.max(-32768, Math.min(32767, Math.round(pcm[i] * ganancia)))
+  }
+  return out
+}
+
+/** Decibeles → factor de ganancia (0 dB = 1×, +6 dB ≈ 2×, +20 dB = 10×). */
+export function dbAGanancia(db: number): number {
+  return Math.pow(10, db / 20)
+}

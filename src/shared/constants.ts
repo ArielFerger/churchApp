@@ -73,5 +73,6 @@ export const IPC_CHANNELS = {
   SEARCH_VERSE: 'bible:searchVerse',
   SHOW_OPEN_DIALOG: 'dialog:showOpen',
   GET_APP_INFO: 'app:info',
+  SHOW_ITEM_IN_FOLDER: 'app:showItemInFolder',
   OPEN_FOLDER: 'app:openFolder'
 } as const

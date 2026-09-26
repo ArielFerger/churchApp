@@ -196,6 +196,86 @@ const VOCABULARIO = (() => {
   return map
 })()
 
+/**
+ * Clave fonética castellana: cómo SUENA una palabra, para comparar lo que
+ * escribió el reconocedor con los nombres de los libros.
+ *
+ * Whisper es multilenguaje y a veces escribe el sonido con ortografía de otro
+ * idioma: la jota castellana de "Job" le suena a la hache inglesa y escribe
+ * "hop"; la hache muda de "Hageo" o "Hebreos" se le pierde ("Ageo", "Ebreos");
+ * con seseo, "Zacarías" sale "Sacarías". El difuso por distancia de edición no
+ * sirve para nombres cortos (daría falsos positivos con cualquier palabra de
+ * tres letras); esto compara sonidos en vez de letras.
+ */
+export function fonetica(palabra: string): string {
+  let t = palabra
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9ñ]/g, '')
+  t = t
+    .replace(/ch/g, '§') // la "ch" es un sonido propio: que no la toque la regla de la h
+    .replace(/ll/g, 'y')
+    .replace(/qu/g, 'k')
+    .replace(/c(?=[ei])/g, 's')
+    .replace(/c/g, 'k')
+    .replace(/z/g, 's')
+    .replace(/v/g, 'b')
+    .replace(/w/g, 'u')
+    .replace(/g(?=[ei])/g, 'j')
+    // La h es muda, y la j suena como la h de otros idiomas: el reconocedor
+    // las confunde entre sí. Se tiran las dos.
+    .replace(/[jh]/g, '')
+    // Final ensordecido: "Job" se oye "Jop".
+    .replace(/p$/, 'b')
+    .replace(/d$/, 't')
+    .replace(/§/g, 'ch')
+    .replace(/(.)\1+/g, '$1')
+  return t
+}
+
+/**
+ * Formas en que el reconocedor escribe un libro y que ni la clave fonética
+ * alcanza. Salen de pruebas reales: "Job" llegó como "hop" (la fonética lo
+ * deja en dos letras, "ob", demasiado corto para compararlo con seguridad).
+ */
+const ALIAS: Record<string, string> = {
+  hop: 'JOB',
+  hob: 'JOB',
+  jop: 'JOB',
+  jov: 'JOB',
+  yob: 'JOB',
+  joob: 'JOB',
+  ruth: 'RUT',
+  yoel: 'JOL',
+  yonas: 'JON',
+  jonah: 'JON',
+  naum: 'NAM',
+  salmos: 'PSA'
+}
+
+/**
+ * Índice fonético: clave fonética → libro. Sólo claves de 3 letras o más:
+ * más cortas ("os" de Josué, "ua" de "jua") coinciden con palabras corrientes.
+ */
+const VOCABULARIO_FONETICO = (() => {
+  const map = new Map<string, BookMeta>()
+  for (const [clave, libro] of VOCABULARIO) {
+    const f = fonetica(clave)
+    if (f.length >= 3 && !map.has(f)) map.set(f, libro)
+  }
+  return map
+})()
+
+/** Busca por alias y por sonido. Puntaje menor que el exacto: se corrigió. */
+function buscarPorSonido(clave: string): BookMeta | null {
+  const alias = ALIAS[clave]
+  if (alias) return BIBLE_BOOKS.find((b) => b.id === alias) ?? null
+  const f = fonetica(clave)
+  if (f.length < 3) return null
+  return VOCABULARIO_FONETICO.get(f) ?? null
+}
+
 /** Nombres largos, para el matching difuso. Los cortos dan falsos positivos. */
 const NOMBRES_LARGOS = BIBLE_BOOKS.map((b) => ({
   clave: normalizeBookName(b.name),
@@ -250,6 +330,15 @@ export function buscarLibro(
     const clave = normalizeBookName(palabras.slice(desde, desde + largo).join(''))
     const exacto = VOCABULARIO.get(clave)
     if (exacto) return { libro: exacto, consumidas: largo, puntaje: 1 }
+  }
+
+  // Por sonido, de a una o dos palabras ("hop", "Ageo", "san Mateo").
+  for (let largo = 2; largo >= 1; largo--) {
+    if (desde + largo > palabras.length || cruzaSeparador(largo)) continue
+    if (/^\d/.test(palabras[desde])) continue
+    const clave = normalizeBookName(palabras.slice(desde, desde + largo).join(''))
+    const porSonido = buscarPorSonido(clave)
+    if (porSonido) return { libro: porSonido, consumidas: largo, puntaje: 0.85 }
   }
 
   // Sin coincidencia exacta: se tolera que el reconocedor haya errado letras.
@@ -371,7 +460,10 @@ const RELLENO = new Set([
 const APERTURA = new Set([
   'en', 'a', 'al', 'con', 'desde', 'leemos', 'dice', 'abramos', 'abran', 'vayamos',
   'vamos', 'busquemos', 'busquen', 'lean', 'leamos', 'leer', 'segun', 'evangelio',
-  'carta', 'epistola', 'libro', 'profeta', 'apostol'
+  'carta', 'epistola', 'libro', 'profeta', 'apostol',
+  // Verbos con los que un predicador presenta el pasaje: "escuchen Job 1:21".
+  'escucha', 'escuchen', 'escuchemos', 'veamos', 'miren', 'mira', 'tomemos',
+  'recordemos', 'leo', 'leyendo', 'cita', 'pasaje'
 ])
 /** Marcan que lo que sigue es un rango: "del 16 al 18". */
 const HASTA = new Set(['al', 'hasta', 'a', SEP_RANGO])

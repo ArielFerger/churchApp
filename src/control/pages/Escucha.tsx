@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Cpu, Ear, Settings2, Square, Trash2 } from 'lucide-react'
+import { Cpu, Ear, Pencil, Settings2, Square, Trash2 } from 'lucide-react'
 import { modeloPorId, type WhisperModelId } from '@/shared/utils/whisper'
 import { pasajeVecino, textoReferencia, type Pasaje } from '@/shared/utils/navegacionBiblica'
 import { claveSugerencia, useEscuchaStore, type Sugerencia } from '@/shared/store/escuchaStore'
 import { useBibleHistoryStore } from '@/shared/store/bibleHistoryStore'
 import { useSettingsStore } from '@/shared/store/settingsStore'
 import { useLiveStore } from '@/shared/store/liveStore'
-import { cambiarSensibilidad, detenerEscucha, iniciarEscucha } from '@/control/audio/escuchaEnVivo'
+import {
+  cambiarGanancia,
+  cambiarSensibilidad,
+  detenerEscucha,
+  iniciarEscucha
+} from '@/control/audio/escuchaEnVivo'
 import { entradasDeAudio } from '@/control/audio/capturaVoz'
 import type { EscuchaStatus } from '@/shared/types/escucha'
 import type { BibleBookStats, BibleVersionSummary } from '@/shared/types/electronAPI'
@@ -22,6 +27,8 @@ import PanelEnPantalla from '../components/escucha/PanelEnPantalla'
 import TranscripcionEnVivo from '../components/escucha/TranscripcionEnVivo'
 import ModelosWhisper from '../components/escucha/ModelosWhisper'
 import { useVersiculos } from '../components/escucha/useVersiculos'
+import { useMenuContextual } from '../components/ui/MenuContextual'
+import { copiar, iconos } from '../menus'
 
 /**
  * Escuchar la predicación y ofrecer el pasaje que se nombró.
@@ -62,7 +69,9 @@ export default function Escucha() {
   const enPantalla = useEscuchaStore((s) => s.enPantalla)
   const proyectadas = useEscuchaStore((s) => s.proyectadas)
   const estadisticas = useEscuchaStore((s) => s.estadisticas)
+  const provisional = useEscuchaStore((s) => s.provisional)
   const store = useEscuchaStore.getState
+  const abrirMenu = useMenuContextual()
 
   const [whisper, setWhisper] = useState<EscuchaStatus | null>(null)
   const [instalando, setInstalando] = useState<{ step: string; ratio: number | null } | null>(null)
@@ -78,6 +87,7 @@ export default function Escucha() {
 
   const escuchando = estado === 'escuchando' || estado === 'iniciando'
   const sensibilidad = settings?.escuchaSensibilidad ?? 0.5
+  const gananciaDb = settings?.escuchaGananciaDb ?? 0
 
   const refrescarWhisper = useCallback(async () => {
     setWhisper((await window.electronAPI?.getEscuchaStatus()) ?? null)
@@ -129,17 +139,24 @@ export default function Escucha() {
 
   const falta = whisper?.falta ?? null
 
+  // Las citas de la frase en curso van arriba de todo, antes que las ya
+  // confirmadas: son las más nuevas.
+  const todas = useMemo(
+    () => [...(provisional?.sugerencias ?? []), ...sugerencias],
+    [provisional, sugerencias]
+  )
+
   // Texto de cada sugerencia, para confirmarla antes de proyectar.
   const pedidos = useMemo(
     () =>
-      sugerencias.map((r) => ({
+      todas.map((r) => ({
         clave: claveSugerencia(r),
         bookId: r.bookId,
         chapter: r.chapter,
         verse: r.verse ?? 1,
         endVerse: r.endVerse
       })),
-    [sugerencias]
+    [todas]
   )
   const previas = useVersiculos(version, pedidos)
 
@@ -178,7 +195,8 @@ export default function Escucha() {
     else
       void iniciarEscucha({
         deviceId: settings?.escuchaDispositivoId ?? null,
-        sensibilidad
+        sensibilidad,
+        gananciaDb
       })
   }
 
@@ -253,7 +271,10 @@ export default function Escucha() {
     ultimoComando?.type === 'showBibleVerse' && ultimoComando.reference === referenciaEnviada
 
   // La más nueva que todavía no salió: la que se proyecta con Ctrl+Enter.
-  const ordenadas = useMemo(() => [...sugerencias].reverse(), [sugerencias])
+  const ordenadas = useMemo(
+    () => [...(provisional?.sugerencias ?? []).slice().reverse(), ...[...sugerencias].reverse()],
+    [provisional, sugerencias]
+  )
   const masNueva = useMemo(
     () => ordenadas.find((r) => !proyectadas.includes(claveSugerencia(r))) ?? null,
     [ordenadas, proyectadas]
@@ -415,6 +436,34 @@ export default function Escucha() {
               </span>
             </label>
 
+            <label className="flex min-w-[180px] flex-1 flex-col gap-1 text-xs text-cabina-tinta-tenue sm:max-w-[240px]">
+              <span className="flex justify-between">
+                Volumen de entrada
+                <span className="font-mono text-cabina-tinta-dim">
+                  {gananciaDb > 0 ? '+' : ''}
+                  {gananciaDb} dB
+                </span>
+              </span>
+              <input
+                type="range"
+                min={-6}
+                max={30}
+                step={1}
+                value={gananciaDb}
+                onChange={(e) => {
+                  const v = Number(e.target.value)
+                  cambiarGanancia(v)
+                  void updateSettings({ escuchaGananciaDb: v })
+                }}
+                aria-valuetext={`${gananciaDb} decibeles`}
+                className="seek-range h-1.5 cursor-pointer appearance-none rounded-full bg-cabina-alto"
+              />
+              <span className="flex justify-between text-[10px]">
+                <span>consola</span>
+                <span>micrófono lejano</span>
+              </span>
+            </label>
+
             <dl className="flex gap-4 text-xs text-cabina-tinta-tenue">
               <div>
                 <dt>Demora</dt>
@@ -479,7 +528,7 @@ export default function Escucha() {
             </p>
 
             <ul className="space-y-2">
-              {sugerencias.length === 0 && (
+              {todas.length === 0 && (
                 <li className="rounded-xl border border-dashed border-cabina-linea-fuerte px-4 py-10 text-center text-sm text-cabina-tinta-tenue">
                   {escuchando
                     ? 'Escuchando. Las citas aparecen acá un par de segundos después de que se nombran.'
@@ -496,6 +545,7 @@ export default function Escucha() {
                       correccion={correcciones[clave]}
                       editando={editando === clave}
                       yaSalio={proyectadas.includes(clave)}
+                      provisional={Boolean(r.provisional)}
                       esLaMasNueva={masNueva !== null && claveSugerencia(masNueva) === clave}
                       version={version}
                       previa={previas[clave]}
@@ -503,6 +553,35 @@ export default function Escucha() {
                       onDescartar={() => store().descartarSugerencia(clave)}
                       onEditar={() => setEditando(editando === clave ? null : clave)}
                       onCorregir={(c) => setCorrecciones((prev) => ({ ...prev, [clave]: c }))}
+                      onMenu={(e) => {
+                        const ref = textoReferencia(r.bookId, r.chapter, r.verse, r.endVerse)
+                        abrirMenu(e, [
+                          { titulo: ref },
+                          {
+                            etiqueta: 'Proyectar',
+                            icono: <iconos.Eye className="h-4 w-4" />,
+                            variante: 'aire',
+                            onSelect: () => void proyectar(r)
+                          },
+                          {
+                            etiqueta: 'Corregir el número',
+                            icono: <Pencil className="h-4 w-4" />,
+                            onSelect: () => setEditando(clave)
+                          },
+                          {
+                            etiqueta: 'Copiar la referencia',
+                            icono: <iconos.Copy className="h-4 w-4" />,
+                            onSelect: () => copiar(ref, 'Referencia copiada')
+                          },
+                          'separador',
+                          {
+                            etiqueta: 'Descartar',
+                            icono: <iconos.X className="h-4 w-4" />,
+                            variante: 'peligro',
+                            onSelect: () => store().descartarSugerencia(clave)
+                          }
+                        ])
+                      }}
                     />
                   )
                 })}
@@ -524,6 +603,7 @@ export default function Escucha() {
 
             <TranscripcionEnVivo
               fragmentos={fragmentos}
+              provisional={provisional?.texto ?? null}
               pendientes={pendientes}
               hablando={hablando}
               activa={escuchando}

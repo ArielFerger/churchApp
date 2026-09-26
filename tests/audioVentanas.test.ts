@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { floatAPcm16, rms, wavDesdePcm16 } from '@/shared/utils/audioVentanas'
+import { floatAPcm16, normalizarVoz, rms, wavDesdePcm16 } from '@/shared/utils/audioVentanas'
 
 describe('rms', () => {
   it('el silencio digital da cero', () => {
@@ -59,5 +59,38 @@ describe('floatAPcm16', () => {
     const pcm = floatAPcm16(Float32Array.from([1.5, -1.5]))
     expect(pcm[0]).toBe(32767)
     expect(pcm[1]).toBe(-32768)
+  })
+})
+
+describe('normalizarVoz', () => {
+  const tono = (amp: number, n = 16000): Int16Array =>
+    Int16Array.from({ length: n }, (_, i) => Math.round(Math.sin(i / 5) * amp * 32767))
+
+  it('sube una voz baja hasta un nivel cómodo para whisper', () => {
+    const bajo = tono(0.01) // ~ -43 dBFS: notebook a dos metros
+    const out = normalizarVoz(bajo)
+    expect(rms(out)).toBeGreaterThan(rms(bajo) * 10)
+    expect(rms(out)).toBeLessThan(0.15)
+  })
+
+  it('no amplifica más de lo permitido (el silencio no se vuelve ruido fuerte)', () => {
+    const casiNada = tono(0.0005)
+    const out = normalizarVoz(casiNada, -20, 24)
+    // +24 dB = ×15,8 como máximo
+    expect(rms(out) / rms(casiNada)).toBeLessThanOrEqual(15.9)
+  })
+
+  it('no satura: el pico queda por debajo del techo', () => {
+    const conPico = tono(0.05)
+    conPico[100] = 20000 // un golpe fuerte en medio de voz baja (0,61 de escala)
+    const out = normalizarVoz(conPico)
+    const pico = Math.max(...Array.from(out, Math.abs)) / 32768
+    expect(pico).toBeGreaterThan(0.61) // sí subió
+    expect(pico).toBeLessThanOrEqual(0.901) // pero no pasó del techo
+  })
+
+  it('nunca baja el volumen de una frase fuerte', () => {
+    const fuerte = tono(0.5)
+    expect(normalizarVoz(fuerte)).toBe(fuerte)
   })
 })

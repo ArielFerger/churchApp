@@ -47,8 +47,11 @@ export function registerEscuchaHandlers(controlWindow: BrowserWindow): () => voi
     IPC_CHANNELS.TRANSCRIBE_WINDOW,
     // El PCM llega como Uint8Array por structured clone, sin pasar por JSON:
     // un fragmento de 10 s son 320 KB y serializarlo como texto sería absurdo.
-    (_e, pcm: Uint8Array, tasa: number, prompt?: string | null) =>
-      escucha.transcribirVentana(pcm, tasa, prompt === undefined ? {} : { prompt })
+    (_e, pcm: Uint8Array, tasa: number, prompt?: string | null, provisional?: boolean) =>
+      escucha.transcribirVentana(pcm, tasa, {
+        ...(prompt === undefined ? {} : { prompt }),
+        provisional: Boolean(provisional)
+      })
   )
 
   return () => {

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMenuContextual } from '../components/ui/MenuContextual'
+import { menuParaTema } from '../menus'
 import {
   Search,
   Music,
@@ -22,6 +24,7 @@ import { audioEngine } from '@/control/audio/audioEngine'
 import type { AudioTrack, AudioPlaylist } from '@/shared/types/audio'
 
 export default function Audio() {
+  const abrirMenu = useMenuContextual()
   const {
     library,
     libraryLoaded,
@@ -236,6 +239,18 @@ export default function Audio() {
                       className={`group flex w-full items-center gap-3 px-4 py-2 text-left transition-colors ${
                         isCurrent ? 'bg-listo-suave' : 'hover:bg-slate-800/60'
                       }`}
+                      onContextMenu={(e) =>
+                        abrirMenu(
+                          e,
+                          menuParaTema(track, {
+                            reproducir: () => playTrack(track),
+                            sonando: isCurrent && isPlaying,
+                            playlistActiva: activePlaylist
+                              ? { id: activePlaylist.id, name: activePlaylist.name }
+                              : null
+                          })
+                        )
+                      }
                     >
                       <button
                         type="button"

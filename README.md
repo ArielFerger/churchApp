@@ -2,7 +2,7 @@
 
 App de escritorio para proyección en iglesias. Muestra letras de canciones, versículos bíblicos, imágenes, videos y GIFs en una segunda pantalla, con reproducción de música de fondo independiente.
 
-**Plataformas:** Windows · Linux (x64 y arm64) &nbsp;·&nbsp; **Versión actual:** 1.2.0
+**Plataformas:** Windows · Linux (x64 y arm64) &nbsp;·&nbsp; **Versión actual:** 1.3.0
 
 ## Funcionalidades
 

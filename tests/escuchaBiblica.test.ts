@@ -4,6 +4,7 @@ import {
   detectarReferencias,
   fusionar,
   leerNumero,
+  fonetica,
   leerOrdinal,
   tokenizar,
   type ReferenciaDetectada
@@ -429,5 +430,45 @@ describe('tokenizar', () => {
   it('funde "1ra" y deja "1ª" como el dígito solo', () => {
     expect(tokenizar('1ra de Juan').map((t) => t.norm)).toEqual(['1ra', 'de', 'juan'])
     expect(tokenizar('1ª de Juan').map((t) => t.norm)).toEqual(['1', 'de', 'juan'])
+  })
+})
+
+describe('detectarReferencias — nombres que el reconocedor escribe mal', () => {
+  // Salió de una prueba real: el operador dijo "Job" y whisper escribió "hop".
+  // La jota castellana le suena a la hache inglesa.
+  it('"hop" es Job cuando el contexto lo deja claro', () => {
+    expect(corta(primera('escuchen hop 1:21'))).toBe('JOB 1:21')
+    expect(corta(primera('vamos a hop capítulo 19 versículo 25'))).toBe('JOB 19:25')
+  })
+
+  it('"hop" suelto no dispara: Job sigue siendo un libro ambiguo', () => {
+    expect(detectarReferencias('hicimos hop 3 veces')).toEqual([])
+  })
+
+  it('la hache perdida y el seseo', () => {
+    expect(corta(primera('en Ageo 2:9'))).toBe('HAG 2:9')
+    expect(corta(primera('leamos Ebreos 11:1'))).toBe('HEB 11:1')
+    expect(corta(primera('en Sacarías 4:6'))).toBe('ZEC 4:6')
+    expect(corta(primera('en Abacuc 2:4'))).toBe('HAB 2:4')
+  })
+
+  it('una corrección por sonido tiene menos confianza que el nombre exacto', () => {
+    const exacto = primera('Hageo dos nueve')!
+    const porSonido = primera('Ageo dos nueve')!
+    expect(porSonido.confianza).toBeLessThan(exacto.confianza)
+  })
+
+  it('no convierte palabras corrientes en libros', () => {
+    expect(detectarReferencias('os digo 3 cosas hermanos')).toEqual([])
+    expect(detectarReferencias('buenos días a todos, qué lindo estar acá')).toEqual([])
+  })
+})
+
+describe('fonetica', () => {
+  it('iguala lo que suena igual', () => {
+    expect(fonetica('Job')).toBe(fonetica('hop'))
+    expect(fonetica('Hageo')).toBe(fonetica('Ageo'))
+    expect(fonetica('Zacarías')).toBe(fonetica('Sacarias'))
+    expect(fonetica('Hechos')).toBe('echos')
   })
 })

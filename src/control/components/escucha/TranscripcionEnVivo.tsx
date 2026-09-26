@@ -17,11 +17,14 @@ import { fundido } from '../ui/movimiento'
  */
 export default function TranscripcionEnVivo({
   fragmentos,
+  provisional = null,
   pendientes,
   hablando,
   activa
 }: {
   fragmentos: FragmentoOido[]
+  /** Lo que se va oyendo de la frase en curso, todavía sin terminar. */
+  provisional?: string | null
   pendientes: number
   hablando: boolean
   activa: boolean
@@ -32,7 +35,7 @@ export default function TranscripcionEnVivo({
   useEffect(() => {
     const el = caja.current
     if (el && pegadoAbajo) el.scrollTop = el.scrollHeight
-  }, [fragmentos.length, pendientes, pegadoAbajo])
+  }, [fragmentos.length, pendientes, provisional, pegadoAbajo])
 
   return (
     <Panel aria-labelledby="escucha-transcripcion" className="flex min-h-0 flex-col">
@@ -77,6 +80,12 @@ export default function TranscripcionEnVivo({
               </motion.p>
             ))}
           </AnimatePresence>
+          {activa && provisional && (
+            <p className="italic text-cabina-tinta-tenue" aria-label="Frase en curso">
+              <ConCitas texto={provisional} />
+              <span className="animate-latido"> …</span>
+            </p>
+          )}
           {activa && (pendientes > 0 || hablando) && (
             <p className="inline-flex items-center gap-2 text-xs text-cabina-tinta-tenue">
               {pendientes > 0 ? (

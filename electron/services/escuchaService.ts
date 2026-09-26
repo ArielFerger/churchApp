@@ -5,7 +5,7 @@ import { cpus } from 'os'
 import { join, dirname } from 'path'
 import { app } from 'electron'
 import log from 'electron-log'
-import { TASA, wavDesdePcm16 } from '../../src/shared/utils/audioVentanas'
+import { normalizarVoz, TASA, wavDesdePcm16 } from '../../src/shared/utils/audioVentanas'
 import type {
   EscuchaStatus,
   MotorWhisper,
@@ -348,26 +348,37 @@ export async function transcribirWav(
 // ─── Ventanas en vivo ────────────────────────────────────────────────────────
 
 /**
- * Una transcripción a la vez. Si llega un fragmento mientras whisper todavía
- * está con el anterior, se **descarta** en vez de encolarlo: en vivo, una cola
- * significa que cada fragmento sale más tarde que el anterior y la Escucha se
- * va quedando atrás del predicador para siempre. Perder uno duele mucho menos,
- * y el que viene arrastra el final del anterior (ver `segmentadorVoz.ts`).
+ * Una transcripción a la vez, con prioridad para las frases completas.
+ *
+ * - Una frase **provisional** (lo que va de una frase que todavía no terminó)
+ *   sólo se transcribe si whisper está libre y no hay nada esperando. Si no,
+ *   se ignora sin contarla como perdida: en un par de segundos llega otra.
+ * - Una frase **completa** espera a que termine lo que esté en curso, pero sólo
+ *   puede esperar UNA. Si llega otra más, se descarta: en vivo, una cola larga
+ *   hace que la Escucha se vaya quedando atrás del predicador para siempre. Con
+ *   frases de 1 s o más y ~0,7 s por transcripción, esperar una no atrasa.
  */
-let ocupado = false
+let enCurso: Promise<unknown> | null = null
+let completaEsperando = false
 let descartadas = 0
 
-/** Cuántas ventanas se descartaron por saturación. La pantalla lo muestra. */
+/** Cuántas frases se descartaron por saturación. La pantalla lo muestra. */
 export function ventanasDescartadas(): number {
   return descartadas
 }
 
 let seq = 0
 
+export interface OpcionesVentana extends OpcionesTranscripcion {
+  /** Lo que va de una frase en curso: cede siempre el paso a las completas. */
+  provisional?: boolean
+}
+
 /**
  * Transcribe un fragmento de audio crudo (PCM de 16 bits, mono).
  *
- * Devuelve `null` si se descartó por saturación.
+ * Devuelve `null` si se descartó (saturación) o si era provisional y whisper
+ * estaba ocupado.
  *
  * Con el servidor, el audio viaja en memoria y nunca toca el disco. Con el
  * CLI hace falta un WAV temporal, que se borra apenas termina pase lo que pase:
@@ -377,60 +388,82 @@ let seq = 0
 export async function transcribirVentana(
   pcm: Uint8Array,
   tasa: number = TASA,
-  opciones: OpcionesTranscripcion = {}
+  opciones: OpcionesVentana = {}
 ): Promise<Transcripcion | null> {
-  if (ocupado) {
-    descartadas += 1
-    log.warn(`escucha: fragmento descartado, whisper todavía trabajando (${descartadas} en total)`)
-    return null
+  if (opciones.provisional) {
+    if (enCurso || completaEsperando) return null
+  } else if (enCurso) {
+    if (completaEsperando) {
+      descartadas += 1
+      log.warn(`escucha: frase descartada, whisper todavía trabajando (${descartadas} en total)`)
+      return null
+    }
+    completaEsperando = true
+    try {
+      // Esperar lo que haya en curso (una provisional, o la completa anterior).
+      while (enCurso) await enCurso.catch(() => {})
+    } finally {
+      completaEsperando = false
+    }
   }
-  ocupado = true
+
+  const tarea = transcribirAhora(pcm, tasa, opciones)
+  enCurso = tarea
+  try {
+    return await tarea
+  } finally {
+    if (enCurso === tarea) enCurso = null
+  }
+}
+
+async function transcribirAhora(
+  pcm: Uint8Array,
+  tasa: number,
+  opciones: OpcionesTranscripcion
+): Promise<Transcripcion> {
   // `pcm` llega como bytes desde el renderer; la vista de 16 bits se arma
-  // sobre el mismo buffer, sin copiar.
-  const muestras = new Int16Array(pcm.buffer, pcm.byteOffset, pcm.byteLength >> 1)
+  // sobre el mismo buffer, sin copiar. Después se lleva a un nivel cómodo para
+  // whisper: con un micrófono lejano la voz llega muy baja y se entiende peor.
+  const muestras = normalizarVoz(new Int16Array(pcm.buffer, pcm.byteOffset, pcm.byteLength >> 1))
   const wav = wavDesdePcm16(muestras, tasa)
   const prompt = opciones.prompt === undefined ? PROMPT_BIBLICO : opciones.prompt
 
-  try {
-    const estado = resolveWhisper()
-    const falta = queFalta(estado)
-    if (falta) throw new Error(falta)
+  const estado = resolveWhisper()
+  const falta = queFalta(estado)
+  if (falta) throw new Error(falta)
 
-    if (motorDisponible(estado) === 'servidor' && estado.serverPath && estado.modelPath) {
-      try {
-        await servidor.asegurar(estado.serverPath, estado.modelPath, hilosSugeridos(cpus().length))
-        const { json, ms } = await servidor.transcribir(wav, {
-          prompt,
-          idioma: opciones.idioma,
-          timeoutMs: opciones.timeoutMs ?? 30_000,
-          audioCtx: audioCtxPara((muestras.length / tasa) * 1000)
-        })
-        return {
-          texto: parseRespuestaServidor(json, prompt ?? undefined),
-          ms,
-          modelo: estado.modelo,
-          motor: 'servidor'
-        }
-      } catch (e) {
-        if (!estado.binPath) throw e
-        log.warn('whisper-server falló, este fragmento va por el CLI:', String(e))
-      }
-    }
-
-    const dir = join(app.getPath('temp'), 'church-escucha')
-    seq += 1
-    const ruta = join(dir, `ventana-${seq}.wav`)
+  if (motorDisponible(estado) === 'servidor' && estado.serverPath && estado.modelPath) {
     try {
-      await mkdir(dir, { recursive: true })
-      await writeFile(ruta, wav)
-      return await transcribirWav(ruta, { timeoutMs: 30_000, ...opciones, prompt })
-    } finally {
-      await rm(ruta, { force: true }).catch(() => {
-        /* ya no está, o el antivirus lo tiene tomado */
+      await servidor.asegurar(estado.serverPath, estado.modelPath, hilosSugeridos(cpus().length))
+      const { json, ms } = await servidor.transcribir(wav, {
+        prompt,
+        idioma: opciones.idioma,
+        timeoutMs: opciones.timeoutMs ?? 30_000,
+        audioCtx: audioCtxPara((muestras.length / tasa) * 1000)
       })
+      return {
+        texto: parseRespuestaServidor(json, prompt ?? undefined),
+        ms,
+        modelo: estado.modelo,
+        motor: 'servidor'
+      }
+    } catch (e) {
+      if (!estado.binPath) throw e
+      log.warn('whisper-server falló, este fragmento va por el CLI:', String(e))
     }
+  }
+
+  const dir = join(app.getPath('temp'), 'church-escucha')
+  seq += 1
+  const ruta = join(dir, `ventana-${seq}.wav`)
+  try {
+    await mkdir(dir, { recursive: true })
+    await writeFile(ruta, wav)
+    return await transcribirWav(ruta, { timeoutMs: 30_000, ...opciones, prompt })
   } finally {
-    ocupado = false
+    await rm(ruta, { force: true }).catch(() => {
+      /* ya no está, o el antivirus lo tiene tomado */
+    })
   }
 }
 

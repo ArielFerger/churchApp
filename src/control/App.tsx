@@ -17,6 +17,7 @@ import IndicadorEscucha from './components/IndicadorEscucha'
 import QuickActions from './components/QuickActions'
 import RielNavegacion, { SECCIONES } from './components/RielNavegacion'
 import MiniPlayer from './components/audio/MiniPlayer'
+import { ProveedorMenuContextual } from './components/ui/MenuContextual'
 import { pagina } from './components/ui/movimiento'
 import { useProjectionBridge } from './hooks/useProjectionBridge'
 import { useAvisosGlobales } from './hooks/useAvisosGlobales'
@@ -87,6 +88,7 @@ function Cabina() {
   useAvisosGlobales()
 
   return (
+    <ProveedorMenuContextual>
     <div className="flex h-screen flex-col bg-cabina-negro font-sans text-cabina-tinta">
       <a href="#contenido" className="saltar-al-contenido rounded-md bg-listo px-3 py-2 text-sm font-semibold text-cabina-negro">
         Saltar al contenido
@@ -145,6 +147,7 @@ function Cabina() {
         }}
       />
     </div>
+    </ProveedorMenuContextual>
   )
 }
 

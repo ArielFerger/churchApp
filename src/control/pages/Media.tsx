@@ -50,6 +50,8 @@ import {
   type MediaType
 } from '@/shared/types/media'
 import type { ProjectionCommand } from '@/shared/types/ipc'
+import { useMenuContextual } from '../components/ui/MenuContextual'
+import { menuParaMedia } from '../menus'
 
 type Filter = 'all' | MediaType
 /** Filtro de categoría: todas, una en concreto, o solo las que no tienen. */
@@ -389,6 +391,7 @@ function TodayStrip({
 }) {
   const toggleToday = useMediaMetaStore((s) => s.toggleToday)
   const clearToday = useMediaMetaStore((s) => s.clearToday)
+  const abrirMenu = useMenuContextual()
   if (items.length === 0) return null
   return (
     <section className="border-b border-listo-borde bg-listo-suave px-4 py-2">
@@ -420,6 +423,10 @@ function TodayStrip({
               <button
                 type="button"
                 onClick={() => onSelect(item.id)}
+                onContextMenu={(e) => {
+                  onSelect(item.id)
+                  abrirMenu(e, menuParaMedia(item))
+                }}
                 className="block w-full text-left"
                 title={item.fileName}
               >
@@ -561,6 +568,7 @@ function MediaCard({
   showFolder = false
 }: MediaCardProps) {
   const toggleToday = useMediaMetaStore((s) => s.toggleToday)
+  const abrirMenu = useMenuContextual()
   // Duración leída del propio <video> una vez cargada la metadata.
   const [duration, setDuration] = useState<number | null>(null)
   const info = category ? categoryInfo(category) : undefined
@@ -578,6 +586,12 @@ function MediaCard({
         <button
           type="button"
           onClick={onSelect}
+          onContextMenu={(e) => {
+            // Clic derecho también lo elige: el panel de la derecha muestra
+            // de qué archivo se trata mientras se decide qué hacer.
+            onSelect()
+            abrirMenu(e, menuParaMedia(item))
+          }}
           aria-pressed={isSelected}
           aria-label={`${item.fileName}${isToday ? ', marcado para hoy' : ''}`}
           className="block w-full text-left"
