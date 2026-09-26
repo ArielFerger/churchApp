@@ -205,12 +205,16 @@ export default function Escucha() {
     async (p: Pasaje): Promise<boolean> => {
       setErrorAccion(null)
       const api = window.electronAPI
-      if (!api || !version) {
+      // Proyectar apenas se abre la sección le puede ganar a la carga de las
+      // versiones: en vez de fallar, se pregunta en el momento.
+      const v =
+        version ?? (await api?.getBibleVersions().catch(() => []))?.[0]?.version ?? null
+      if (!api || !v) {
         setErrorAccion('No hay ninguna versión de la Biblia cargada.')
         return false
       }
       const res = await api.lookupVerse({
-        version,
+        version: v,
         bookId: p.bookId,
         chapter: p.chapter,
         verse: p.verse,
@@ -218,7 +222,7 @@ export default function Escucha() {
       })
       if (!res) {
         setErrorAccion(
-          `${textoReferencia(p.bookId, p.chapter, p.verse, p.endVerse)} no existe en ${version}. Corregí el número con el lápiz.`
+          `${textoReferencia(p.bookId, p.chapter, p.verse, p.endVerse)} no existe en ${v}. Corregí el número con el lápiz.`
         )
         return false
       }

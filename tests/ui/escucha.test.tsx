@@ -199,6 +199,21 @@ describe('sección Escucha', () => {
     expect(enviados[0]).toMatchObject({ reference: 'Romanos 8:28' })
   })
 
+  it('proyecta aunque la Biblia todavía se esté cargando', async () => {
+    // Pasó en CI: la sugerencia aparece antes de que lleguen las versiones, y
+    // si el operador proyectaba en ese instante salía "no hay ninguna versión".
+    let soltar: (v: (typeof RESULTADO.version)[]) => void = () => {}
+    window.electronAPI!.getBibleVersions = () => new Promise((r) => (soltar = r))
+    oyó('abramos en Juan 3:16')
+    render(<Escucha />)
+    await screen.findByRole('listitem', { name: 'Juan 3:16' })
+
+    fireEvent.click(screen.getByRole('button', { name: /Proyectar/ }))
+    soltar([RESULTADO.version])
+    await waitFor(() => expect(enviados).toHaveLength(1))
+    expect(enviados[0]).toMatchObject({ reference: 'Juan 3:16', version: 'RVR1909' })
+  })
+
   it('después de proyectar, "Siguiente" avanza un versículo', async () => {
     oyó('abramos en Juan 3:16')
     render(<Escucha />)
