@@ -1,16 +1,8 @@
-import {
-  agregar,
-  crearVentaneo,
-  floatAPcm16,
-  hayVoz,
-  rms,
-  TASA,
-  vaciar,
-  type Ventaneo
-} from '@/shared/utils/audioVentanas'
+import { floatAPcm16, TASA } from '@/shared/utils/audioVentanas'
+import { SegmentadorVoz } from '@/shared/utils/segmentadorVoz'
 
 /**
- * Toma el audio del predicador y lo entrega en ventanas listas para whisper.
+ * Toma el audio del predicador y lo entrega en frases listas para whisper.
  *
  * El micrófono sólo existe acá, en el renderer: `getUserMedia` no está en el
  * proceso principal. Lo que se manda al main son bytes de PCM, nada más.
@@ -26,16 +18,19 @@ import {
 export interface OpcionesCaptura {
   /** `deviceId` de `enumerateDevices`. Sin esto, la entrada por defecto. */
   deviceId?: string | null
-  /** Una ventana lista para transcribir (PCM 16 bits mono a 16 kHz). */
-  onVentana: (pcm: Int16Array) => void
-  /** Nivel de la señal, 0..1, varias veces por segundo. Para el medidor. */
-  onNivel?: (nivel: number) => void
+  /** 0..1, ver `SegmentadorVoz`. */
+  sensibilidad?: number
+  /** Una frase lista para transcribir (PCM 16 bits mono a 16 kHz). */
+  onFragmento: (pcm: Int16Array, forzado: boolean) => void
+  /** Nivel, umbral vigente y si hay voz, varias veces por segundo. */
+  onNivel?: (nivel: number, umbral: number, hablando: boolean) => void
   /** Se llama si la captura se cae sola (se desenchufó la placa, por ejemplo). */
   onError?: (e: Error) => void
 }
 
 export interface Captura {
   detener: () => Promise<void>
+  setSensibilidad: (s: number) => void
   /** El dispositivo que efectivamente quedó tomando. */
   etiqueta: string
 }
@@ -65,7 +60,7 @@ export async function iniciarCaptura(opciones: OpcionesCaptura): Promise<Captura
   // previo, bajar de 48 kHz a 16 mete aliasing y whisper empeora bastante).
   const contexto = new AudioContext({ sampleRate: TASA })
 
-  let ventaneo: Ventaneo = crearVentaneo()
+  const segmentador = new SegmentadorVoz({ tasa: TASA, sensibilidad: opciones.sensibilidad })
   let vivo = true
 
   try {
@@ -82,17 +77,12 @@ export async function iniciarCaptura(opciones: OpcionesCaptura): Promise<Captura
 
   nodo.port.onmessage = (e: MessageEvent<Float32Array>): void => {
     if (!vivo) return
-    const pcm = floatAPcm16(e.data)
-    opciones.onNivel?.(rms(pcm))
-
-    const r = agregar(ventaneo, pcm)
-    ventaneo = r.ventaneo
-    for (const ventana of r.ventanas) {
-      // La puerta por energía va acá y no en el main: mandar 192 KB por IPC
-      // para que del otro lado se decida tirarlos es trabajo al pedo, y el
-      // main ya está ocupado con whisper.
-      if (hayVoz(ventana)) opciones.onVentana(ventana)
-    }
+    const lectura = segmentador.alimentar(floatAPcm16(e.data))
+    opciones.onNivel?.(lectura.nivel, lectura.umbral, lectura.hablando)
+    // La decisión de qué es voz va acá y no en el main: mandar audio por IPC
+    // para que del otro lado se decida tirarlo es trabajo al pedo, y el main
+    // ya está ocupado con whisper.
+    for (const f of lectura.fragmentos) opciones.onFragmento(f.pcm, f.forzado)
   }
 
   fuente.connect(nodo)
@@ -110,13 +100,13 @@ export async function iniciarCaptura(opciones: OpcionesCaptura): Promise<Captura
 
   return {
     etiqueta: pista?.label ?? 'entrada de audio',
+    setSensibilidad: (s) => segmentador.setSensibilidad(s),
     detener: async (): Promise<void> => {
       vivo = false
       nodo.port.onmessage = null
-      // Lo que quedó a medio juntar todavía puede tener una cita adentro.
-      const cola = vaciar(ventaneo)
-      ventaneo = cola.ventaneo
-      if (cola.ventana && hayVoz(cola.ventana)) opciones.onVentana(cola.ventana)
+      // Lo que quedó a medio decir todavía puede tener una cita adentro.
+      const cola = segmentador.cerrar()
+      if (cola) opciones.onFragmento(cola.pcm, cola.forzado)
 
       nodo.disconnect()
       fuente.disconnect()

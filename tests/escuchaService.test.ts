@@ -63,6 +63,31 @@ describe('resolveWhisper', () => {
     expect(queFalta(estado)).toBeNull()
   })
 
+  it('encuentra el servidor, que es el que se usa para escuchar en vivo', async () => {
+    crear('whisper', 'whisper-cli' + EXE)
+    crear('whisper', 'whisper-server' + EXE)
+    crear('whisper', 'modelos', 'ggml-base.bin')
+
+    const { estadoParaLaPantalla } = await servicio()
+    const estado = estadoParaLaPantalla()
+    expect(estado.serverPath).toBe(join(tools, 'whisper', 'whisper-server' + EXE))
+    expect(estado.motor).toBe('servidor')
+    expect(estado.servidor).toBe('apagado')
+  })
+
+  it('sin servidor, cae al CLI (instalaciones viejas)', async () => {
+    crear('whisper', 'whisper-cli' + EXE)
+    crear('whisper', 'modelos', 'ggml-base.bin')
+    const { estadoParaLaPantalla } = await servicio()
+    expect(estadoParaLaPantalla().motor).toBe('cli')
+  })
+
+  it('no deja borrar el modelo que está en uso', async () => {
+    crear('whisper', 'modelos', 'ggml-base.bin')
+    const { borrarModelo } = await servicio()
+    await expect(borrarModelo('base')).rejects.toThrow(/en uso/)
+  })
+
   it('acepta el nombre viejo del ejecutable', async () => {
     // whisper.cpp lo llamaba `main` hasta la 1.7. Quien ya lo tenga compilado
     // no tiene por qué bajar otra copia.

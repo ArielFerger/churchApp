@@ -1,107 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import {
-  agregar,
-  crearVentaneo,
-  floatAPcm16,
-  hayVoz,
-  rms,
-  TASA,
-  vaciar,
-  wavDesdePcm16
-} from '@/shared/utils/audioVentanas'
+import { floatAPcm16, rms, wavDesdePcm16 } from '@/shared/utils/audioVentanas'
 
-/**
- * El troceo es la parte de la fase 3 que se puede equivocar en silencio: si el
- * solapamiento sale mal, todo "funciona" —hay transcripción, hay sugerencias—
- * y sólo se pierden las citas que caen justo en el corte, que es exactamente
- * lo que nadie va a notar hasta un domingo.
- */
-
-/** Ventaneo chico para no manejar cientos de miles de muestras en los tests. */
-const chico = (): ReturnType<typeof crearVentaneo> => crearVentaneo(6, 4.5, 100) // 600 y 450
-
-/** Muestras numeradas, para poder ver de dónde salió cada trozo. */
-function rampa(desde: number, cantidad: number): Int16Array {
-  return Int16Array.from({ length: cantidad }, (_, i) => desde + i)
-}
-
-describe('ventaneo', () => {
-  it('no emite nada hasta completar la primera ventana', () => {
-    const { ventaneo, ventanas } = agregar(chico(), rampa(0, 599))
-    expect(ventanas).toHaveLength(0)
-    expect(ventaneo.pendiente).toHaveLength(599)
-  })
-
-  it('emite la ventana completa apenas se llena', () => {
-    const { ventanas } = agregar(chico(), rampa(0, 600))
-    expect(ventanas).toHaveLength(1)
-    expect(ventanas[0]).toHaveLength(600)
-    expect(ventanas[0][0]).toBe(0)
-    expect(ventanas[0][599]).toBe(599)
-  })
-
-  it('solapa: la ventana siguiente empieza antes de que termine la anterior', () => {
-    // Con salto 450 y ventana 600, la segunda arranca en la muestra 450 y
-    // repite las últimas 150 de la primera. Ahí está el 1,5 s de solape.
-    const { ventanas } = agregar(chico(), rampa(0, 1050))
-    expect(ventanas).toHaveLength(2)
-    expect(ventanas[1][0]).toBe(450)
-    expect(ventanas[1][149]).toBe(599) // el pedazo compartido
-    expect(ventanas[1][150]).toBe(600) // y sigue con lo nuevo
-  })
-
-  it('da igual cómo venga partido el audio', () => {
-    // El worklet entrega trozos de tamaño arbitrario; el resultado no puede
-    // depender de eso.
-    let v = chico()
-    const salidas: Int16Array[] = []
-    let n = 0
-    for (const tam of [7, 300, 1, 500, 242]) {
-      const r = agregar(v, rampa(n, tam))
-      v = r.ventaneo
-      salidas.push(...r.ventanas)
-      n += tam
-    }
-    const deUnaVez = agregar(chico(), rampa(0, 1050)).ventanas
-    expect(salidas.map((s) => Array.from(s))).toEqual(deUnaVez.map((s) => Array.from(s)))
-  })
-
-  it('no pierde la cola al detener, salvo que sea demasiado corta', () => {
-    const parcial = agregar(chico(), rampa(0, 300)).ventaneo
-    // Mínimo de 1 s = 100 muestras a esta tasa de prueba.
-    expect(vaciar(parcial, 1, 100).ventana).toHaveLength(300)
-    expect(vaciar(agregar(chico(), rampa(0, 99)).ventaneo, 1, 100).ventana).toBeNull()
-  })
-
-  it('deja el pendiente vacío después de vaciar', () => {
-    const { ventaneo } = vaciar(agregar(chico(), rampa(0, 300)).ventaneo, 1, 100)
-    expect(ventaneo.pendiente).toHaveLength(0)
-  })
-
-  it('usa 6 s de ventana y 1,5 s de solape con los valores reales', () => {
-    const v = crearVentaneo()
-    expect(v.largoVentana).toBe(6 * TASA)
-    expect(v.largoVentana - v.salto).toBe(1.5 * TASA)
-  })
-})
-
-describe('puerta por energía', () => {
-  it('el silencio digital no pasa', () => {
+describe('rms', () => {
+  it('el silencio digital da cero', () => {
     expect(rms(new Int16Array(1000))).toBe(0)
-    expect(hayVoz(new Int16Array(1000))).toBe(false)
+    expect(rms(new Int16Array(0))).toBe(0)
   })
 
-  it('una señal a media escala pasa de sobra', () => {
+  it('una señal a media escala da ~0,49', () => {
     const fuerte = Int16Array.from({ length: 1000 }, (_, i) => (i % 2 ? 16000 : -16000))
     expect(rms(fuerte)).toBeCloseTo(0.488, 2)
-    expect(hayVoz(fuerte)).toBe(true)
-  })
-
-  it('un piso de ruido bajo no dispara la transcripción', () => {
-    // ±75 sobre 32768 ≈ 0,0023, que es lo que midió el ruido de prueba de la
-    // fase 2. Tiene que quedar por debajo del umbral.
-    const piso = Int16Array.from({ length: 1000 }, (_, i) => (i % 2 ? 75 : -75))
-    expect(hayVoz(piso)).toBe(false)
   })
 })
 

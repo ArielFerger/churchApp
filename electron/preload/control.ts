@@ -230,8 +230,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installEscucha: (modelo?: WhisperModelId): Promise<EscuchaStatus> =>
     ipcRenderer.invoke(IPC_CHANNELS.INSTALL_ESCUCHA, modelo),
 
-  transcribirVentana: (pcm: Uint8Array, tasa: number): Promise<Transcripcion | null> =>
-    ipcRenderer.invoke(IPC_CHANNELS.TRANSCRIBE_WINDOW, pcm, tasa),
+  deleteEscuchaModel: (modelo: WhisperModelId): Promise<EscuchaStatus> =>
+    ipcRenderer.invoke(IPC_CHANNELS.DELETE_ESCUCHA_MODEL, modelo),
+
+  warmupEscucha: (): Promise<EscuchaStatus> => ipcRenderer.invoke(IPC_CHANNELS.WARMUP_ESCUCHA),
+
+  idleEscucha: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.IDLE_ESCUCHA),
+
+  transcribirVentana: (
+    pcm: Uint8Array,
+    tasa: number,
+    prompt?: string | null
+  ): Promise<Transcripcion | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.TRANSCRIBE_WINDOW, pcm, tasa, prompt),
+
+  onEscuchaStatus: (callback: (s: EscuchaStatus) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, s: EscuchaStatus) => callback(s)
+    ipcRenderer.on(IPC_CHANNELS.ESCUCHA_STATUS_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.ESCUCHA_STATUS_UPDATED, handler)
+  },
 
   onEscuchaProgress: (callback: (p: { step: string; ratio: number | null }) => void) => {
     const handler = (_: Electron.IpcRendererEvent, p: Parameters<typeof callback>[0]) => callback(p)

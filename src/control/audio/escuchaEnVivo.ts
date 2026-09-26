@@ -1,4 +1,5 @@
 import { TASA } from '@/shared/utils/audioVentanas'
+import { promptConContexto } from '@/shared/utils/whisper'
 import { useEscuchaStore } from '@/shared/store/escuchaStore'
 import { iniciarCaptura, type Captura } from './capturaVoz'
 
@@ -17,7 +18,12 @@ export function escuchando(): boolean {
   return captura !== null
 }
 
-export async function iniciarEscucha(deviceId?: string | null): Promise<void> {
+export interface OpcionesEscucha {
+  deviceId?: string | null
+  sensibilidad?: number
+}
+
+export async function iniciarEscucha(opciones: OpcionesEscucha = {}): Promise<void> {
   if (captura) return
   const store = useEscuchaStore.getState()
   const api = window.electronAPI
@@ -27,34 +33,27 @@ export async function iniciarEscucha(deviceId?: string | null): Promise<void> {
   store.setEstado('iniciando')
 
   try {
-    // Antes de abrir el micrófono: si falta el modelo, capturar audio para
-    // tirarlo sería tomar el micrófono de la máquina para nada, y encima
-    // dejaría el indicador de "grabando" prendido sin ninguna razón.
-    const estado = await api.getEscuchaStatus()
+    // Antes de abrir el micrófono: cargar el modelo. Si falta algo, capturar
+    // audio para tirarlo sería tomar el micrófono de la máquina para nada, y
+    // encima dejaría el indicador de "escuchando" prendido sin ninguna razón.
+    // Y cargarlo ahora (1-3 s) evita que la primera frase del pastor espere.
+    const estado = await api.warmupEscucha()
+    useEscuchaStore.getState().setMotor(estado.motor, estado.servidor)
     if (estado.falta) return store.setError(estado.falta)
+    if (!estado.motor) {
+      return store.setError(estado.errorServidor ?? 'No se pudo arrancar la transcripción.')
+    }
 
     captura = await iniciarCaptura({
-      deviceId,
-      onNivel: (nivel) => useEscuchaStore.getState().setNivel(nivel),
+      deviceId: opciones.deviceId,
+      sensibilidad: opciones.sensibilidad,
+      onNivel: (nivel, umbral, hablando) =>
+        useEscuchaStore.getState().setNivel(nivel, umbral, hablando),
       onError: (e) => {
         void detenerEscucha()
         useEscuchaStore.getState().setError(e.message)
       },
-      onVentana: (pcm) => {
-        // Sin `await`: el worklet sigue juntando audio mientras whisper
-        // trabaja. Si llega otra ventana antes de que termine, el main la
-        // descarta —eso es mejor que atrasarse cada vez más.
-        void api
-          .transcribirVentana(new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength), TASA)
-          .then((r) => {
-            const s = useEscuchaStore.getState()
-            if (!r) return s.ventanaDescartada()
-            s.aplicarVentana(r.texto, r.ms)
-          })
-          .catch((e: unknown) => {
-            useEscuchaStore.getState().setError(mensaje(e))
-          })
-      }
+      onFragmento: enviar
     })
 
     useEscuchaStore.getState().setEstado('escuchando')
@@ -64,6 +63,37 @@ export async function iniciarEscucha(deviceId?: string | null): Promise<void> {
   }
 }
 
+/**
+ * Manda una frase a transcribir. Sin `await`: el micrófono sigue juntando
+ * audio mientras whisper trabaja. Si llega otra antes de que termine, el main
+ * la descarta —eso es mejor que atrasarse cada vez más.
+ */
+function enviar(pcm: Int16Array, forzado: boolean): void {
+  const api = window.electronAPI
+  if (!api) return
+  const s = useEscuchaStore.getState()
+  s.fragmentoEnviado()
+  // El final de lo que se venía diciendo va como contexto: whisper mantiene
+  // los nombres y la forma de escribir las citas entre una frase y la otra.
+  const prompt = promptConContexto(s.textoReciente())
+  void api
+    .transcribirVentana(new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength), TASA, prompt)
+    .then((r) => {
+      const st = useEscuchaStore.getState()
+      if (!r) return st.ventanaDescartada()
+      st.aplicarVentana(r.texto, r.ms, { forzado })
+    })
+    .catch((e: unknown) => {
+      const st = useEscuchaStore.getState()
+      st.ventanaDescartada()
+      st.setError(mensaje(e))
+    })
+}
+
+export function cambiarSensibilidad(s: number): void {
+  captura?.setSensibilidad(s)
+}
+
 export async function detenerEscucha(): Promise<void> {
   const actual = captura
   captura = null
@@ -71,8 +101,11 @@ export async function detenerEscucha(): Promise<void> {
   try {
     await actual?.detener()
   } finally {
-    store.setNivel(0)
-    if (store.estado !== 'error') store.setEstado('apagada')
+    store.setNivel(0, undefined, false)
+    if (useEscuchaStore.getState().estado !== 'error') store.setEstado('apagada')
+    // El modelo queda cargado un rato por si se vuelve a escuchar; después se
+    // libera la memoria.
+    void window.electronAPI?.idleEscucha()
   }
 }
 
@@ -83,7 +116,8 @@ function mensaje(e: unknown): string {
 /** Los errores de `getUserMedia` llegan con nombres que no dicen nada. */
 function explicarCaptura(e: unknown): string {
   const nombre = e instanceof Error ? e.name : ''
-  if (nombre === 'NotAllowedError') return 'Windows no dejó usar la entrada de audio.'
+  if (nombre === 'NotAllowedError')
+    return 'El sistema no dejó usar la entrada de audio. Revisá los permisos de micrófono.'
   if (nombre === 'NotFoundError') return 'No hay ninguna entrada de audio conectada.'
   if (nombre === 'NotReadableError') return 'La entrada de audio está tomada por otro programa.'
   if (nombre === 'OverconstrainedError')

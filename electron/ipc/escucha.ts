@@ -12,6 +12,15 @@ import type { EscuchaStatus } from '../../src/shared/types/escucha'
  * Nada de esto sale de la máquina.
  */
 export function registerEscuchaHandlers(controlWindow: BrowserWindow): () => void {
+  const avisar = (): void => {
+    if (!controlWindow.isDestroyed()) {
+      controlWindow.webContents.send(IPC_CHANNELS.ESCUCHA_STATUS_UPDATED, escucha.estadoParaLaPantalla())
+    }
+  }
+  // Cargar un modelo tarda: la pantalla se entera sola cuando está listo o si
+  // el servidor se cayó, sin tener que preguntar cada medio segundo.
+  escucha.alCambiarServidor(avisar)
+
   ipcMain.handle(
     IPC_CHANNELS.GET_ESCUCHA_STATUS,
     (): EscuchaStatus => escucha.estadoParaLaPantalla()
@@ -26,17 +35,29 @@ export function registerEscuchaHandlers(controlWindow: BrowserWindow): () => voi
     return escucha.estadoParaLaPantalla()
   })
 
+  ipcMain.handle(IPC_CHANNELS.DELETE_ESCUCHA_MODEL, async (_e, modelo: WhisperModelId) => {
+    await escucha.borrarModelo(modelo)
+    return escucha.estadoParaLaPantalla()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WARMUP_ESCUCHA, () => escucha.precalentar())
+  ipcMain.handle(IPC_CHANNELS.IDLE_ESCUCHA, () => escucha.reposar())
+
   ipcMain.handle(
     IPC_CHANNELS.TRANSCRIBE_WINDOW,
     // El PCM llega como Uint8Array por structured clone, sin pasar por JSON:
-    // una ventana de 6 s son 192 KB y serializarla como texto sería absurdo.
-    (_e, pcm: Uint8Array, tasa: number) => escucha.transcribirVentana(pcm, tasa)
+    // un fragmento de 10 s son 320 KB y serializarlo como texto sería absurdo.
+    (_e, pcm: Uint8Array, tasa: number, prompt?: string | null) =>
+      escucha.transcribirVentana(pcm, tasa, prompt === undefined ? {} : { prompt })
   )
 
   return () => {
     for (const c of [
       IPC_CHANNELS.GET_ESCUCHA_STATUS,
       IPC_CHANNELS.INSTALL_ESCUCHA,
+      IPC_CHANNELS.DELETE_ESCUCHA_MODEL,
+      IPC_CHANNELS.WARMUP_ESCUCHA,
+      IPC_CHANNELS.IDLE_ESCUCHA,
       IPC_CHANNELS.TRANSCRIBE_WINDOW
     ]) {
       ipcMain.removeHandler(c)

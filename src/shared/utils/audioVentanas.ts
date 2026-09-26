@@ -1,14 +1,10 @@
 /**
- * Trocear audio en vivo para mandárselo a whisper.
+ * Utilidades de audio para la Escucha: el formato que whisper acepta, el nivel
+ * de una señal y el WAV mínimo que se le manda.
  *
- * Whisper no es streaming: transcribe un archivo entero. Para escuchar en vivo
- * hay que cortar el flujo en ventanas y transcribir cada una por separado. Las
- * ventanas se **solapan** porque si no, una cita que cae justo en el corte
- * queda partida al medio ("...vamos a primera de" | "corintios trece...") y no
- * la detecta nadie. Con 1,5 s de solapamiento, cualquier frase de menos de ese
- * largo aparece entera en al menos una ventana.
- *
- * Que se repita no es problema: `fusionar()` de `escuchaBiblica.ts` deduplica.
+ * Antes este archivo también cortaba el audio en ventanas fijas de 6 s con un
+ * umbral de voz fijo. Eso lo reemplazó `segmentadorVoz.ts`, que corta por
+ * frases y aprende solo el ruido de fondo.
  *
  * Todo esto es puro y sin dependencias del navegador: entra un `Int16Array` y
  * sale otro. La parte que toca el micrófono está en `control/audio/capturaVoz.ts`.
@@ -17,80 +13,7 @@
 /** Lo único que whisper acepta: 16 kHz, mono, 16 bits. */
 export const TASA = 16000
 
-/** Largo de cada ventana, en segundos. */
-export const VENTANA_SEG = 6
-
-/**
- * Cada cuánto se emite una ventana. La diferencia con `VENTANA_SEG` es el
- * solapamiento: 6 − 4,5 = 1,5 s.
- */
-export const SALTO_SEG = 4.5
-
-export interface Ventaneo {
-  /** Muestras acumuladas que todavía no completaron una ventana. */
-  pendiente: Int16Array
-  largoVentana: number
-  salto: number
-}
-
-export function crearVentaneo(
-  ventanaSeg: number = VENTANA_SEG,
-  saltoSeg: number = SALTO_SEG,
-  tasa: number = TASA
-): Ventaneo {
-  const largoVentana = Math.round(ventanaSeg * tasa)
-  const salto = Math.min(Math.round(saltoSeg * tasa), largoVentana)
-  return { pendiente: new Int16Array(0), largoVentana, salto }
-}
-
-/**
- * Suma un trozo de audio y devuelve las ventanas que se completaron con él.
- *
- * Devuelve un ventaneo nuevo en vez de mutar el que recibe: así el estado se
- * puede guardar en un store y comparar, y los tests no dependen del orden.
- */
-export function agregar(
-  v: Ventaneo,
-  chunk: Int16Array
-): { ventaneo: Ventaneo; ventanas: Int16Array[] } {
-  let buffer = concat(v.pendiente, chunk)
-  const ventanas: Int16Array[] = []
-
-  while (buffer.length >= v.largoVentana) {
-    ventanas.push(buffer.slice(0, v.largoVentana))
-    // Se avanza `salto`, no `largoVentana`: lo que queda atrás es el solape.
-    buffer = buffer.slice(v.salto)
-  }
-
-  return { ventaneo: { ...v, pendiente: buffer }, ventanas }
-}
-
-/**
- * Al detener, lo que quedó sin completar una ventana. Si el pastor dijo la
- * cita en los últimos tres segundos, tirar la cola sería perderla.
- *
- * Se descarta lo muy corto: menos de un segundo no alcanza ni para una palabra
- * y whisper sobre eso inventa.
- */
-export function vaciar(
-  v: Ventaneo,
-  minimoSeg = 1,
-  tasa: number = TASA
-): { ventaneo: Ventaneo; ventana: Int16Array | null } {
-  const ventana = v.pendiente.length >= minimoSeg * tasa ? v.pendiente.slice() : null
-  return { ventaneo: { ...v, pendiente: new Int16Array(0) }, ventana }
-}
-
-function concat(a: Int16Array, b: Int16Array): Int16Array {
-  if (a.length === 0) return b.slice()
-  if (b.length === 0) return a
-  const out = new Int16Array(a.length + b.length)
-  out.set(a, 0)
-  out.set(b, a.length)
-  return out
-}
-
-// ─── Nivel y puerta por energía ──────────────────────────────────────────────
+// ─── Nivel ───────────────────────────────────────────────────────────────────
 
 /** Nivel de la señal, 0..1 (RMS). Es lo que muestra el medidor de la pantalla. */
 export function rms(pcm: Int16Array): number {
@@ -101,31 +24,6 @@ export function rms(pcm: Int16Array): number {
     suma += v * v
   }
   return Math.sqrt(suma / pcm.length)
-}
-
-/**
- * Por debajo de esto se considera que no hubo voz.
- *
- * Punto de partida, no un número sagrado: medido sobre voz sintetizada da
- * 0,098, sobre ruido bajo generado 0,0023 y sobre silencio digital 0. Falta
- * medirlo sobre la línea de la consola real y ajustarlo ahí.
- *
- * Queda deliberadamente cerca del piso: pasarse hacia arriba descarta una
- * ventana con voz floja y pierde una cita; pasarse hacia abajo sólo gasta un
- * segundo de CPU.
- */
-export const UMBRAL_VOZ = 0.008
-
-/**
- * Puerta por energía: ¿vale la pena mandar esta ventana a transcribir?
- *
- * No es un lujo de rendimiento. Whisper **nunca contesta vacío**: sobre
- * silencio devuelve `[MÚSICA]` y sobre ruido de fondo, `(Cantando)`. Sin esta
- * puerta, la app transcribiría silencio durante todo el sermón, ocupando la
- * CPU que necesita el video que está al aire.
- */
-export function hayVoz(pcm: Int16Array, umbral: number = UMBRAL_VOZ): boolean {
-  return rms(pcm) >= umbral
 }
 
 // ─── WAV ─────────────────────────────────────────────────────────────────────

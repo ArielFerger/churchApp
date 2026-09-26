@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { claveSugerencia, useEscuchaStore } from '@/shared/store/escuchaStore'
 
 /**
- * Acá se prueba lo que pasa cuando las ventanas transcritas van llegando: que
- * el solapamiento no duplique sugerencias, que el orden siga al sermón, y que
- * al detener no quede nada del culto anterior.
+ * Acá se prueba lo que pasa cuando los fragmentos transcritos van llegando: que
+ * una cita repetida no duplique sugerencias, que el orden siga al sermón, que
+ * una cita partida entre dos frases se detecte igual, y que al detener no
+ * quede nada del culto anterior.
  */
 
 const store = (): ReturnType<typeof useEscuchaStore.getState> => useEscuchaStore.getState()
@@ -22,14 +23,54 @@ describe('aplicarVentana', () => {
     expect(store().ultimaLatenciaMs).toBe(1200)
   })
 
-  it('no duplica la cita que aparece en dos ventanas seguidas', () => {
-    // Las ventanas se solapan 1,5 s: la frase del borde llega dos veces. Si
-    // cada llegada sumara una fila, la lista sería inusable a los diez minutos.
+  it('no duplica la cita que aparece en dos fragmentos seguidos', () => {
+    // Un corte forzado arrastra el final al fragmento siguiente, y el pastor
+    // repite. Si cada llegada sumara una fila, la lista sería inusable.
     store().aplicarVentana('vamos a primera de corintios trece')
     store().aplicarVentana('primera de corintios trece, donde Pablo habla del amor')
 
     expect(store().sugerencias).toHaveLength(1)
-    expect(store().ventanas).toHaveLength(2)
+    expect(store().sugerencias[0].veces).toBe(2)
+    expect(store().fragmentos).toHaveLength(2)
+  })
+
+  it('costura: la cita partida entre dos frases sale entera', () => {
+    // El predicador respira en el medio: "vamos a segunda de" | "Corintios 5".
+    // Sin la costura, el segundo fragmento sólo tiene "Corintios", que
+    // resuelve a PRIMERA. Un libro equivocado con cara de cita perfecta.
+    store().aplicarVentana('y ahora vamos a segunda de')
+    store().aplicarVentana('Corintios 5:17, si alguno está en Cristo')
+    expect(store().sugerencias.map((r) => `${r.bookId} ${r.chapter}:${r.verse}`)).toEqual([
+      '2CO 5:17'
+    ])
+  })
+
+  it('costura: no repite lo que ya estaba entero en el fragmento anterior', () => {
+    store().aplicarVentana('abramos en Juan 3:16')
+    store().aplicarVentana('porque de tal manera amó Dios al mundo')
+    expect(store().sugerencias).toHaveLength(1)
+    expect(store().sugerencias[0].veces).toBe(1)
+  })
+
+  it('resuelve "el versículo 31" con la cita de un fragmento anterior', () => {
+    store().aplicarVentana('Vamos a Romanos 8:28, donde Pablo nos recuerda')
+    store().aplicarVentana('que todas las cosas ayudan a bien.')
+    store().aplicarVentana('Y quiero que también leamos el versículo 31.')
+    const r = store().sugerencias.find((s) => s.verse === 31)
+    expect(r).toMatchObject({ bookId: 'ROM', chapter: 8, inferida: true })
+  })
+
+  it('lo proyectado pasa a ser el contexto', () => {
+    store().marcarEnPantalla({ bookId: 'PSA', chapter: 23, verse: 1 })
+    store().aplicarVentana('miren el versículo 4')
+    expect(store().sugerencias[0]).toMatchObject({ bookId: 'PSA', chapter: 23, verse: 4 })
+  })
+
+  it('con las estadísticas cargadas descarta versículos que no existen', () => {
+    store().setEstadisticas({ JHN: [51, 25, 36] })
+    store().aplicarVentana('en Juan 3:99 y en Juan 3:36')
+    expect(store().sugerencias.map((r) => r.verse)).toEqual([36])
+    store().setEstadisticas(null)
   })
 
   it('ordena las sugerencias como se dijeron, no como llegaron', () => {
@@ -45,36 +86,35 @@ describe('aplicarVentana', () => {
     expect(offsets[1]).toBeLessThan(offsets[2])
   })
 
-  it('ignora la ventana vacía pero se queda con la latencia', () => {
+  it('ignora el fragmento vacío pero se queda con la latencia', () => {
     store().aplicarVentana('   ', 900)
-    expect(store().ventanas).toHaveLength(0)
+    expect(store().fragmentos).toHaveLength(0)
     expect(store().sugerencias).toHaveLength(0)
     expect(store().ultimaLatenciaMs).toBe(900)
   })
 
-  it('marca como cortada la cita pegada al final de la ventana', () => {
-    // Caso real de la prueba en vivo: la ventana cortó justo en el número y
+  it('marca como cortada la cita pegada a un corte forzado', () => {
+    // Caso real de la prueba en vivo: el corte cayó justo en el número y
     // whisper escribió "capítulo 3" donde el audio decía "capítulo 13". Salía
     // con confianza máxima, indistinguible de una cita bien oída.
-    store().aplicarVentana('y ahora vamos a primera de corintios capítulo 3')
+    store().aplicarVentana('y ahora vamos a primera de corintios capítulo 3', 900, { forzado: true })
     expect(store().sugerencias[0]).toMatchObject({ chapter: 3, cortada: true })
     // La confianza no se toca: el reconocedor entendió bien lo que le llegó.
     // Lo que falló fue dónde cayó el corte, y eso se dice aparte.
     expect(store().sugerencias[0].confianza).toBe(1)
   })
 
-  it('marca como cortada la que arranca la ventana', () => {
-    // El corte de arriba se lleva el ordinal: "segunda de Corintios" cortada
-    // queda en "Corintios", que resuelve a Primera. Es un libro equivocado con
-    // cara de cita perfecta.
-    store().aplicarVentana('corintios capítulo trece, donde Pablo nos habla del amor')
-    expect(store().sugerencias[0].cortada).toBe(true)
+  it('una frase cerrada por una pausa no está cortada, aunque la cita quede al final', () => {
+    // Con los fragmentos cortados por pausas, que la cita termine la frase es
+    // lo normal: "Y cerramos con el Salmo 23." Marcarla sería ruido.
+    store().aplicarVentana('Y cerramos con el Salmo 23.')
+    expect(store().sugerencias[0].cortada).toBe(false)
   })
 
   it('deja de estar cortada si después se oye entera', () => {
-    // Para esto están los 1,5 s de solape: lo que cae en el borde de una
-    // ventana vuelve a caer en el medio de la siguiente.
-    store().aplicarVentana('vamos a primera de corintios capítulo 13')
+    // Para esto está el solape del corte forzado: lo que cae en el borde de un
+    // fragmento vuelve a caer en el medio del siguiente.
+    store().aplicarVentana('vamos a primera de corintios capítulo 13', 900, { forzado: true })
     expect(store().sugerencias[0].cortada).toBe(true)
 
     store().aplicarVentana('y ahora vamos a primera de corintios capítulo 13, donde Pablo habla')
@@ -88,10 +128,19 @@ describe('aplicarVentana', () => {
   })
 
   it('no acumula transcripción sin límite', () => {
-    for (let i = 0; i < 60; i++) store().aplicarVentana(`ventana número ${i}`)
-    expect(store().ventanas.length).toBeLessThanOrEqual(40)
+    for (let i = 0; i < 90; i++) store().aplicarVentana(`fragmento número ${i}`)
+    expect(store().fragmentos.length).toBeLessThanOrEqual(60)
     // Lo que se conserva es lo último, que es lo que el operador está mirando.
-    expect(store().ventanas[store().ventanas.length - 1]).toBe('ventana número 59')
+    expect(store().fragmentos[store().fragmentos.length - 1].texto).toBe('fragmento número 89')
+  })
+
+  it('lleva la cuenta de lo que está en vuelo', () => {
+    store().fragmentoEnviado()
+    store().fragmentoEnviado()
+    expect(store().pendientes).toBe(2)
+    store().aplicarVentana('hola')
+    store().ventanaDescartada()
+    expect(store().pendientes).toBe(0)
   })
 })
 
@@ -114,8 +163,10 @@ describe('limpiar', () => {
     expect(store()).toMatchObject({
       estado: 'apagada',
       nivel: 0,
-      ventanas: [],
+      fragmentos: [],
       sugerencias: [],
+      contexto: null,
+      enPantalla: null,
       ultimaLatenciaMs: null,
       descartadas: 0,
       error: null
@@ -127,7 +178,9 @@ describe('limpiar', () => {
     store().limpiar()
     // Si el recuerdo sobreviviera, la misma cita del culto siguiente llegaría
     // "ya confirmada" aunque esta vez sólo se la haya oído cortada.
-    store().aplicarVentana('abramos en juan capítulo tres versículo dieciséis')
+    store().aplicarVentana('abramos en juan capítulo tres versículo dieciséis', 900, {
+      forzado: true
+    })
     expect(store().sugerencias[0].cortada).toBe(true)
   })
 
