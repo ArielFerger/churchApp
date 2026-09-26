@@ -58,10 +58,21 @@ export interface DownloadProgress {
   eta: number | null
 }
 
+/**
+ * Un tramo del video, en segundos. Para bajar sólo el pedazo que se va a
+ * proyectar (el testimonio del minuto 12 al 15) en vez de la hora entera.
+ */
+export interface SeccionClip {
+  desde: number
+  hasta: number
+}
+
 export interface DownloadOptions {
   kind: DownloadKind
   quality: VideoQuality
   bitrate: AudioBitrate
+  /** Sólo este tramo. `null`/ausente = el video entero. */
+  seccion?: SeccionClip | null
 }
 
 export const DEFAULT_OPTIONS: DownloadOptions = {
@@ -76,6 +87,7 @@ export interface DownloadJob {
   kind: DownloadKind
   quality: VideoQuality
   bitrate: AudioBitrate
+  seccion?: SeccionClip | null
   stage: DownloadStage
   /** Título resuelto por yt-dlp; hasta que responde se muestra la URL. */
   title: string | null
@@ -171,6 +183,53 @@ export function normalizeUrl(raw: string): string | null {
   if (/^(www\.|m\.)?(youtube\.com|youtu\.be)\/\S+$/i.test(t)) return `https://${t}`
   return null
 }
+
+/**
+ * Todos los enlaces de un texto pegado: uno por línea, separados por espacios
+ * o por comas. Sirve para pegar de una vez la lista de videos que mandó el
+ * encargado de alabanza por WhatsApp. Sin repetidos, en el orden en que
+ * aparecen.
+ */
+export function extraerUrls(texto: string): string[] {
+  const vistas = new Set<string>()
+  const out: string[] = []
+  for (const trozo of texto.split(/[\s,;]+/)) {
+    const url = normalizeUrl(trozo.replace(/^[<(]+|[>).]+$/g, ''))
+    if (url && !vistas.has(url)) {
+      vistas.add(url)
+      out.push(url)
+    }
+  }
+  return out
+}
+
+/**
+ * "1:30" → 90, "1:02:03" → 3723, "45" → 45. `null` si no es un tiempo.
+ * Es como lo escribe cualquiera mirando el reproductor de YouTube.
+ */
+export function parseTiempo(texto: string): number | null {
+  const t = texto.trim()
+  if (!/^\d{1,3}(:\d{1,2}){0,2}$/.test(t)) return null
+  const partes = t.split(':').map(Number)
+  if (partes.slice(1).some((n) => n >= 60)) return null
+  return partes.reduce((acc, n) => acc * 60 + n, 0)
+}
+
+/**
+ * Antigüedad de yt-dlp en días, a partir de su versión (`2026.08.19`, a veces
+ * con un sufijo de build nocturno). YouTube cambia algo cada pocas semanas y
+ * un yt-dlp de hace dos meses suele dejar de andar: la pantalla lo avisa.
+ */
+export function diasDeAntiguedad(version: string | null, hoy: Date = new Date()): number | null {
+  const m = /^(\d{4})\.(\d{2})\.(\d{2})/.exec(version ?? '')
+  if (!m) return null
+  const fecha = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  const dia = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate())
+  return Math.max(0, Math.round((dia - fecha) / 86_400_000))
+}
+
+/** A partir de cuántos días se sugiere actualizar yt-dlp. */
+export const YTDLP_VIEJO_DIAS = 45
 
 /** Si la URL apunta a una lista y no a un video suelto. */
 export function looksLikePlaylist(url: string): boolean {
@@ -337,6 +396,22 @@ export interface JsRuntime {
   path: string | null
 }
 
+/**
+ * " [12m05-15m30]": legible y válido como nombre de archivo en Windows (sin
+ * ":"). Tampoco puede llevar puntos: al cortar el tramo con ffmpeg, yt-dlp
+ * toma lo que sigue a un punto como extensión, y "[0.02-0.07]" terminaba en
+ * el disco como "[0.0.07]" (medido con yt-dlp 2026.08.19).
+ */
+export function sufijoSeccion(s: SeccionClip): string {
+  const f = (n: number): string => {
+    const h = Math.floor(n / 3600)
+    const m = Math.floor((n % 3600) / 60)
+    const seg = String(Math.floor(n % 60)).padStart(2, '0')
+    return h > 0 ? `${h}h${String(m).padStart(2, '0')}m${seg}` : `${m}m${seg}`
+  }
+  return ` [${f(s.desde)}-${f(s.hasta)}]`
+}
+
 export function buildArgs(opts: {
   url: string
   kind: DownloadKind
@@ -344,10 +419,15 @@ export function buildArgs(opts: {
   ffmpegDir: string | null
   quality?: VideoQuality
   bitrate?: AudioBitrate
+  seccion?: SeccionClip | null
   jsRuntime?: JsRuntime | null
   cookiesBrowser?: string | null
   cookiesFile?: string | null
 }): string[] {
+  const seccion =
+    opts.seccion && opts.seccion.hasta > opts.seccion.desde && opts.seccion.desde >= 0
+      ? opts.seccion
+      : null
   const args = [
     opts.url,
     ...networkArgs(
@@ -371,11 +451,36 @@ export function buildArgs(opts: {
     PROGRESS_TEMPLATE,
     '--print',
     FILE_TEMPLATE,
+    // Los videos de YouTube vienen en pedacitos (DASH): bajar cuatro a la vez
+    // acelera mucho sin abrir más de una descarga en paralelo.
+    '--concurrent-fragments',
+    '4',
+    // Títulos larguísimos pasan el límite de 260 caracteres de las rutas de
+    // Windows, y el archivo no se puede ni abrir. OJO: yt-dlp aplica este
+    // límite a la RUTA ENTERA, no al nombre. Con 150 y una carpeta de 118
+    // caracteres, el título quedaba en 30 (medido). 230 deja lugar al
+    // ".f137.mp4.part" de los temporales antes de llegar a 260.
+    '--trim-filenames',
+    '230',
+    // Nombres válidos en Windows aunque se baje desde Linux: los archivos
+    // terminan en un pendrive que se lleva a otra PC.
+    '--windows-filenames',
     '--output',
-    `${opts.destDir.replace(/[\\/]+$/, '')}/%(title)s.%(ext)s`
+    `${opts.destDir.replace(/[\\/]+$/, '')}/%(title)s${seccion ? sufijoSeccion(seccion) : ''}.%(ext)s`
   ]
 
   if (opts.ffmpegDir) args.push('--ffmpeg-location', opts.ffmpegDir)
+
+  if (seccion) {
+    // Cortar en los segundos exactos obliga a recodificar los bordes; sin
+    // esto el corte cae en el keyframe más cercano, que puede estar a varios
+    // segundos del pedido — justo en la frase que se quería mostrar.
+    args.push(
+      '--download-sections',
+      `*${seccion.desde}-${seccion.hasta}`,
+      '--force-keyframes-at-cuts'
+    )
+  }
 
   // Los valores por defecto son los mismos que DEFAULT_OPTIONS: omitir la
   // calidad no puede terminar bajando un 4K de tres gigas por descuido.
@@ -562,4 +667,45 @@ export function parsePlaylistEntries(
     }
   }
   return out
+}
+
+// ─── Binarios por plataforma ─────────────────────────────────────────────────
+
+/**
+ * yt-dlp publica un ejecutable autónomo por plataforma. En Linux se usa
+ * `yt-dlp_linux` y NO `yt-dlp` a secas: el segundo es un zipapp de Python y
+ * exige python3 instalado, que no toda PC de iglesia tiene.
+ */
+export const YTDLP_ASSETS: Record<string, string> = {
+  'win32-x64': 'yt-dlp.exe',
+  'win32-arm64': 'yt-dlp_arm64.exe',
+  'win32-ia32': 'yt-dlp_x86.exe',
+  'linux-x64': 'yt-dlp_linux',
+  'linux-arm64': 'yt-dlp_linux_aarch64',
+  'darwin-x64': 'yt-dlp_macos',
+  'darwin-arm64': 'yt-dlp_macos'
+}
+
+/** Builds estáticos de ffmpeg (BtbN). Los de Linux vienen en .tar.xz. */
+export const FFMPEG_ASSETS: Record<string, string> = {
+  'win32-x64': 'ffmpeg-master-latest-win64-gpl.zip',
+  'win32-arm64': 'ffmpeg-master-latest-winarm64-gpl.zip',
+  'linux-x64': 'ffmpeg-master-latest-linux64-gpl.tar.xz',
+  'linux-arm64': 'ffmpeg-master-latest-linuxarm64-gpl.tar.xz'
+}
+
+export const FFMPEG_URL_BASE = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/'
+
+/**
+ * Deno: el intérprete de JavaScript que yt-dlp usa por defecto para resolver
+ * el desafío de YouTube. Es un ejecutable suelto de ~45 MB. Se baja sólo si no
+ * hay ningún intérprete (deno, node, bun) instalado.
+ */
+export const DENO_ASSETS: Record<string, string> = {
+  'win32-x64': 'deno-x86_64-pc-windows-msvc.zip',
+  'win32-arm64': 'deno-aarch64-pc-windows-msvc.zip',
+  'linux-x64': 'deno-x86_64-unknown-linux-gnu.zip',
+  'linux-arm64': 'deno-aarch64-unknown-linux-gnu.zip',
+  'darwin-x64': 'deno-x86_64-apple-darwin.zip',
+  'darwin-arm64': 'deno-aarch64-apple-darwin.zip'
 }

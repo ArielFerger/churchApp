@@ -217,7 +217,7 @@ function VerseBlock({
   // el porcentaje configurado. La referencia hereda el color al 75%.
   const pct = (display?.fontSizePct ?? 100) / 100
   const color = display?.textColor ?? '#ffffff'
-  const family = fontFamily ? `"${fontFamily}", Inter, system-ui, sans-serif` : undefined
+  const family = fontFamily ? `"${fontFamily}", "Inter Variable", system-ui, sans-serif` : undefined
   const shadow = (display?.textShadow ?? true) ? '0 4px 16px rgba(0,0,0,0.85)' : 'none'
   return (
     <div className="space-y-8">

@@ -41,6 +41,8 @@ interface AudioState {
 
   /** Append a track to the end of the queue. */
   enqueue: (id: string) => void
+  /** Al principio de la cola: suena después del tema actual. */
+  enqueueNext: (id: string) => void
   /** Remove the queue entry at `index`. */
   removeFromQueue: (index: number) => void
   /** Empty the queue. */
@@ -84,6 +86,8 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   setLibrary: (items) => set({ library: items, libraryLoaded: true }),
 
   enqueue: (id) => set((s) => ({ queue: [...s.queue, id] })),
+
+  enqueueNext: (id) => set((s) => ({ queue: [id, ...s.queue] })),
 
   removeFromQueue: (index) =>
     set((s) => ({ queue: s.queue.filter((_, i) => i !== index) })),

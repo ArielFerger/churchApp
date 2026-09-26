@@ -1,0 +1,98 @@
+/*
+ * Estilos que valen SÓLO para la ventana de control. La proyección no los
+ * importa a propósito: lo de acá abajo apaga animaciones cuando el sistema
+ * pide "reducir movimiento", y eso no puede tocar los fundidos que ve la
+ * congregación.
+ */
+
+:root {
+  /* Controles nativos (selects desplegados, scrollbars, date pickers) en
+     oscuro. Sin esto, abrir un <select> en la cabina a oscuras encandila. */
+  color-scheme: dark;
+}
+
+::selection {
+  background: rgba(245, 179, 66, 0.35);
+  color: #faf7f2;
+}
+
+/* Foco visible con teclado. Chromium sólo lo dibuja con `:focus-visible`, así
+   que el clic con mouse no deja anillos, pero quien opera con teclado (o con
+   un lector de pantalla) siempre sabe dónde está. Ámbar = "esto es lo que
+   está seleccionado", como en el resto del sistema. */
+:where(a, button, [role='button'], [role='tab'], [role='switch'], [role='option'], summary, [tabindex]):focus-visible {
+  outline: 2px solid #f5b342;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* El plugin de formularios de Tailwind trae un anillo azul de foco: el azul
+   no significa nada en este sistema. */
+:where(input, select, textarea):focus {
+  --tw-ring-color: rgba(245, 179, 66, 0.55);
+  border-color: rgba(245, 179, 66, 0.7);
+}
+
+/* Scrollbars finas y oscuras: las de Windows por defecto son gruesas y
+   claras, y en Linux dependen del tema del escritorio. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(239, 230, 214, 0.22) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(239, 230, 214, 0.18);
+  border: 3px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(239, 230, 214, 0.32);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Botones: una respuesta táctil mínima al apretar. */
+:where(button:not(:disabled)):active {
+  transform: translateY(0.5px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Enlace para saltar la navegación con teclado: invisible hasta que se lo
+   enfoca con Tab. */
+.saltar-al-contenido {
+  position: absolute;
+  left: 8px;
+  top: -48px;
+  z-index: 100;
+  transition: top 120ms ease;
+}
+.saltar-al-contenido:focus {
+  top: 8px;
+}
+
+/* Red de seguridad: la ventana de control es una app, no un documento. El
+   scroll vive dentro de cada sección; el body nunca debería desplazarse (si
+   algo se sale de ancho, se corta en vez de sumar una barra a toda la app). */
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}

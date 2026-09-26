@@ -53,9 +53,33 @@ Bundled in the asar:
 Bundled as `extraResources` (loaded at runtime via `process.resourcesPath`):
 
 - `data/bibles/*.json` — RVR1909 + RVA-2015 (~9 MB total)
+- `scripts/herramientas/*.{py,md,cmd,sh}` — the stdlib-only Python scripts that
+  install/update yt-dlp, ffmpeg, deno and whisper, and download from YouTube
+  without opening the app (see `scripts/herramientas/README.md`)
 
-Source files in the repo not shipped: `resources/icons/icon.svg`,
+Not shipped on purpose: yt-dlp, ffmpeg, deno and whisper. They are fetched on
+demand (from the app or the scripts) into `userData/tools`, because yt-dlp goes
+stale within weeks and ffmpeg + a whisper model outweigh the whole app.
+
+Source files in the repo not shipped: `resources/icons/icon.svg`, the other
 `scripts/*`, documentation, tests.
+
+## Linux notes
+
+- **AppImage** needs FUSE 2. Ubuntu 22.04+ doesn't install it by default:
+  `sudo apt install libfuse2` (or run it with `--appimage-extract-and-run`).
+- **Display server.** The app prefers X11 (XWayland) whenever `DISPLAY` is set,
+  because Wayland doesn't let an app place a window on a specific monitor and
+  the projection window must land on the projector. To force Wayland anyway:
+  `ELECTRON_OZONE_PLATFORM_HINT=wayland`.
+- **Audio input** for Escucha goes through PipeWire/PulseAudio like any
+  Chromium app; the console's line-in must be visible in `pavucontrol`.
+- **Tools install** from the app uses the system `tar` (present on every
+  distro) for `.tar.xz`/`.tar.gz` and a JS unzipper for `.zip`; no `unzip` or
+  PowerShell needed. whisper's Linux package comes from whisper.cpp's
+  `whisper-bin-ubuntu-*.tar.gz`; on other architectures,
+  `python3 scripts/herramientas/instalar_herramientas.py --compilar-whisper`
+  builds it (needs `git cmake build-essential`).
 
 ## Icons
 
@@ -76,6 +100,12 @@ The bundled placeholder shows a stylized projection beam with a cross. Replace
 `icon.svg` with the church's actual logo and re-run `npm run build:icons`.
 
 ## Releases via GitHub Actions
+
+Every push and pull request runs `.github/workflows/build.yml` on **both**
+`windows-latest` and `ubuntu-latest`: typecheck, lint, the test suite, a
+production build, and a syntax check of the Python tool scripts. Platform bugs
+(paths, process killing, archive formats) show up there instead of on a
+Sunday.
 
 Tagging a release triggers `.github/workflows/release.yml`, which:
 

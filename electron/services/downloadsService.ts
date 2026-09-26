@@ -1,10 +1,8 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
-import { createWriteStream, existsSync } from 'fs'
-import { chmod, mkdir, readdir, rename, rm, writeFile } from 'fs/promises'
-import { Readable } from 'stream'
-import { pipeline } from 'stream/promises'
-import { join } from 'path'
-import { app, session, BrowserWindow } from 'electron'
+import { spawn, type ChildProcess } from 'child_process'
+import { existsSync, statSync } from 'fs'
+import { mkdir, readdir, rename, rm, writeFile } from 'fs/promises'
+import { dirname, join } from 'path'
+import { app, session, shell, BrowserWindow } from 'electron'
 import log from 'electron-log'
 import {
   buildArgs,
@@ -20,49 +18,50 @@ import {
   toNetscapeCookies,
   ACTIVOS,
   DEFAULT_OPTIONS,
+  DENO_ASSETS,
+  FFMPEG_ASSETS,
+  FFMPEG_URL_BASE,
+  YTDLP_ASSETS,
   type DownloadJob,
   type DownloadOptions,
   type JsRuntime
 } from '../../src/shared/utils/downloads'
+import type { DownloadTools, ToolsUpdateResult } from '../../src/shared/types/electronAPI'
 import { getSettings } from './settingsService'
+import {
+  candidateDirs,
+  EXE,
+  extraerArchivo,
+  fetchToFile,
+  findFileDeep,
+  findIn,
+  findInPath,
+  hacerEjecutable,
+  installDir,
+  matarArbol,
+  opcionesSpawnMatable,
+  PLATAFORMA,
+  urlDeAsset,
+  type InstallProgress
+} from './toolsPaths'
+
+export type { InstallProgress }
 
 /**
  * Descargas de YouTube (y de cualquier sitio que yt-dlp soporte).
  *
- * El trabajo pesado lo hacen dos binarios externos: yt-dlp baja, y ffmpeg junta
- * el video con el audio y arma el MP3. No se empaquetan con la app —yt-dlp se
- * desactualiza en semanas cuando YouTube cambia algo, y ffmpeg pesa más que
- * todo el resto junto—, así que se buscan en el disco y se avisa cuando faltan.
+ * El trabajo pesado lo hacen binarios externos: yt-dlp baja, ffmpeg junta el
+ * video con el audio y arma el MP3, y un intérprete de JavaScript (deno o
+ * node) resuelve el desafío que YouTube pone para entregar los formatos. No se
+ * empaquetan con la app —yt-dlp se desactualiza en semanas cuando YouTube
+ * cambia algo, y ffmpeg pesa más que todo el resto junto—, así que se buscan
+ * en el disco y se ofrecen bajar cuando faltan, en Windows y en Linux.
  *
  * Las descargas se hacen de a una. Bajar cuatro videos en paralelo por la
  * conexión de una iglesia sólo consigue que las cuatro vayan lentas.
  */
 
-export interface ToolStatus {
-  ytDlp: string | null
-  ffmpegDir: string | null
-  /** Intérprete de JavaScript disponible. YouTube no funciona sin uno. */
-  jsRuntime: JsRuntime | null
-  /** Dónde se buscó, para poder mostrarlo si falta algo. */
-  searched: string[]
-}
-
-const EXE = process.platform === 'win32' ? '.exe' : ''
-
-/** Busca un ejecutable en el PATH del sistema. */
-function findInPath(name: string): string | null {
-  const raw = process.env.PATH ?? ''
-  for (const dir of raw.split(process.platform === 'win32' ? ';' : ':')) {
-    if (!dir) continue
-    const p = join(dir, name + EXE)
-    try {
-      if (existsSync(p)) return p
-    } catch {
-      /* entrada de PATH inválida */
-    }
-  }
-  return null
-}
+export type ToolStatus = DownloadTools
 
 /**
  * Busca un intérprete de JavaScript. yt-dlp lo necesita para resolver el
@@ -81,42 +80,66 @@ function findJsRuntime(dirs: string[]): JsRuntime | null {
   return null
 }
 
-/** Carpetas donde se busca, en orden de prioridad. */
-function candidateDirs(): string[] {
-  const dirs: string[] = []
-  const configured = getSettings().toolsFolder
-  if (configured) dirs.push(configured)
-  dirs.push(join(app.getPath('userData'), 'tools'))
-  // En desarrollo la app corre desde <repo>; en producción desde resources/.
-  dirs.push(join(app.getAppPath(), 'tools'))
-  dirs.push(join(app.getAppPath(), '..', 'tools'))
-  dirs.push(join(process.resourcesPath ?? app.getAppPath(), 'tools'))
-  return [...new Set(dirs)]
-}
+/** Versión de yt-dlp, cacheada por ruta y fecha de modificación del binario. */
+const versiones = new Map<string, string | null>()
 
-function findIn(dirs: string[], name: string): string | null {
-  for (const dir of dirs) {
-    const p = join(dir, name + EXE)
-    if (existsSync(p)) return p
+function versionDe(bin: string): Promise<string | null> {
+  let clave = bin
+  try {
+    clave = `${bin}|${statSync(bin).mtimeMs}`
+  } catch {
+    /* si no se puede leer, no se cachea por fecha */
   }
-  return null
+  if (versiones.has(clave)) return Promise.resolve(versiones.get(clave) ?? null)
+  return new Promise((resolve) => {
+    let out = ''
+    let child: ChildProcess
+    try {
+      child = spawn(bin, ['--version'], { windowsHide: true })
+    } catch {
+      return resolve(null)
+    }
+    const timer = setTimeout(() => {
+      matarArbol(child)
+      resolve(null)
+    }, 15_000)
+    child.stdout?.on('data', (d) => (out += d))
+    child.on('error', () => {
+      clearTimeout(timer)
+      resolve(null)
+    })
+    child.on('close', () => {
+      clearTimeout(timer)
+      const v = out.trim().split(/\s+/)[0] || null
+      versiones.set(clave, v)
+      resolve(v)
+    })
+  })
 }
 
 /**
  * Resuelve dónde están las herramientas: primero en las carpetas conocidas y
  * después en el PATH. Buscar en el PATH importa — quien ya instaló yt-dlp con
- * winget o chocolatey no tiene por qué bajarse otros 180 MB.
+ * winget, chocolatey o el gestor de paquetes de su Linux no tiene por qué
+ * bajarse otros 180 MB.
  */
-export function resolveTools(): ToolStatus {
+export function resolveTools(): Omit<ToolStatus, 'ytDlpVersion'> {
   const dirs = candidateDirs()
   const ytDlp = findIn(dirs, 'yt-dlp') ?? findInPath('yt-dlp')
   const ffmpeg = findIn(dirs, 'ffmpeg') ?? findInPath('ffmpeg')
   return {
     ytDlp,
-    ffmpegDir: ffmpeg ? join(ffmpeg, '..') : null,
+    ffmpegDir: ffmpeg ? dirname(ffmpeg) : null,
     jsRuntime: findJsRuntime(dirs),
-    searched: [...dirs, '(PATH del sistema)']
+    searched: [...dirs, '(PATH del sistema)'],
+    instalable: Boolean(YTDLP_ASSETS[PLATAFORMA])
   }
+}
+
+/** Lo mismo más la versión de yt-dlp, que exige lanzarlo (una vez por binario). */
+export async function herramientas(): Promise<ToolStatus> {
+  const t = resolveTools()
+  return { ...t, ytDlpVersion: t.ytDlp ? await versionDe(t.ytDlp) : null }
 }
 
 /** La carpeta a la que va cada tipo de descarga, según los Ajustes. */
@@ -153,7 +176,7 @@ export async function clearYoutubeSession(): Promise<void> {
   // reaparece sola un segundo y medio después. Primero se corta todo lo que lo
   // esté usando, y recién ahí se borra.
   if (running) cancel(running.id)
-  for (const c of auxiliares) killTree(c)
+  for (const c of auxiliares) matarArbol(c)
   auxiliares.clear()
   await new Promise((r) => setTimeout(r, 1500))
 
@@ -167,7 +190,7 @@ export async function clearYoutubeSession(): Promise<void> {
   }
 }
 
-const YT_PARTITION = 'persist:youtube-login'
+export const YT_PARTITION = 'persist:youtube-login'
 
 /**
  * Abre YouTube en una ventana propia para que la persona inicie sesión y pase
@@ -269,128 +292,154 @@ export function openYoutubeLogin(parent?: BrowserWindow): Promise<{
 
 // ─── Instalación de las herramientas ─────────────────────────────────────────
 
-/** Releases oficiales. yt-dlp es un ejecutable suelto; ffmpeg viene en un zip. */
-const YTDLP_URL: Record<string, string> = {
-  win32: 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe',
-  linux: 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp',
-  darwin: 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos'
-}
-const FFMPEG_ZIP_WIN =
-  'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip'
-
-export type InstallProgress = (step: string, ratio: number | null) => void
-
-/**
- * Baja a disco en streaming. Acumular los 180 MB de ffmpeg en memoria hacía un
- * pico de ~360 MB al concatenar, y avisar del avance en cada trozo inundaba el
- * IPC con miles de mensajes que dejaban la interfaz pegada; por eso el avance
- * se reporta como mucho cuatro veces por segundo.
- */
-async function fetchToFile(
+/** Baja un binario suelto con escritura atómica y lo deja ejecutable. */
+async function bajarBinario(
   url: string,
-  dest: string,
+  destino: string,
   onProgress: InstallProgress,
-  label: string
+  etiqueta: string
 ): Promise<void> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(15 * 60_000) })
-  if (!res.ok || !res.body) throw new Error(`${label}: HTTP ${res.status}`)
-  const total = Number(res.headers.get('content-length')) || null
+  // Escritura atómica: si se corta la luz a mitad, un yt-dlp truncado queda
+  // para siempre y la app lo da por instalado, fallando en cada descarga sin
+  // ofrecer forma de arreglarlo desde la interfaz.
+  const tmp = destino + '.descargando'
+  await fetchToFile(url, tmp, onProgress, etiqueta)
+  await rename(tmp, destino)
+  await hacerEjecutable(destino)
+}
 
-  const out = createWriteStream(dest)
-  let got = 0
-  let ultimoAviso = 0
-  const source = Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0])
-  source.on('data', (chunk: Buffer) => {
-    got += chunk.byteLength
-    const ahora = Date.now()
-    if (ahora - ultimoAviso >= 250) {
-      ultimoAviso = ahora
-      onProgress(label, total ? got / total : null)
+/** Descomprime un paquete y sube a `dir` los ejecutables pedidos. */
+async function instalarDesdePaquete(
+  url: string,
+  nombrePaquete: string,
+  dir: string,
+  ejecutables: string[],
+  onProgress: InstallProgress,
+  etiqueta: string
+): Promise<void> {
+  const paquete = join(dir, `${etiqueta}-tmp-${nombrePaquete}`)
+  const tmp = join(dir, `${etiqueta}-tmp`)
+  try {
+    await fetchToFile(url, paquete, onProgress, etiqueta)
+    onProgress(`Descomprimiendo ${etiqueta}`, null)
+    await rm(tmp, { recursive: true, force: true })
+    await mkdir(tmp, { recursive: true })
+    await extraerArchivo(paquete, tmp)
+    // Los paquetes traen todo dentro de una carpeta con el número de build.
+    for (const name of ejecutables) {
+      const found = await findFileDeep(tmp, name + EXE)
+      if (!found) throw new Error(`El paquete de ${etiqueta} no traía ${name}${EXE}`)
+      const destino = join(dir, name + EXE)
+      await rm(destino, { force: true })
+      await rename(found, destino)
+      await hacerEjecutable(destino)
     }
-  })
-  await pipeline(source, out)
-  onProgress(label, 1)
+  } finally {
+    await rm(tmp, { recursive: true, force: true }).catch(() => {})
+    await rm(paquete, { force: true }).catch(() => {})
+  }
 }
 
 /**
- * Baja yt-dlp y ffmpeg a la carpeta de herramientas. La descomprensión del zip
- * de ffmpeg se delega al sistema (`Expand-Archive` en Windows, `unzip` en el
- * resto) para no sumar una dependencia de node sólo para esto.
+ * Baja lo que falte: yt-dlp, ffmpeg (con ffprobe) y, si no hay ningún
+ * intérprete de JavaScript, deno. Igual en Windows y en Linux: la
+ * descompresión ya no depende de PowerShell.
  */
 export async function installTools(onProgress: InstallProgress): Promise<ToolStatus> {
-  const dir = getSettings().toolsFolder ?? join(app.getPath('userData'), 'tools')
+  const dir = installDir()
   await mkdir(dir, { recursive: true })
+  const actual = resolveTools()
 
-  const ytUrl = YTDLP_URL[process.platform]
-  if (!ytUrl) throw new Error(`No hay build de yt-dlp para ${process.platform}`)
-
-  if (!findIn([dir], 'yt-dlp')) {
-    // Escritura atómica: si se corta la luz a mitad, un yt-dlp.exe truncado
-    // queda para siempre y la app lo da por instalado, fallando en cada
-    // descarga sin ofrecer forma de arreglarlo desde la interfaz.
-    const tmp = join(dir, 'yt-dlp.descargando')
-    await fetchToFile(ytUrl, tmp, onProgress, 'yt-dlp')
-    await rename(tmp, join(dir, 'yt-dlp' + EXE))
-    if (process.platform !== 'win32') await chmod(join(dir, 'yt-dlp'), 0o755)
+  const ytAsset = YTDLP_ASSETS[PLATAFORMA]
+  if (!ytAsset) throw new Error(`No hay un yt-dlp publicado para ${PLATAFORMA}`)
+  if (!actual.ytDlp) {
+    onProgress('Buscando la última versión de yt-dlp', null)
+    await bajarBinario(
+      await urlDeAsset('yt-dlp/yt-dlp', ytAsset),
+      join(dir, 'yt-dlp' + EXE),
+      onProgress,
+      'yt-dlp'
+    )
   }
 
-  if (!findIn([dir], 'ffmpeg')) {
-    if (process.platform !== 'win32') {
+  if (!actual.ffmpegDir) {
+    const asset = FFMPEG_ASSETS[PLATAFORMA]
+    if (!asset) {
       throw new Error(
-        'ffmpeg automático sólo está para Windows. Instalalo con el gestor de paquetes de tu sistema.'
+        `No hay un ffmpeg listo para ${PLATAFORMA}. Instalalo con el gestor de paquetes del sistema.`
       )
     }
-    const zip = join(dir, 'ffmpeg-tmp.zip')
-    await fetchToFile(FFMPEG_ZIP_WIN, zip, onProgress, 'ffmpeg')
-    onProgress('Descomprimiendo ffmpeg', null)
-    const unpack = join(dir, 'ffmpeg-tmp')
-    // Las comillas simples se duplican para escaparlas: la ruta sale de una
-    // opción configurable y del nombre de usuario de Windows, así que un
-    // apellido con apóstrofe (O'Brien) rompía el comando — y era una vía de
-    // inyección a través de un valor de configuración.
-    const psQuote = (p: string): string => `'${p.replace(/'/g, "''")}'`
-    await runCommand('powershell', [
-      '-NoProfile',
-      '-Command',
-      `Expand-Archive -LiteralPath ${psQuote(zip)} -DestinationPath ${psQuote(unpack)} -Force`
-    ])
-    // El zip trae todo dentro de una carpeta con el número de build adentro.
-    for (const name of ['ffmpeg', 'ffprobe']) {
-      const found = await findFileDeep(unpack, name + EXE)
-      if (!found) throw new Error(`El zip de ffmpeg no traía ${name}${EXE}`)
-      await rename(found, join(dir, name + EXE))
-    }
-    await rm(unpack, { recursive: true, force: true })
-    await rm(zip, { force: true })
-  }
-
-  return resolveTools()
-}
-
-function runCommand(cmd: string, args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { windowsHide: true })
-    let err = ''
-    child.stderr.on('data', (d) => (err += d))
-    child.on('error', reject)
-    child.on('close', (code) =>
-      code === 0 ? resolve() : reject(new Error(err.trim() || `${cmd} salió con ${code}`))
+    await instalarDesdePaquete(
+      FFMPEG_URL_BASE + asset,
+      asset,
+      dir,
+      ['ffmpeg', 'ffprobe'],
+      onProgress,
+      'ffmpeg'
     )
-  })
-}
+  }
 
-async function findFileDeep(dir: string, name: string): Promise<string | null> {
-  const entries = await readdir(dir, { withFileTypes: true })
-  for (const e of entries) {
-    const full = join(dir, e.name)
-    if (e.isDirectory()) {
-      const found = await findFileDeep(full, name)
-      if (found) return found
-    } else if (e.name.toLowerCase() === name.toLowerCase()) {
-      return full
+  if (!actual.jsRuntime) {
+    const asset = DENO_ASSETS[PLATAFORMA]
+    if (asset) {
+      onProgress('Buscando la última versión de deno', null)
+      await instalarDesdePaquete(
+        await urlDeAsset('denoland/deno', asset),
+        asset,
+        dir,
+        ['deno'],
+        onProgress,
+        'deno'
+      )
+    } else {
+      log.warn(`no hay deno publicado para ${PLATAFORMA}; YouTube puede fallar`)
     }
   }
-  return null
+
+  return herramientas()
+}
+
+/**
+ * Baja la última versión de yt-dlp. YouTube cambia algo cada pocas semanas y
+ * un yt-dlp viejo es la causa número uno de "no anda la descarga".
+ *
+ * Se reemplaza el binario en su lugar (atómico: primero se baja al lado y
+ * recién después se renombra encima). Si el que se usa vino del PATH del
+ * sistema —instalado con winget o con el gestor de paquetes—, no se lo toca:
+ * se baja una copia propia a la carpeta de herramientas, que tiene prioridad.
+ */
+export async function actualizarYtDlp(onProgress: InstallProgress): Promise<ToolsUpdateResult> {
+  if (running || auxiliares.size > 0) {
+    return {
+      ok: false,
+      version: null,
+      mensaje: 'Hay descargas en curso: esperá a que terminen para actualizar yt-dlp.'
+    }
+  }
+  const asset = YTDLP_ASSETS[PLATAFORMA]
+  if (!asset) return { ok: false, version: null, mensaje: `No hay un yt-dlp publicado para ${PLATAFORMA}` }
+
+  const actual = resolveTools().ytDlp
+  const antes = actual ? await versionDe(actual) : null
+  const propio = actual && candidateDirs().some((d) => actual.startsWith(d))
+  const destino = propio && actual ? actual : join(installDir(), 'yt-dlp' + EXE)
+  await mkdir(dirname(destino), { recursive: true })
+
+  try {
+    onProgress('Buscando la última versión de yt-dlp', null)
+    await bajarBinario(await urlDeAsset('yt-dlp/yt-dlp', asset), destino, onProgress, 'yt-dlp')
+  } catch (e) {
+    return { ok: false, version: antes, mensaje: `No se pudo actualizar: ${String(e)}` }
+  }
+  const despues = await versionDe(destino)
+  return {
+    ok: true,
+    version: despues,
+    mensaje:
+      antes && despues && antes === despues
+        ? `yt-dlp ya estaba al día (${despues}).`
+        : `yt-dlp actualizado${antes ? ` de ${antes}` : ''} a ${despues ?? 'la última versión'}.`
+  }
 }
 
 // ─── Estado ──────────────────────────────────────────────────────────────────
@@ -398,7 +447,7 @@ async function findFileDeep(dir: string, name: string): Promise<string | null> {
 type Listener = (jobs: DownloadJob[]) => void
 
 let jobs: DownloadJob[] = []
-let running: { id: string; child: ChildProcessWithoutNullStreams } | null = null
+let running: { id: string; child: ChildProcess } | null = null
 let listeners: Listener[] = []
 let seq = 0
 /**
@@ -411,7 +460,7 @@ let seq = 0
  */
 let pumping = false
 /** Procesos de probe/lista, para poder matarlos al cerrar la app. */
-const auxiliares = new Set<ChildProcessWithoutNullStreams>()
+const auxiliares = new Set<ChildProcess>()
 
 function emit(): void {
   const snapshot = jobs.map((j) => ({ ...j }))
@@ -440,8 +489,7 @@ function patch(id: string, changes: Partial<DownloadJob>): void {
   // lo que decide es si la etapa cambió de verdad.
   const cambioEtapa = changes.stage !== undefined && changes.stage !== antes?.stage
   const soloProgreso =
-    !cambioEtapa &&
-    Object.keys(changes).every((k) => k === 'progress' || k === 'stage')
+    !cambioEtapa && Object.keys(changes).every((k) => k === 'progress' || k === 'stage')
 
   if (soloProgreso) return emitThrottled()
   if (emitPendiente) {
@@ -476,9 +524,9 @@ function runYtDlp(
 ): Promise<{ code: number; out: string; err: string }> {
   const { ytDlp } = resolveTools()
   return new Promise((resolve, reject) => {
-    let child: ChildProcessWithoutNullStreams
+    let child: ChildProcess
     try {
-      child = spawn(ytDlp ?? `yt-dlp${EXE}`, args, { windowsHide: true })
+      child = spawn(ytDlp ?? `yt-dlp${EXE}`, args, opcionesSpawnMatable())
     } catch (e) {
       return reject(e)
     }
@@ -489,7 +537,7 @@ function runYtDlp(
     let cerrado = false
     const timer = setTimeout(() => {
       if (cerrado) return
-      killTree(child)
+      matarArbol(child)
       cerrado = true
       auxiliares.delete(child)
       reject(new Error(`yt-dlp no respondió en ${Math.round(timeoutMs / 1000)}s`))
@@ -503,8 +551,8 @@ function runYtDlp(
       fn()
     }
 
-    child.stdout.on('data', (d) => (out += d))
-    child.stderr.on('data', (d) => (err += d))
+    child.stdout?.on('data', (d) => (out += d))
+    child.stderr?.on('data', (d) => (err += d))
     child.on('error', (e) => terminar(() => reject(e)))
     child.on('close', (code) => terminar(() => resolve({ code: code ?? -1, out, err })))
   })
@@ -540,37 +588,11 @@ export async function probe(url: string): Promise<{
   }
 }
 
-/**
- * Mata el proceso y sus hijos. yt-dlp lanza ffmpeg como hijo, y en Windows un
- * kill sobre el padre lo deja huérfano mordiendo el archivo de salida.
- */
-function killTree(child: ChildProcessWithoutNullStreams): void {
-  if (child.exitCode !== null || child.signalCode !== null) return // ya murió
-  if (process.platform === 'win32' && child.pid) {
-    // Sin un handler de 'error', si taskkill no se puede lanzar Node relanza el
-    // evento como excepción no capturada y se cae TODA la app — en el peor
-    // momento posible, con la proyección al aire.
-    const tk = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
-      windowsHide: true
-    })
-    tk.on('error', (e) => {
-      log.warn('taskkill falló, se intenta SIGKILL:', e)
-      try {
-        child.kill('SIGKILL')
-      } catch {
-        /* ya no está */
-      }
-    })
-  } else {
-    child.kill('SIGTERM')
-  }
-}
-
 /** Mata todo lo que esté corriendo. Se llama al cerrar la app. */
 export function dispose(): void {
-  if (running) killTree(running.child)
+  if (running) matarArbol(running.child)
   running = null
-  for (const c of auxiliares) killTree(c)
+  for (const c of auxiliares) matarArbol(c)
   auxiliares.clear()
   listeners = []
 }
@@ -595,6 +617,7 @@ function runJob(job: DownloadJob): Promise<void> {
       kind: job.kind,
       quality: job.quality,
       bitrate: job.bitrate,
+      seccion: job.seccion ?? null,
       destDir,
       ffmpegDir: tools.ffmpegDir,
       jsRuntime: tools.jsRuntime,
@@ -602,9 +625,9 @@ function runJob(job: DownloadJob): Promise<void> {
       cookiesFile: cookiesFileOrNull()
     })
 
-    let child: ChildProcessWithoutNullStreams
+    let child: ChildProcess
     try {
-      child = spawn(tools.ytDlp ?? `yt-dlp${EXE}`, args, { windowsHide: true })
+      child = spawn(tools.ytDlp ?? `yt-dlp${EXE}`, args, opcionesSpawnMatable())
     } catch (e) {
       patch(job.id, { stage: 'error', error: String(e) })
       return resolve()
@@ -627,14 +650,14 @@ function runJob(job: DownloadJob): Promise<void> {
       if (f) filePath = f
     }
 
-    child.stdout.on('data', (chunk: Buffer) => {
+    child.stdout?.on('data', (chunk: Buffer) => {
       pending += chunk.toString()
       const lines = pending.split(/\r?\n/)
       pending = lines.pop() ?? ''
       for (const l of lines) handleLine(l)
     })
 
-    child.stderr.on('data', (chunk: Buffer) => {
+    child.stderr?.on('data', (chunk: Buffer) => {
       stderr += chunk.toString()
     })
 
@@ -670,9 +693,7 @@ function runJob(job: DownloadJob): Promise<void> {
       } else {
         const detalle = stderr.trim()
         const reason =
-          explainError(detalle) ??
-          lastMeaningfulLine(detalle) ??
-          `yt-dlp terminó con código ${code}`
+          explainError(detalle) ?? lastMeaningfulLine(detalle) ?? `yt-dlp terminó con código ${code}`
         log.error('descarga fallida:', job.url, '\n', detalle.slice(-8000))
         patch(job.id, {
           stage: 'error',
@@ -704,19 +725,21 @@ async function pump(): Promise<void> {
 
     // Los datos del video son un lujo: si el probe falla, se baja igual. Lo que
     // ya se sabía (el título que trajo la lista) no se pisa con un null.
-    try {
-      const meta = await probe(next.url)
-      const current = jobs.find((j) => j.id === next.id)
-      if (current?.stage === 'preparing') {
-        patch(next.id, {
-          title: meta.title ?? current.title,
-          uploader: meta.uploader ?? current.uploader,
-          durationSec: meta.durationSec ?? current.durationSec,
-          thumbnail: meta.thumbnail ?? current.thumbnail
-        })
+    if (!next.title || !next.thumbnail) {
+      try {
+        const meta = await probe(next.url)
+        const current = jobs.find((j) => j.id === next.id)
+        if (current?.stage === 'preparing') {
+          patch(next.id, {
+            title: meta.title ?? current.title,
+            uploader: meta.uploader ?? current.uploader,
+            durationSec: meta.durationSec ?? current.durationSec,
+            thumbnail: meta.thumbnail ?? current.thumbnail
+          })
+        }
+      } catch (e) {
+        log.warn('no se pudieron leer los datos del video:', String(e))
       }
-    } catch (e) {
-      log.warn('no se pudieron leer los datos del video:', String(e))
     }
 
     // Sigue en 'preparing' salvo que lo hayan cancelado mientras se consultaba.
@@ -742,6 +765,7 @@ export function enqueue(
     kind: o.kind,
     quality: o.quality,
     bitrate: o.bitrate,
+    seccion: o.seccion ?? null,
     stage: 'queued',
     title,
     uploader: null,
@@ -788,13 +812,12 @@ export async function enqueuePlaylist(
   if (entries.length === 0) {
     const detalle = err.trim()
     const reason =
-      explainError(detalle) ??
-      lastMeaningfulLine(detalle) ??
-      `No se encontró ningún video (código ${code})`
+      explainError(detalle) ?? lastMeaningfulLine(detalle) ?? `No se encontró ningún video (código ${code})`
     log.error('lista fallida:', url, '\n', detalle.slice(-4000))
     return { added: 0, error: reason }
   }
-  for (const e of entries) enqueue(e.url, options, e.title)
+  // Un recorte no tiene sentido aplicado a toda una lista.
+  for (const e of entries) enqueue(e.url, { ...options, seccion: null }, e.title)
   return { added: entries.length, error: null }
 }
 
@@ -804,7 +827,7 @@ export function cancel(id: string): void {
   if (job.stage === 'done' || job.stage === 'error') return
   patch(id, { stage: 'canceled', progress: null })
   if (running?.id === id) {
-    killTree(running.child)
+    matarArbol(running.child)
     // No se toca `running`: lo limpia el handler de 'close' cuando el proceso
     // realmente muera. Soltarlo acá deja arrancar otra descarga mientras la
     // anterior todavía agoniza, y ahí corren dos a la vez.
@@ -813,7 +836,41 @@ export function cancel(id: string): void {
 }
 
 /**
- * Borra los `.part` que quedaron de una descarga cortada. Un `taskkill /F` no
+ * Vuelve a poner en cola una descarga que falló o se canceló, con las mismas
+ * opciones. Lo más común después de iniciar sesión en YouTube o de actualizar
+ * yt-dlp: antes había que volver a pegar el enlace.
+ */
+export function retry(id: string): void {
+  const job = jobs.find((j) => j.id === id)
+  if (!job || (job.stage !== 'error' && job.stage !== 'canceled')) return
+  patch(id, {
+    stage: 'queued',
+    error: null,
+    errorDetail: null,
+    needsLogin: false,
+    progress: null,
+    filePath: null
+  })
+  void pump()
+}
+
+/** Abre el explorador de archivos con la descarga seleccionada. */
+export function showInFolder(id: string): boolean {
+  const job = jobs.find((j) => j.id === id)
+  if (job?.filePath && existsSync(job.filePath)) {
+    shell.showItemInFolder(job.filePath)
+    return true
+  }
+  const dir = job ? destinationFor(job.kind) : null
+  if (dir && existsSync(dir)) {
+    void shell.openPath(dir)
+    return true
+  }
+  return false
+}
+
+/**
+ * Borra los `.part` que quedaron de una descarga cortada. Un kill forzado no
  * le da a yt-dlp la chance de limpiar, y esos archivos —invisibles para la app,
  * porque el scanner filtra por extensión— se acumulan de a cientos de MB hasta
  * llenar el disco sin que nadie entienda por qué.

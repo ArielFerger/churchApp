@@ -1,0 +1,6 @@
+# Los .cmd de Windows necesitan CRLF (con LF, goto y las etiquetas fallan);
+# los .sh necesitan LF o no arrancan en Linux.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.sh  text eol=lf
+*.py  text eol=lf

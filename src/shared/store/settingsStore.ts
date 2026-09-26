@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { DEFAULT_BIBLE_DISPLAY, type AppSettings, type DisplayInfo } from '../types/ipc'
+import { DEFAULT_SETTINGS, type AppSettings, type DisplayInfo } from '../types/ipc'
 
 interface SettingsState {
   settings: AppSettings | null
@@ -10,22 +10,7 @@ interface SettingsState {
   refreshDisplays: () => Promise<void>
 }
 
-const DEFAULTS: AppSettings = {
-  projectionDisplayId: null,
-  mediaFolder: null,
-  audioFolder: null,
-  toolsFolder: null,
-  downloadCookiesBrowser: null,
-  songsFolder: null,
-  liveLoopFolder: null,
-  bibleBackgroundsFolder: null,
-  defaultBibleVersion: null,
-  bibleDisplay: DEFAULT_BIBLE_DISPLAY,
-  videoFadeIn: true,
-  videoFadeOut: false,
-  videoFadeInSec: 1,
-  videoFadeOutSec: 2.5
-}
+const DEFAULTS: AppSettings = DEFAULT_SETTINGS
 
 export const useSettingsStore = create<SettingsState>((set) => ({
   settings: null,

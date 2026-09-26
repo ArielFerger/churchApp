@@ -1,4 +1,6 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMenuContextual } from '../components/ui/MenuContextual'
+import { FolderInput, Pencil, Play, Trash2 } from 'lucide-react'
 import { useTransientMessage } from '../hooks/useTransientMessage'
 import { useLibraryStore } from '@/shared/store/libraryStore'
 import { useLiveStore } from '@/shared/store/liveStore'
@@ -66,6 +68,15 @@ export default function Songs() {
   const [currentSongId, setCurrentSongId] = useState<string | null>(null)
   const [view, setView] = useState<View>('perform')
   const [albumFilter, setAlbumFilter] = useState<string>('all') // 'all' | 'none' | albumId
+  /**
+   * Nombre de álbum que se está escribiendo (nuevo o renombrado). Antes se
+   * pedía con prompt(), que Electron NO soporta: devolvía null en silencio y
+   * no había forma de crear ni renombrar un álbum.
+   */
+  const [nombrandoAlbum, setNombrandoAlbum] = useState<
+    { modo: 'nuevo' } | { modo: 'renombrar'; id: string; actual: string } | null
+  >(null)
+  const abrirMenu = useMenuContextual()
   const [query, setQuery] = useState('')
   const [showChords, setShowChords] = useState(true)
   const [density, setDensity] = useState<DensityId>(loadDensity)
@@ -298,20 +309,79 @@ export default function Songs() {
     setCurrentSongId(null)
   }
 
-  async function handleCreateAlbum() {
-    const name = prompt('Nombre del nuevo álbum:')
-    if (!name || !name.trim()) return
-    const saved = await saveAlbum({ name: name.trim() })
-    if (saved) setAlbumFilter(saved.id)
+  function handleCreateAlbum() {
+    setNombrandoAlbum({ modo: 'nuevo' })
   }
 
-  async function handleRenameAlbum() {
+  function handleRenameAlbum() {
     if (albumFilter === 'all' || albumFilter === 'none') return
     const current = albums.find((a) => a.id === albumFilter)
     if (!current) return
-    const name = prompt('Nuevo nombre:', current.name)
-    if (!name || !name.trim() || name === current.name) return
-    await saveAlbum({ id: current.id, name: name.trim() })
+    setNombrandoAlbum({ modo: 'renombrar', id: current.id, actual: current.name })
+  }
+
+  async function confirmarNombreAlbum(nombre: string) {
+    const n = nombre.trim()
+    const pedido = nombrandoAlbum
+    setNombrandoAlbum(null)
+    if (!n || !pedido) return
+    if (pedido.modo === 'nuevo') {
+      const saved = await saveAlbum({ name: n })
+      if (saved) setAlbumFilter(saved.id)
+    } else if (n !== pedido.actual) {
+      await saveAlbum({ id: pedido.id, name: n })
+    }
+  }
+
+  /** Clic derecho sobre una canción. */
+  function menuDeCancion(song: (typeof songs)[number]) {
+    return [
+      { titulo: song.title || 'Sin título' },
+      {
+        etiqueta: 'Tocar',
+        icono: <Play className="h-4 w-4" />,
+        onSelect: () => {
+          selectSong(song.id)
+          setView('perform')
+        }
+      },
+      {
+        etiqueta: 'Editar',
+        icono: <Pencil className="h-4 w-4" />,
+        onSelect: () => {
+          selectSong(song.id)
+          setView('editor')
+        }
+      },
+      {
+        etiqueta: 'Mover a álbum',
+        icono: <FolderInput className="h-4 w-4" />,
+        submenu: [
+          ...albums.map((a) => ({
+            etiqueta: a.name,
+            marcado: song.albumId === a.id,
+            onSelect: () => void saveSong({ ...song, albumId: a.id })
+          })),
+          ...(albums.length ? ['separador' as const] : []),
+          {
+            etiqueta: 'Sin álbum',
+            marcado: !song.albumId,
+            onSelect: () => void saveSong({ ...song, albumId: null })
+          }
+        ]
+      },
+      'separador' as const,
+      {
+        etiqueta: 'Eliminar',
+        icono: <Trash2 className="h-4 w-4" />,
+        variante: 'peligro' as const,
+        onSelect: async () => {
+          if (!confirm(`¿Eliminar "${song.title}"?`)) return
+          await deleteSong(song.id)
+          if (song.id === currentSongId) setCurrentSongId(null)
+        }
+      }
+    ]
   }
 
   async function handleDeleteAlbum() {
@@ -432,7 +502,7 @@ export default function Songs() {
         {/* Header — en Tocar se achica: cada pixel de arriba es un pedacito de
             canción menos que entra en el mazo. */}
         <header
-          className={`flex flex-wrap items-end justify-between gap-4 border-b border-songbook-border-soft ${
+          className={`flex flex-wrap items-end justify-between gap-4 border-b border-cabina-linea ${
             perform ? 'mb-3 pb-3' : 'mb-6 pb-5'
           }`}
         >
@@ -442,10 +512,10 @@ export default function Songs() {
                 perform ? 'text-2xl' : 'text-4xl'
               }`}
             >
-              Cancion<span className="text-songbook-amber">ero</span>
+              Cancion<span className="text-listo">ero</span>
             </h1>
             {!perform && (
-              <p className="mt-2 text-[11px] font-medium uppercase tracking-[0.15em] text-songbook-ink-faint">
+              <p className="mt-2 text-[11px] font-medium uppercase tracking-[0.15em] text-cabina-tinta-tenue">
                 Letras · Acordes · Proyección
               </p>
             )}
@@ -479,8 +549,17 @@ export default function Songs() {
                 count={albumCounts.byAlbum.get(a.id) ?? 0}
               />
             ))}
-            <ActionChip onClick={handleCreateAlbum}>＋ Nuevo álbum</ActionChip>
-            {albumFilter !== 'all' && albumFilter !== 'none' && (
+            {nombrandoAlbum ? (
+              <NombreEnLinea
+                inicial={nombrandoAlbum.modo === 'renombrar' ? nombrandoAlbum.actual : ''}
+                etiqueta={nombrandoAlbum.modo === 'nuevo' ? 'Nombre del álbum nuevo' : 'Nuevo nombre del álbum'}
+                onListo={(n) => void confirmarNombreAlbum(n)}
+                onCancelar={() => setNombrandoAlbum(null)}
+              />
+            ) : (
+              <ActionChip onClick={handleCreateAlbum}>＋ Nuevo álbum</ActionChip>
+            )}
+            {albumFilter !== 'all' && albumFilter !== 'none' && !nombrandoAlbum && (
               <>
                 <ActionChip onClick={handleRenameAlbum}>✎ Renombrar</ActionChip>
                 <ActionChip danger onClick={handleDeleteAlbum}>
@@ -549,6 +628,7 @@ export default function Songs() {
                 key={s.id}
                 selected={s.id === currentSongId}
                 onClick={() => selectSong(s.id)}
+                onContextMenu={(e) => abrirMenu(e, menuDeCancion(s))}
                 label={s.title || 'Sin título'}
               />
             ))}
@@ -614,13 +694,13 @@ export default function Songs() {
                 className="input-base min-h-[280px] resize-y font-mono text-sm leading-relaxed"
                 spellCheck={false}
               />
-              <ul className="mt-3 space-y-1.5 font-serif text-[15px] italic leading-relaxed text-songbook-ink-dim">
+              <ul className="mt-3 space-y-1.5 font-serif text-[15px] italic leading-relaxed text-cabina-tinta-dim">
                 <li>
                   <strong className="not-italic">Una línea en blanco</strong> separa
                   un slide del siguiente.
                 </li>
                 <li>
-                  <code className="rounded bg-songbook-sage/15 px-1.5 py-[0.1rem] font-mono text-[0.78em] not-italic text-songbook-sage">
+                  <code className="rounded bg-ok-suave px-1.5 py-[0.1rem] font-mono text-[0.78em] not-italic text-ok">
                     # Coro
                   </code>{' '}
                   al principio de una estrofa le pone nombre a esa parte. Se ve en
@@ -628,7 +708,7 @@ export default function Songs() {
                 </li>
                 <li>
                   Acordes entre corchetes, en la posición exacta donde tocan:{' '}
-                  <code className="rounded bg-songbook-sage/15 px-1.5 py-[0.1rem] font-mono text-[0.78em] not-italic text-songbook-sage">
+                  <code className="rounded bg-ok-suave px-1.5 py-[0.1rem] font-mono text-[0.78em] not-italic text-ok">
                     que ge[Am]nial, est[A]a canción
                   </code>
                   .
@@ -749,6 +829,7 @@ function PerformanceView({
             <div className="divider" />
             <div className="deck-nav">
               <button
+                aria-label="Slide anterior (←)"
                 type="button"
                 onClick={() => onProject(at - 1)}
                 disabled={at <= 0}
@@ -761,6 +842,7 @@ function PerformanceView({
                 <em>/{slides.length}</em>
               </span>
               <button
+                aria-label="Slide siguiente (→ o barra espaciadora)"
                 type="button"
                 onClick={() => onProject(at + 1)}
                 disabled={at >= slides.length - 1}
@@ -842,7 +924,7 @@ function PerformanceView({
       )}
 
       {slides.length > 0 && (
-        <div className="mt-5 text-center font-serif text-[13px] italic text-songbook-ink-faint">
+        <div className="mt-5 text-center font-serif text-[13px] italic text-cabina-tinta-tenue">
           <kbd>←</kbd> <kbd>→</kbd> o <kbd>espacio</kbd> pasan de slide ·{' '}
           <kbd>1</kbd>–<kbd>9</kbd> saltan directo · <kbd>Esc</kbd> limpia la
           pantalla. Los acordes son sólo para vos: la proyección siempre va sin
@@ -957,23 +1039,71 @@ function Chip({
   count,
   selected,
   variant,
-  onClick
+  onClick,
+  onContextMenu
 }: {
   label: string
   count?: number
   selected?: boolean
   variant?: 'default' | 'album'
   onClick: () => void
+  onContextMenu?: (e: React.MouseEvent) => void
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      onContextMenu={onContextMenu}
+      aria-pressed={selected}
       className={`chip ${selected ? 'selected' : ''} ${variant === 'album' ? 'is-album' : ''}`}
     >
       {label}
       {count !== undefined && <span className="chip-count">{count}</span>}
     </button>
+  )
+}
+
+/**
+ * Un nombre que se escribe en el lugar, con forma de chip. Enter guarda;
+ * salir del campo sin escribir nada o tocar ✕ cancela. (Esc no: en esta app
+ * es la parada de pánico.)
+ */
+function NombreEnLinea({
+  inicial,
+  etiqueta,
+  onListo,
+  onCancelar
+}: {
+  inicial: string
+  etiqueta: string
+  onListo: (nombre: string) => void
+  onCancelar: () => void
+}) {
+  const [valor, setValor] = useState(inicial)
+  return (
+    <span className="chip selected inline-flex items-center gap-1 !py-1">
+      <input
+        autoFocus
+        value={valor}
+        onChange={(e) => setValor(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') onListo(valor)
+        }}
+        onBlur={() => (valor.trim() && valor !== inicial ? onListo(valor) : onCancelar())}
+        aria-label={etiqueta}
+        placeholder={etiqueta}
+        className="w-44 border-0 bg-transparent p-0 text-sm text-inherit placeholder:text-current placeholder:opacity-50 focus:ring-0"
+      />
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={onCancelar}
+        aria-label="Cancelar"
+        className="opacity-70 hover:opacity-100"
+      >
+        ✕
+      </button>
+    </span>
   )
 }
 
@@ -1027,16 +1157,19 @@ const songbookCss = `
   --ct-alto: #221d19;
   --ct-tinta: #efe6d6;
   --ct-dim: rgba(239, 230, 214, 0.72);
-  --ct-tenue: rgba(239, 230, 214, 0.48);
+  --ct-tenue: rgba(239, 230, 214, 0.58);
   --ct-linea: rgba(239, 230, 214, 0.14);
   --ct-linea-fuerte: rgba(239, 230, 214, 0.32);
   --ct-aire: #e2483b;
-  --ct-listo: var(--ct-listo);
-  --ct-ok: var(--ct-ok);
+  /* Antes decía var(--ct-listo): se referenciaba a sí misma, la variable
+     quedaba inválida y todo acento ámbar de esta sección desaparecía (el
+     botón activo "Editar" era texto oscuro sobre fondo oscuro). */
+  --ct-listo: #f5b342;
+  --ct-ok: #8fb98a;
 
   background: var(--ct-negro);
   color: var(--ct-tinta);
-  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -1067,7 +1200,7 @@ const songbookCss = `
   background: transparent;
   border: none;
   color: var(--ct-dim);
-  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-weight: 600;
   font-size: 0.82rem;
   padding: 0.55rem 1.15rem;
@@ -1091,7 +1224,7 @@ const songbookCss = `
   /* El serif queda SÓLO dentro de las tarjetas de letra, donde significa algo:
      "esto es texto que se proyecta". Acá era la voz de documento que
      contradecía el trabajo real de la pantalla. */
-  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-size: 0.86rem;
   font-weight: 500;
   color: var(--ct-dim);
@@ -1109,7 +1242,7 @@ const songbookCss = `
   color: var(--ct-ok);
 }
 .songbook .chip-count {
-  font-family: Consolas, ui-monospace, monospace;
+  font-family: 'JetBrains Mono Variable', Consolas, ui-monospace, monospace;
   font-style: normal;
   font-size: 0.72em;
   opacity: 0.6;
@@ -1118,7 +1251,7 @@ const songbookCss = `
   border-style: dashed;
   color: var(--ct-tenue);
   font-style: normal;
-  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-size: 0.82rem;
   letter-spacing: 0.04em;
 }
@@ -1139,7 +1272,7 @@ const songbookCss = `
   color: var(--ct-tinta);
   padding: 0.7rem 0.95rem;
   border-radius: 8px;
-  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-size: 0.95rem;
   outline: none;
   transition: border-color 0.2s;
@@ -1147,7 +1280,7 @@ const songbookCss = `
 .songbook .input-base::placeholder { color: var(--ct-tenue); }
 .songbook .input-base:focus { border-color: var(--ct-listo); }
 .songbook textarea.input-base {
-  font-family: Consolas, ui-monospace, monospace;
+  font-family: 'JetBrains Mono Variable', Consolas, ui-monospace, monospace;
   font-size: 0.88rem;
   line-height: 1.7;
 }
@@ -1181,7 +1314,7 @@ const songbookCss = `
   padding: 0.55rem 1rem;
   border-radius: 8px;
   cursor: pointer;
-  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-weight: 500;
   font-size: 0.85rem;
   letter-spacing: 0.01em;
@@ -1222,21 +1355,21 @@ const songbookCss = `
   outline-offset: -10px;
 }
 .songbook .import-msg {
-  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-size: 0.82rem;
   color: var(--ct-listo);
 }
 
 .songbook .save-status {
   align-self: center;
-  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-size: 0.75rem;
   color: var(--ct-tenue);
   letter-spacing: 0.02em;
 }
 
 .songbook .empty-state {
-  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   color: var(--ct-tenue);
   font-size: 0.95rem;
 }
@@ -1252,7 +1385,7 @@ const songbookCss = `
   border-radius: 12px;
 }
 .songbook .now-playing {
-  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-weight: 600;
   color: var(--ct-dim);
   font-size: 0.95rem;
@@ -1271,7 +1404,7 @@ const songbookCss = `
   background: transparent;
   border: none;
   color: var(--ct-dim);
-  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-weight: 600;
   font-size: 0.75rem;
   padding: 0.4rem 0.75rem;
@@ -1301,7 +1434,7 @@ const songbookCss = `
 .songbook .deck-nav button:hover:not(:disabled) { border-color: var(--ct-listo); color: var(--ct-listo); }
 .songbook .deck-nav button:disabled { opacity: 0.25; cursor: not-allowed; }
 .songbook .deck-pos {
-  font-family: Consolas, ui-monospace, monospace;
+  font-family: 'JetBrains Mono Variable', Consolas, ui-monospace, monospace;
   font-size: 0.8rem;
   color: var(--ct-listo);
   min-width: 3.2rem;
@@ -1323,7 +1456,7 @@ const songbookCss = `
   background: transparent;
   border: none;
   color: var(--ct-tenue);
-  font-family: Consolas, ui-monospace, monospace;
+  font-family: 'JetBrains Mono Variable', Consolas, ui-monospace, monospace;
   font-weight: 600;
   font-size: 0.68rem;
   padding: 0.35rem 0.5rem;
@@ -1334,7 +1467,7 @@ const songbookCss = `
 .songbook .density-toggle button.active { background: var(--ct-listo); color: var(--ct-negro); }
 
 .songbook kbd {
-  font-family: Consolas, ui-monospace, monospace;
+  font-family: 'JetBrains Mono Variable', Consolas, ui-monospace, monospace;
   font-style: normal;
   font-size: 0.85em;
   background: var(--ct-negro);
@@ -1388,12 +1521,12 @@ const songbookCss = `
   min-width: 0;
 }
 .songbook .slide-card-index .num {
-  font-family: Consolas, ui-monospace, monospace;
+  font-family: 'JetBrains Mono Variable', Consolas, ui-monospace, monospace;
   font-size: 0.62rem;
   color: var(--ct-tenue);
 }
 .songbook .slide-card-index .label {
-  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -1412,7 +1545,7 @@ const songbookCss = `
 
 /* Lyrics rendering */
 .songbook .lyrics-line {
-  font-family: Georgia, serif;
+  font-family: 'Source Serif 4 Variable', Georgia, serif;
   font-weight: 400;
   font-size: var(--deck-font, 0.86rem);
   line-height: 1.32;
@@ -1434,7 +1567,7 @@ const songbookCss = `
   line-height: 1;
 }
 .songbook .part .chord {
-  font-family: Consolas, ui-monospace, monospace;
+  font-family: 'JetBrains Mono Variable', Consolas, ui-monospace, monospace;
   font-weight: 600;
   font-size: 0.66em;
   color: var(--ct-ok);

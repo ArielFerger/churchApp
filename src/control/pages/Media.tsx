@@ -50,6 +50,8 @@ import {
   type MediaType
 } from '@/shared/types/media'
 import type { ProjectionCommand } from '@/shared/types/ipc'
+import { useMenuContextual } from '../components/ui/MenuContextual'
+import { menuParaMedia } from '../menus'
 
 type Filter = 'all' | MediaType
 /** Filtro de categoría: todas, una en concreto, o solo las que no tienen. */
@@ -171,7 +173,7 @@ export default function Media() {
   return (
     <div className="flex h-full">
       <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-slate-700 px-4 py-2">
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-700 px-4 py-2">
           {filterOptions.map((opt) => {
             const Icon = opt.icon
             const isActive = filter === opt.value
@@ -180,13 +182,14 @@ export default function Media() {
                 key={opt.value}
                 type="button"
                 onClick={() => setFilter(opt.value)}
+                aria-pressed={isActive}
                 className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors ${
                   isActive
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-listo text-cabina-negro'
                     : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
                 }`}
               >
-                <Icon className="h-3.5 w-3.5" />
+                <Icon className="h-3.5 w-3.5" aria-hidden />
                 {opt.label}
               </button>
             )
@@ -194,7 +197,12 @@ export default function Media() {
 
           <SearchBox value={query} onChange={setQuery} />
 
-          <span className="shrink-0 text-xs text-slate-500">
+          {/* La ruta puede ser larguísima: se corta con "…" y entera va en el
+              título. Antes empujaba los filtros fuera de la pantalla. */}
+          <span
+            className="min-w-0 max-w-full flex-1 truncate text-xs text-slate-500"
+            title={settings.mediaFolder ?? undefined}
+          >
             {filtered.length} {filtered.length === 1 ? 'item' : 'items'} ·{' '}
             <span className="font-mono">{settings.mediaFolder}</span>
           </span>
@@ -258,7 +266,7 @@ export default function Media() {
         <VideoTransport media={media} />
       </div>
 
-      <aside className="flex w-72 flex-col overflow-y-auto border-l border-slate-700 p-4">
+      <aside className="flex w-64 shrink-0 flex-col overflow-y-auto border-l border-slate-700 p-4 xl:w-80" aria-label="Detalle del archivo elegido">
         {selectedItem ? (
           <SelectionPanel
             // key: resetea el checkbox de loop y la duración al cambiar de item
@@ -307,10 +315,11 @@ function SearchBox({ value, onChange }: { value: string; onChange: (v: string) =
         }}
         placeholder="Buscar por nombre o carpeta…"
         aria-label="Buscar archivos de media"
-        className="w-full rounded-md border border-slate-700 bg-slate-900 py-1 pl-7 pr-7 text-xs text-slate-100 placeholder:text-slate-600 focus:border-blue-500 focus:outline-none"
+        className="w-full rounded-md border border-slate-700 bg-slate-900 py-1 pl-7 pr-7 text-xs text-slate-100 placeholder:text-slate-600 focus:border-listo-borde focus:outline-none"
       />
       {value && (
         <button
+          aria-label="Limpiar búsqueda"
           type="button"
           onClick={() => onChange('')}
           className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-500 hover:bg-slate-700 hover:text-slate-200"
@@ -333,13 +342,13 @@ function CategoryFilterBar({
   counts: Record<CategoryFilter, number>
 }) {
   const options: { value: CategoryFilter; label: string; activeClass: string }[] = [
-    { value: 'all', label: 'Todas', activeClass: 'bg-slate-600 text-white' },
+    { value: 'all', label: 'Todas', activeClass: 'bg-cabina-tinta text-cabina-negro' },
     ...MEDIA_CATEGORIES.map((c) => ({
       value: c.value as CategoryFilter,
       label: c.label,
       activeClass: c.activeClass
     })),
-    { value: 'none', label: 'Sin categoría', activeClass: 'bg-slate-600 text-white' }
+    { value: 'none', label: 'Sin categoría', activeClass: 'bg-cabina-tinta text-cabina-negro' }
   ]
   return (
     <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-700/60 bg-slate-800/20 px-4 py-1.5">
@@ -352,6 +361,7 @@ function CategoryFilterBar({
           key={opt.value}
           type="button"
           onClick={() => onChange(opt.value)}
+          aria-pressed={value === opt.value}
           className={`rounded-full px-2.5 py-0.5 text-[11px] transition-colors ${
             value === opt.value
               ? opt.activeClass
@@ -381,19 +391,20 @@ function TodayStrip({
 }) {
   const toggleToday = useMediaMetaStore((s) => s.toggleToday)
   const clearToday = useMediaMetaStore((s) => s.clearToday)
+  const abrirMenu = useMenuContextual()
   if (items.length === 0) return null
   return (
-    <section className="border-b border-amber-500/20 bg-amber-500/[0.06] px-4 py-2">
+    <section className="border-b border-listo-borde bg-listo-suave px-4 py-2">
       <div className="flex items-center justify-between">
-        <h2 className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-300">
+        <h2 className="inline-flex items-center gap-1.5 text-xs font-medium text-listo">
           <CalendarCheck className="h-3.5 w-3.5" />
           Para hoy
-          <span className="rounded-full bg-amber-500/20 px-1.5 text-[10px]">{items.length}</span>
+          <span className="rounded-full bg-listo-suave px-1.5 text-[10px]">{items.length}</span>
         </h2>
         <button
           type="button"
           onClick={() => void clearToday()}
-          className="rounded px-1.5 py-0.5 text-[11px] text-slate-500 hover:bg-slate-700 hover:text-red-400"
+          className="rounded px-1.5 py-0.5 text-[11px] text-slate-500 hover:bg-slate-700 hover:text-falla"
           title="Sacar todos los archivos de la lista de hoy"
         >
           Vaciar
@@ -405,13 +416,17 @@ function TodayStrip({
             <div
               className={`group relative w-32 overflow-hidden rounded-md border bg-black ${
                 item.id === selectedId
-                  ? 'border-blue-500 ring-2 ring-blue-500/40'
-                  : 'border-amber-500/30 hover:border-amber-400/70'
+                  ? 'border-listo ring-2 ring-listo-borde'
+                  : 'border-listo-borde hover:border-listo'
               }`}
             >
               <button
                 type="button"
                 onClick={() => onSelect(item.id)}
+                onContextMenu={(e) => {
+                  onSelect(item.id)
+                  abrirMenu(e, menuParaMedia(item))
+                }}
                 className="block w-full text-left"
                 title={item.fileName}
               >
@@ -423,9 +438,10 @@ function TodayStrip({
                 </span>
               </button>
               <button
+                aria-label="Sacar de la lista de hoy"
                 type="button"
                 onClick={() => void toggleToday(item.id)}
-                className="absolute right-1 top-1 rounded bg-black/70 p-0.5 text-amber-300 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+                className="absolute right-1 top-1 rounded bg-black/70 p-0.5 text-listo opacity-0 transition-opacity hover:text-falla group-hover:opacity-100 focus-visible:opacity-100"
                 title="Sacar de la lista de hoy"
               >
                 <X className="h-3 w-3" />
@@ -494,17 +510,17 @@ function FolderCard({
         type="button"
         onClick={onOpen}
         onDoubleClick={onOpen}
-        className="group block w-full overflow-hidden rounded-md border border-slate-700 bg-slate-800/40 text-left transition-colors hover:border-amber-500/60 hover:bg-slate-800"
+        className="group block w-full overflow-hidden rounded-md border border-slate-700 bg-slate-800/40 text-left transition-colors hover:border-listo hover:bg-slate-800"
         title={`Abrir carpeta "${name}"`}
       >
         <div className="flex aspect-video items-center justify-center bg-slate-900/60">
-          <Folder className="h-12 w-12 text-amber-400/80 transition-transform group-hover:scale-110" />
+          <Folder className="h-12 w-12 text-listo/80 transition-transform group-hover:scale-110" />
         </div>
         <div className="flex items-center justify-between gap-2 px-2 py-1.5">
           <span className="truncate text-xs font-medium text-slate-200" title={name}>
             {name}
           </span>
-          <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
+          <span className="shrink-0 rounded bg-listo-suave px-1.5 py-0.5 text-[10px] font-medium text-listo">
             {count}
           </span>
         </div>
@@ -552,6 +568,7 @@ function MediaCard({
   showFolder = false
 }: MediaCardProps) {
   const toggleToday = useMediaMetaStore((s) => s.toggleToday)
+  const abrirMenu = useMenuContextual()
   // Duración leída del propio <video> una vez cargada la metadata.
   const [duration, setDuration] = useState<number | null>(null)
   const info = category ? categoryInfo(category) : undefined
@@ -560,13 +577,25 @@ function MediaCard({
       <div
         className={`group relative overflow-hidden rounded-md border bg-slate-950 transition-colors ${
           isSelected
-            ? 'border-blue-500 ring-2 ring-blue-500/40'
+            ? 'border-listo ring-2 ring-listo-borde'
             : isToday
-              ? 'border-amber-500/50'
+              ? 'border-listo-borde'
               : 'border-slate-700 hover:border-slate-500'
         }`}
       >
-        <button type="button" onClick={onSelect} className="block w-full text-left">
+        <button
+          type="button"
+          onClick={onSelect}
+          onContextMenu={(e) => {
+            // Clic derecho también lo elige: el panel de la derecha muestra
+            // de qué archivo se trata mientras se decide qué hacer.
+            onSelect()
+            abrirMenu(e, menuParaMedia(item))
+          }}
+          aria-pressed={isSelected}
+          aria-label={`${item.fileName}${isToday ? ', marcado para hoy' : ''}`}
+          className="block w-full text-left"
+        >
           <div className="relative aspect-video bg-black">
             <Thumb item={item} onDuration={setDuration} />
             {item.type === 'video' && duration !== null && (
@@ -602,13 +631,14 @@ function MediaCard({
 
         {/* Marcar para hoy — siempre visible si está marcado, si no al hover */}
         <button
+          aria-label={isToday ? 'Sacar de la lista de hoy' : 'Marcar para hoy'}
           type="button"
           onClick={() => void toggleToday(item.id)}
           aria-pressed={isToday}
           className={`absolute right-1 top-1 rounded bg-black/70 p-1 transition-opacity ${
             isToday
-              ? 'text-amber-300 opacity-100'
-              : 'text-slate-300 opacity-0 hover:text-amber-300 focus:opacity-100 group-hover:opacity-100'
+              ? 'text-listo opacity-100'
+              : 'text-slate-300 opacity-0 hover:text-listo focus:opacity-100 group-hover:opacity-100 focus-visible:opacity-100'
           }`}
           title={isToday ? 'Sacar de la lista de hoy' : 'Marcar para hoy'}
         >
@@ -620,10 +650,12 @@ function MediaCard({
 }
 
 function TypeBadge({ type }: { type: MediaType }) {
+  // El tipo no es un estado: va en gris. El verde, el ámbar y el rojo dicen
+  // en qué situación está algo (listo, preparado, al aire), no qué es.
   const styles: Record<MediaType, string> = {
-    image: 'bg-emerald-500/15 text-emerald-300',
-    video: 'bg-purple-500/15 text-purple-300',
-    gif: 'bg-amber-500/15 text-amber-300'
+    image: 'bg-cabina-alto text-cabina-tinta-dim',
+    video: 'bg-cabina-alto text-cabina-tinta-dim',
+    gif: 'bg-cabina-alto text-cabina-tinta-dim'
   }
   return (
     <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${styles[type]}`}>
@@ -657,6 +689,7 @@ function SelectionPanel({ item, onClear }: SelectionPanelProps) {
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-slate-200">Seleccionado</h3>
         <button
+          aria-label="Limpiar selección"
           type="button"
           onClick={onClear}
           className="rounded p-1 text-slate-500 hover:bg-slate-700 hover:text-slate-200"
@@ -729,7 +762,7 @@ function SelectionPanel({ item, onClear }: SelectionPanelProps) {
         aria-pressed={isToday}
         className={`mt-3 flex w-full items-center justify-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
           isToday
-            ? 'bg-amber-500/20 text-amber-200 hover:bg-amber-500/30'
+            ? 'bg-listo-suave text-listo hover:bg-listo/30'
             : 'border border-slate-700 text-slate-300 hover:bg-slate-800'
         }`}
       >
@@ -743,7 +776,7 @@ function SelectionPanel({ item, onClear }: SelectionPanelProps) {
             type="checkbox"
             checked={loop}
             onChange={(e) => setLoop(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-0"
+            className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-800 text-listo focus:ring-0"
           />
           <Repeat className="h-3.5 w-3.5 text-slate-500" />
           Repetir en loop
@@ -765,7 +798,7 @@ function SelectionPanel({ item, onClear }: SelectionPanelProps) {
               fadeOutSec: settings?.videoFadeOutSec ?? 2.5
             })
           }
-          className="flex w-full items-center justify-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500"
+          className="flex w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold border border-aire-borde bg-cabina-alto text-cabina-tinta transition-colors hover:bg-aire hover:text-white"
         >
           <Eye className="h-4 w-4" />
           Mostrar en proyección
@@ -775,18 +808,18 @@ function SelectionPanel({ item, onClear }: SelectionPanelProps) {
             <button
               type="button"
               onClick={() => addToQueue(item.id)}
-              className="flex w-full items-center justify-center gap-2 rounded-md bg-purple-600 px-3 py-2 text-sm font-medium text-white hover:bg-purple-500"
+              className="flex w-full items-center justify-center gap-2 rounded-md border border-listo-borde px-3 py-2 text-sm font-medium text-listo transition-colors hover:bg-listo-suave"
             >
-              <ListPlus className="h-4 w-4" />
+              <ListPlus className="h-4 w-4" aria-hidden />
               Añadir a la cola
             </button>
           ) : (
             <button
               type="button"
               onClick={() => removeFromQueue(item.id)}
-              className="flex w-full items-center justify-center gap-2 rounded-md border border-purple-500/50 bg-purple-500/10 px-3 py-2 text-sm font-medium text-purple-300 hover:bg-purple-500/20"
+              className="flex w-full items-center justify-center gap-2 rounded-md border border-listo-borde bg-listo-suave px-3 py-2 text-sm font-medium text-listo transition-colors hover:bg-listo/25"
             >
-              <ListVideo className="h-4 w-4" />
+              <ListVideo className="h-4 w-4" aria-hidden />
               En cola (#{queuePos + 1}) — quitar
             </button>
           ))}
@@ -832,11 +865,11 @@ function QueuePanel({ media }: { media: MediaItem[] }) {
     <div className="mt-5 border-t border-slate-700 pt-4">
       <div className="flex items-center justify-between">
         <h3 className="flex items-center gap-1.5 text-sm font-medium text-slate-200">
-          <ListVideo className="h-4 w-4 text-purple-400" />
+          <ListVideo className="h-4 w-4 text-listo" aria-hidden />
           Cola de videos
           {active && (
-            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
-              EN VIVO
+            <span className="rounded bg-aire px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">
+              AL AIRE
             </span>
           )}
         </h3>
@@ -846,7 +879,7 @@ function QueuePanel({ media }: { media: MediaItem[] }) {
             if (active) stopQueue()
             clear()
           }}
-          className="rounded px-1.5 py-0.5 text-[11px] text-slate-500 hover:bg-slate-700 hover:text-red-400"
+          className="rounded px-1.5 py-0.5 text-[11px] text-slate-500 hover:bg-slate-700 hover:text-falla"
           title="Vaciar la cola"
         >
           Vaciar
@@ -861,9 +894,10 @@ function QueuePanel({ media }: { media: MediaItem[] }) {
               key={item.id}
               className={`group flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs ${
                 isCurrent
-                  ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-200'
+                  ? 'border-aire-borde bg-aire-suave text-cabina-tinta'
                   : 'border-slate-700 bg-slate-800/40 text-slate-300'
               }`}
+              aria-current={isCurrent ? 'true' : undefined}
             >
               <span className="w-4 shrink-0 text-center font-mono text-[10px] text-slate-500">
                 {i + 1}
@@ -876,8 +910,9 @@ function QueuePanel({ media }: { media: MediaItem[] }) {
               >
                 {item.fileName}
               </button>
-              <span className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
+              <span className="hidden shrink-0 items-center gap-0.5 group-focus-within:flex group-hover:flex">
                 <button
+                  aria-label="Subir"
                   type="button"
                   onClick={() => move(item.id, -1)}
                   disabled={i === 0}
@@ -887,6 +922,7 @@ function QueuePanel({ media }: { media: MediaItem[] }) {
                   <ChevronUp className="h-3 w-3" />
                 </button>
                 <button
+                  aria-label="Bajar"
                   type="button"
                   onClick={() => move(item.id, 1)}
                   disabled={i === items.length - 1}
@@ -896,9 +932,10 @@ function QueuePanel({ media }: { media: MediaItem[] }) {
                   <ChevronDown className="h-3 w-3" />
                 </button>
                 <button
+                  aria-label="Quitar de la cola"
                   type="button"
                   onClick={() => remove(item.id)}
-                  className="rounded p-0.5 text-slate-500 hover:text-red-400"
+                  className="rounded p-0.5 text-slate-500 hover:text-falla"
                   title="Quitar de la cola"
                 >
                   <X className="h-3 w-3" />
@@ -914,7 +951,7 @@ function QueuePanel({ media }: { media: MediaItem[] }) {
           <button
             type="button"
             onClick={() => startQueue()}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold border border-aire-borde bg-cabina-alto text-cabina-tinta transition-colors hover:bg-aire hover:text-white"
           >
             <Play className="h-3.5 w-3.5" />
             Reproducir cola
@@ -924,7 +961,7 @@ function QueuePanel({ media }: { media: MediaItem[] }) {
             <button
               type="button"
               onClick={skipNext}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-slate-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-600"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-slate-700 px-3 py-1.5 text-xs font-medium text-cabina-tinta hover:bg-slate-600"
               title="Saltar al siguiente video"
             >
               <SkipForward className="h-3.5 w-3.5" />
@@ -972,13 +1009,22 @@ function VideoTransport({ media }: { media: MediaItem[] }) {
   const pct = duration > 0 ? Math.min(100, (shown / duration) * 100) : 0
 
   return (
-    <div className="flex items-center gap-3 border-t border-slate-700 bg-slate-900/80 px-4 py-2.5">
-      <Film className="h-4 w-4 shrink-0 text-purple-300" />
-      <span className="max-w-[180px] truncate text-xs text-slate-300" title={item.fileName}>
+    <div
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-aire-borde bg-aire-suave px-4 py-2.5"
+      role="group"
+      aria-label={`Video al aire: ${item.fileName}`}
+    >
+      {/* Es lo que la congregación está viendo: rojo de "al aire". */}
+      <span className="inline-flex shrink-0 items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-rotulo text-aire">
+        <Film className="h-4 w-4" aria-hidden />
+        Al aire
+      </span>
+      <span className="min-w-0 max-w-[220px] truncate text-xs text-cabina-tinta" title={item.fileName}>
         {item.fileName}
       </span>
 
       <button
+        aria-label="Reiniciar"
         type="button"
         onClick={() => send({ type: 'seekMedia', position: 0 })}
         className="rounded p-1.5 text-slate-300 hover:bg-slate-800 hover:text-white"
@@ -991,7 +1037,7 @@ function VideoTransport({ media }: { media: MediaItem[] }) {
         <button
           type="button"
           onClick={() => send({ type: 'replayMedia' })}
-          className="flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-400"
+          className="flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold border border-aire-borde bg-cabina-alto text-cabina-tinta transition-colors hover:bg-aire hover:text-white"
           title="Reproducir de nuevo"
         >
           <RotateCcw className="h-4 w-4" />
@@ -999,12 +1045,13 @@ function VideoTransport({ media }: { media: MediaItem[] }) {
         </button>
       ) : (
         <button
+          aria-label={playing ? 'Pausar' : 'Reproducir'}
           type="button"
           onClick={() => send({ type: 'setMediaPlaying', playing: !playing })}
-          className="rounded-full bg-white p-2 text-slate-900 hover:bg-slate-200"
+          className="rounded-full bg-cabina-tinta p-2 text-cabina-negro hover:bg-white"
           title={playing ? 'Pausar' : 'Reproducir'}
         >
-          {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 pl-0.5" />}
+          {playing ? <Pause className="h-4 w-4" aria-hidden /> : <Play className="h-4 w-4 pl-0.5" aria-hidden />}
         </button>
       )}
 
@@ -1024,9 +1071,11 @@ function VideoTransport({ media }: { media: MediaItem[] }) {
         }}
         onPointerUp={() => setScrub(null)}
         onPointerCancel={() => setScrub(null)}
-        className="seek-range h-1.5 flex-1 cursor-pointer appearance-none rounded-full"
+        className="seek-range h-1.5 min-w-[120px] flex-1 cursor-pointer appearance-none rounded-full"
+        aria-label="Posición del video"
+        aria-valuetext={`${formatTime(shown)} de ${formatTime(duration)}`}
         style={{
-          background: `linear-gradient(to right, rgb(168 85 247) 0%, rgb(168 85 247) ${pct}%, rgb(51 65 85) ${pct}%, rgb(51 65 85) 100%)`
+          background: `linear-gradient(to right, #e2483b 0%, #e2483b ${pct}%, #332e29 ${pct}%, #332e29 100%)`
         }}
       />
       <span className="w-10 font-mono text-[10px] text-slate-500">{formatTime(duration)}</span>
@@ -1038,8 +1087,9 @@ function VideoTransport({ media }: { media: MediaItem[] }) {
           onClick={() => setVideoVolume(volume > 0 ? 0 : 1)}
           className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
           title={volume > 0 ? 'Silenciar' : 'Activar sonido'}
+          aria-label={volume > 0 ? 'Silenciar el video' : 'Activar el sonido del video'}
         >
-          {volume > 0 ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+          {volume > 0 ? <Volume2 className="h-4 w-4" aria-hidden /> : <VolumeX className="h-4 w-4" aria-hidden />}
         </button>
         <input
           type="range"
@@ -1049,8 +1099,10 @@ function VideoTransport({ media }: { media: MediaItem[] }) {
           value={volume}
           onChange={(e) => setVideoVolume(parseFloat(e.target.value))}
           className="seek-range h-1.5 w-24 cursor-pointer appearance-none rounded-full"
+          aria-label="Volumen del video"
+          aria-valuetext={`${Math.round(volume * 100)} por ciento`}
           style={{
-            background: `linear-gradient(to right, rgb(168 85 247) 0%, rgb(168 85 247) ${volume * 100}%, rgb(51 65 85) ${volume * 100}%, rgb(51 65 85) 100%)`
+            background: `linear-gradient(to right, #efe6d6 0%, #efe6d6 ${volume * 100}%, #332e29 ${volume * 100}%, #332e29 100%)`
           }}
           title={`Volumen del video: ${Math.round(volume * 100)}%`}
         />

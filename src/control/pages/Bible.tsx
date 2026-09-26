@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useMenuContextual } from '../components/ui/MenuContextual'
+import { copiar, iconos } from '../menus'
+import { ListOrdered } from 'lucide-react'
 import {
   Search,
   BookOpen,
@@ -32,6 +35,7 @@ function send(cmd: ProjectionCommand) {
 }
 
 export default function Bible() {
+  const abrirMenu = useMenuContextual()
   const [versions, setVersions] = useState<BibleVersionSummary[]>([])
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null)
   const [selectedBookId, setSelectedBookId] = useState<string>('JHN')
@@ -253,6 +257,71 @@ export default function Bible() {
     })
   }
 
+  /**
+   * Proyecta varios versículos seguidos (del `desde` al `hasta`), como un solo
+   * pasaje. Es lo que se hace cuando el predicador va a leer de corrido.
+   */
+  function projectVerseRange(desde: number, hasta: number): void {
+    if (!selectedVersion || !book) return
+    const tramo = verses.filter((v) => v.number >= desde && v.number <= hasta)
+    if (tramo.length === 0) return
+    setChosenVerse(desde)
+    const texto = tramo.map((v) => v.text).join(' ')
+    send({
+      type: 'showBibleVerse',
+      reference: `${book.name} ${selectedChapter}:${desde}-${hasta}`,
+      text: texto,
+      version: selectedVersion
+    })
+    record({
+      bookId: book.id,
+      bookName: book.name,
+      chapter: selectedChapter,
+      verse: desde,
+      endVerse: hasta,
+      version: selectedVersion,
+      text: texto
+    })
+  }
+
+  function menuDeVersiculo(n: number, texto: string) {
+    const ref = `${book?.name ?? ''} ${selectedChapter}:${n}`
+    const desde = chosenVerse !== null && chosenVerse < n ? chosenVerse : null
+    return [
+      { titulo: `${ref} · ${selectedVersion ?? ''}` },
+      {
+        etiqueta: 'Proyectar este versículo',
+        icono: <iconos.Eye className="h-4 w-4" />,
+        variante: 'aire' as const,
+        onSelect: () => projectChapterVerse(n)
+      },
+      desde !== null && {
+        etiqueta: `Proyectar del ${desde} al ${n}`,
+        icono: <ListOrdered className="h-4 w-4" />,
+        variante: 'aire' as const,
+        detalle: `${n - desde + 1} vers.`,
+        onSelect: () => projectVerseRange(desde, n)
+      },
+      n < verses.length && {
+        etiqueta: `Proyectar del ${n} al ${n + 1}`,
+        icono: <ListOrdered className="h-4 w-4" />,
+        variante: 'aire' as const,
+        onSelect: () => projectVerseRange(n, n + 1)
+      },
+      'separador' as const,
+      {
+        etiqueta: 'Copiar el texto',
+        icono: <iconos.Copy className="h-4 w-4" />,
+        onSelect: () => copiar(`${texto}\n— ${ref} (${selectedVersion})`, 'Versículo copiado')
+      },
+      {
+        etiqueta: 'Copiar la referencia',
+        icono: <iconos.Copy className="h-4 w-4" />,
+        onSelect: () => copiar(ref, 'Referencia copiada')
+      }
+    ]
+  }
+
   function projectChapterVerse(n: number): void {
     if (!selectedVersion || !book) return
     const verse = verses.find((v) => v.number === n)
@@ -314,15 +383,16 @@ export default function Bible() {
       )}
 
       {/* Search bar */}
-      <div className="flex items-center gap-3 border-b border-slate-700 px-4 py-2">
-        <div className="relative max-w-md flex-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-700 px-4 py-2">
+        <div className="relative min-w-[220px] max-w-md flex-1">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
           <input
             type="search"
             placeholder='Referencia rápida — ej. "Juan 3:16" o "Jn 3:16-17"'
             value={search}
             onChange={(e) => void runSearch(e.target.value)}
-            className="w-full rounded-md border border-slate-700 bg-slate-900 py-1.5 pl-8 pr-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
+            aria-label="Referencia rápida"
+            className="w-full rounded-md border border-slate-700 bg-slate-900 py-1.5 pl-8 pr-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-listo-borde focus:outline-none"
           />
         </div>
         <button
@@ -353,15 +423,16 @@ export default function Bible() {
               <div
                 key={v.version}
                 className={`flex items-stretch overflow-hidden rounded ${
-                  isActive ? 'ring-1 ring-blue-500' : ''
+                  isActive ? 'ring-1 ring-listo' : ''
                 }`}
               >
                 <button
                   type="button"
                   onClick={() => setSelectedVersion(v.version)}
+                  aria-pressed={isActive}
                   className={`px-2.5 py-1 text-xs font-medium transition-colors ${
                     isActive
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-listo text-cabina-negro'
                       : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   }`}
                   title={v.name}
@@ -369,10 +440,15 @@ export default function Bible() {
                   {v.version}
                 </button>
                 <button
+                  aria-label={
+                    isDefault
+                      ? 'Versión predeterminada — clic para quitar'
+                      : 'Fijar como versión predeterminada'
+                  }
                   type="button"
                   onClick={() => setDefaultVersion(v.version)}
                   className={`flex items-center px-1.5 transition-colors ${
-                    isActive ? 'bg-blue-600' : 'bg-slate-800 hover:bg-slate-700'
+                    isActive ? 'bg-listo' : 'bg-slate-800 hover:bg-slate-700'
                   }`}
                   title={
                     isDefault
@@ -381,8 +457,15 @@ export default function Bible() {
                   }
                 >
                   <Star
+                    aria-hidden
                     className={`h-3.5 w-3.5 ${
-                      isDefault ? 'fill-yellow-400 text-yellow-400' : 'text-slate-500'
+                      isDefault
+                        ? isActive
+                          ? 'fill-cabina-negro text-cabina-negro'
+                          : 'fill-listo text-listo'
+                        : isActive
+                          ? 'text-cabina-negro/60'
+                          : 'text-slate-500'
                     }`}
                   />
                 </button>
@@ -394,7 +477,7 @@ export default function Bible() {
 
       {/* Aviso de referencia inválida (capítulo/versículo inexistente) */}
       {searchNotice && (
-        <div className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-300">
+        <div className="flex items-center gap-2 border-b border-listo-borde bg-listo-suave px-4 py-2 text-xs text-listo">
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
           {searchNotice}
         </div>
@@ -434,9 +517,10 @@ export default function Bible() {
                   {e.endVerse ? `-${e.endVerse}` : ''}
                 </button>
                 <button
+                  aria-label="Quitar del historial"
                   type="button"
                   onClick={() => removeHistory(historyKey(e))}
-                  className="pr-1.5 text-slate-600 hover:text-red-400"
+                  className="pr-1.5 text-slate-600 hover:text-falla"
                   title="Quitar del historial"
                 >
                   <X className="h-3 w-3" />
@@ -447,7 +531,7 @@ export default function Bible() {
           <button
             type="button"
             onClick={() => clearHistory()}
-            className="shrink-0 rounded px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-700 hover:text-red-400"
+            className="shrink-0 rounded px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-700 hover:text-falla"
             title="Limpiar todo el historial"
           >
             Limpiar
@@ -478,7 +562,7 @@ export default function Bible() {
                   <button
                     type="button"
                     onClick={() => projectVerse(hit)}
-                    className="inline-flex items-center gap-1 rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-500"
+                    className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold border border-aire-borde bg-cabina-alto text-cabina-tinta transition-colors hover:bg-aire hover:text-white"
                   >
                     <Eye className="h-3 w-3" />
                     Proyectar
@@ -520,9 +604,11 @@ export default function Bible() {
                         setSelectedChapter(c)
                         setChosenVerse(null)
                       }}
+                      aria-pressed={isActive}
+                      aria-label={`Capítulo ${c}`}
                       className={`rounded text-xs leading-7 transition-colors ${
                         isActive
-                          ? 'bg-blue-600 text-white'
+                          ? 'bg-listo text-cabina-negro'
                           : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                       }`}
                     >
@@ -549,24 +635,29 @@ export default function Bible() {
                       <button
                         type="button"
                         onClick={() => projectChapterVerse(v.number)}
+                        onContextMenu={(e) => abrirMenu(e, menuDeVersiculo(v.number, v.text))}
                         className={`group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
                           isActive
-                            ? 'bg-red-500/10 ring-1 ring-red-500/40'
+                            ? 'bg-aire-suave ring-1 ring-aire-borde'
                             : 'hover:bg-slate-800'
                         }`}
+                        aria-current={isActive ? 'true' : undefined}
+                        aria-label={`${isActive ? 'Al aire: ' : 'Proyectar '}versículo ${v.number}`}
                       >
                         <span
                           className={`shrink-0 font-mono text-xs ${
-                            isActive ? 'text-red-300' : 'text-slate-500'
+                            isActive ? 'text-aire' : 'text-slate-500'
                           }`}
+                          aria-hidden
                         >
                           {v.number}
                         </span>
-                        <span className="text-sm text-slate-200">{v.text}</span>
+                        <span className="font-letra text-[15px] leading-snug text-slate-200">{v.text}</span>
                         <Eye
                           className={`mt-0.5 ml-auto h-3 w-3 shrink-0 ${
-                            isActive ? 'text-red-400' : 'text-slate-700 group-hover:text-slate-400'
+                            isActive ? 'text-aire' : 'text-slate-600 group-hover:text-slate-400'
                           }`}
+                          aria-hidden
                         />
                       </button>
                     </li>
@@ -628,9 +719,10 @@ function BookGroup({ label, books, selectedId, onSelect, className }: BookGroupP
                 onClick={() => onSelect(b.id)}
                 className={`flex w-full items-center justify-between rounded px-2 py-1 text-left text-sm transition-colors ${
                   isActive
-                    ? 'bg-blue-600/20 text-white'
+                    ? 'bg-listo-suave font-medium text-listo'
                     : 'text-slate-300 hover:bg-slate-800'
                 }`}
+                aria-current={isActive ? 'true' : undefined}
               >
                 <span className="truncate">{b.name}</span>
                 <span className="ml-2 shrink-0 font-mono text-[10px] text-slate-600">

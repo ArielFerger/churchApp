@@ -2,7 +2,7 @@
 
 App de escritorio para proyección en iglesias. Muestra letras de canciones, versículos bíblicos, imágenes, videos y GIFs en una segunda pantalla, con reproducción de música de fondo independiente.
 
-**Plataformas:** Windows · Linux &nbsp;·&nbsp; **Versión actual:** 1.1.0
+**Plataformas:** Windows · Linux (x64 y arm64) &nbsp;·&nbsp; **Versión actual:** 1.3.0
 
 ## Funcionalidades
 
@@ -10,7 +10,8 @@ App de escritorio para proyección en iglesias. Muestra letras de canciones, ver
 - Slide de prueba editable y proyección instantánea.
 - **Fondo único en loop** (video o imagen) detrás del contenido, con carpeta dedicada configurable y navegación por subcarpetas.
 - **Presentación de fondo**: slideshow de imágenes en loop con intervalo configurable.
-- Acciones rápidas siempre visibles: Detener todo, Blackout, Logo, Clear.
+- Acciones rápidas siempre visibles: Detener todo (Esc), Blackout, Limpiar.
+- Franja **AL AIRE** en todas las secciones: dice qué ve la congregación (contenido y fondo).
 
 ### 🎵 Canciones
 - Biblioteca de canciones con secciones (verso, coro, puente) y álbumes.
@@ -39,10 +40,34 @@ App de escritorio para proyección en iglesias. Muestra letras de canciones, ver
 - **Playlists con pestañas**: "Toda la música" + una pestaña por playlist; creación, renombrado, reordenado y borrado.
 - Cola de reproducción, búsqueda, carátulas y persistencia de sesión (retoma donde quedaste).
 
+### 👂 Escucha
+- Oye la predicación desde la consola de sonido, transcribe **sin internet** (whisper.cpp) y ofrece los pasajes que se nombran — `Juan 3:16`, "primera de Corintios trece", "y ahora el versículo 31" — para proyectarlos de un clic. **Nunca proyecta sola.**
+- Corta el audio en las pausas del predicador y aprende solo el ruido de fondo; ~1–2 s desde que termina la frase.
+- Muestra el texto del versículo para confirmar, y permite seguir versículo por versículo (Ctrl+←/→).
+- Modelos de 75 a 574 MB, a elección según la PC. El audio no se guarda ni sale de la máquina.
+
+### 📥 Descargar
+- Videos (MP4 hasta la resolución elegida) o MP3 con tapa y datos, directo a las carpetas de la app.
+- Varios enlaces de una, listas de reproducción, **sólo un tramo** del video, reintentar y mostrar en carpeta.
+- Instala y actualiza yt-dlp, ffmpeg y deno solo, en Windows y Linux; inicio de sesión de YouTube hecho por una persona para cuando la IP compartida dispara el control anti-bots.
+
 ### ⚙️ Ajustes
-- Selección de pantalla de proyección (se reposiciona en caliente).
+- Selección de pantalla de proyección en un mapa de los monitores (se reposiciona en caliente).
 - Carpetas de contenido independientes: media general, loops de En Vivo, fondos de Biblia, música y canciones — todas con watcher (los archivos nuevos aparecen solos).
-- Fades de audio de video con duración configurable.
+- Fades de audio de video con duración configurable, lista de atajos y datos para pedir ayuda.
+
+### ♿ Accesibilidad
+- Navegación completa con teclado (Ctrl+1…8, foco visible, "saltar al contenido"), nombres accesibles en los botones de ícono, anuncios para lectores de pantalla, contraste AA y respeto de "reducir movimiento".
+
+## Herramientas externas
+
+yt-dlp, ffmpeg, deno y whisper no vienen dentro del instalador (se desactualizan rápido o pesan más que la app). La app los baja sola desde Descargar y Escucha, o con los scripts de Python de [`scripts/herramientas`](scripts/herramientas/README.md), que además permiten bajar videos sin abrir la app:
+
+```bash
+npm run herramientas:estado      # qué hay instalado y dónde
+npm run herramientas:instalar    # instalar lo que falte
+npm run descargar -- https://youtu.be/xxxx --audio
+```
 
 ## Estructura del proyecto
 
@@ -61,11 +86,12 @@ churchApp/
 │  ├─ control/          Ventana del operador (pestañas, reproductor, paneles)
 │  ├─ projection/       Ventana proyectada (capas: fondo, contenido, overlay)
 │  ├─ shared/           Tipos, stores Zustand, constantes y utilidades comunes
-│  └─ styles/           Tailwind global
+│  │  └─ components/ui/ Kit de componentes del sistema visual "cabina"
+│  └─ styles/           Tailwind global + estilos de la ventana de control
 ├─ data/bibles/         Biblias JSON incluidas en el paquete
 ├─ docs/                Documentación
 ├─ resources/icons/     Íconos de la app
-└─ scripts/             Conversión de biblias y generación de íconos
+└─ scripts/             Conversión de biblias, íconos y herramientas (Python)
 ```
 
 ## Inicio rápido
@@ -89,7 +115,7 @@ Ver [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) para scripts, alias y flujo de tr
 
 ## Stack
 
-Electron · electron-vite · React 18 · TypeScript strict · Tailwind CSS · Zustand · Framer Motion · Howler.js · chokidar · electron-builder
+Electron · electron-vite · React 18 · TypeScript strict · Tailwind CSS · Zustand · Framer Motion · Howler.js · chokidar · sonner · Fontsource · extract-zip · whisper.cpp · yt-dlp · electron-builder
 
 ## Licencia
 

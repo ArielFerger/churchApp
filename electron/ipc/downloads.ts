@@ -8,7 +8,7 @@ export function registerDownloadsHandlers(controlWindow: BrowserWindow): () => v
     if (!controlWindow.isDestroyed()) controlWindow.webContents.send(channel, payload)
   }
 
-  ipcMain.handle(IPC_CHANNELS.GET_DOWNLOAD_TOOLS, () => downloads.resolveTools())
+  ipcMain.handle(IPC_CHANNELS.GET_DOWNLOAD_TOOLS, () => downloads.herramientas())
 
   ipcMain.handle(IPC_CHANNELS.INSTALL_DOWNLOAD_TOOLS, async () => {
     // El avance de la instalación viaja por el mismo canal que la lista de
@@ -37,6 +37,13 @@ export function registerDownloadsHandlers(controlWindow: BrowserWindow): () => v
   ipcMain.handle(IPC_CHANNELS.YOUTUBE_LOGOUT, () => downloads.clearYoutubeSession())
 
   ipcMain.handle(IPC_CHANNELS.CANCEL_DOWNLOAD, (_e, id: string) => downloads.cancel(id))
+  ipcMain.handle(IPC_CHANNELS.RETRY_DOWNLOAD, (_e, id: string) => downloads.retry(id))
+  ipcMain.handle(IPC_CHANNELS.SHOW_DOWNLOAD_IN_FOLDER, (_e, id: string) => downloads.showInFolder(id))
+  ipcMain.handle(IPC_CHANNELS.UPDATE_YTDLP, () =>
+    downloads.actualizarYtDlp((step, ratio) =>
+      send(IPC_CHANNELS.DOWNLOADS_UPDATED, { install: { step, ratio } })
+    )
+  )
   ipcMain.handle(IPC_CHANNELS.REMOVE_DOWNLOAD, (_e, id: string) => downloads.remove(id))
   ipcMain.handle(IPC_CHANNELS.CLEAR_DOWNLOADS, () => downloads.clearFinished())
 
@@ -56,6 +63,9 @@ export function registerDownloadsHandlers(controlWindow: BrowserWindow): () => v
       IPC_CHANNELS.YOUTUBE_SESSION_STATUS,
       IPC_CHANNELS.YOUTUBE_LOGOUT,
       IPC_CHANNELS.CANCEL_DOWNLOAD,
+      IPC_CHANNELS.RETRY_DOWNLOAD,
+      IPC_CHANNELS.SHOW_DOWNLOAD_IN_FOLDER,
+      IPC_CHANNELS.UPDATE_YTDLP,
       IPC_CHANNELS.REMOVE_DOWNLOAD,
       IPC_CHANNELS.CLEAR_DOWNLOADS
     ]) {

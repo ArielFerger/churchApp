@@ -4,13 +4,55 @@ import type { Song, Album } from './song'
 import type { BibleBook } from './bible'
 import type { AudioTrack, AudioPlaylist } from './audio'
 import type { BibleFont } from './fonts'
-import type { DownloadJob, DownloadOptions } from '../utils/downloads'
+import type { DownloadJob, DownloadOptions, JsRuntime } from '../utils/downloads'
+import type { EscuchaStatus, Transcripcion } from './escucha'
+import type { WhisperModelId } from '../utils/whisper'
 
-/** Dónde están (o no) yt-dlp y ffmpeg. */
+/** Dónde están (o no) yt-dlp, ffmpeg y el intérprete de JavaScript. */
 export interface DownloadTools {
   ytDlp: string | null
+  /** Versión de yt-dlp (`2026.08.19`), para avisar cuando está vieja. */
+  ytDlpVersion: string | null
   ffmpegDir: string | null
+  /** Intérprete de JavaScript disponible. YouTube no funciona sin uno. */
+  jsRuntime: JsRuntime | null
+  /** Dónde se buscó, para poder mostrarlo si falta algo. */
   searched: string[]
+  /** Si la app sabe bajar las herramientas solas en esta plataforma. */
+  instalable: boolean
+}
+
+/** Versión y entorno, para la sección "Acerca de" y para pedir ayuda. */
+export interface AppInfo {
+  version: string
+  electron: string
+  chrome: string
+  node: string
+  /** `win32-x64`, `linux-arm64`… */
+  plataforma: string
+  sistema: string
+  /** Carpeta de datos de la app (userData). */
+  datos: string
+  /** Archivo del registro de errores. */
+  registro: string | null
+}
+
+/** Carpetas que la ventana puede pedir abrir, por nombre (nunca por ruta). */
+export type CarpetaAbrible =
+  | 'datos'
+  | 'registro'
+  | 'mediaFolder'
+  | 'audioFolder'
+  | 'songsFolder'
+  | 'liveLoopFolder'
+  | 'bibleBackgroundsFolder'
+  | 'toolsFolder'
+
+/** Resultado de actualizar yt-dlp. */
+export interface ToolsUpdateResult {
+  ok: boolean
+  version: string | null
+  mensaje: string
 }
 
 export interface AudioPersistedState {
@@ -57,6 +99,14 @@ export interface ControlElectronAPI {
   showOpenDialog: (
     options: Electron.OpenDialogOptions
   ) => Promise<Electron.OpenDialogReturnValue>
+  getAppInfo: () => Promise<AppInfo>
+  /** Abre una carpeta en el explorador. `false` si no existe o no está configurada. */
+  openFolder: (cual: CarpetaAbrible) => Promise<boolean>
+  /**
+   * Muestra un archivo de la biblioteca en su carpeta, por id (la pantalla no
+   * maneja rutas). `false` si el id no existe.
+   */
+  showItemInFolder: (tipo: 'media' | 'audio', id: string) => Promise<boolean>
   getMedia: () => Promise<MediaItem[]>
   onMediaUpdated: (callback: (items: MediaItem[]) => void) => () => void
   getLiveMedia: () => Promise<MediaItem[]>
@@ -110,8 +160,14 @@ export interface ControlElectronAPI {
     options: Partial<DownloadOptions>
   ) => Promise<{ added: number; error: string | null }>
   cancelDownload: (id: string) => Promise<void>
+  /** Vuelve a encolar una descarga que falló o se canceló. */
+  retryDownload: (id: string) => Promise<void>
   removeDownload: (id: string) => Promise<void>
   clearDownloads: () => Promise<void>
+  /** Abre la carpeta del archivo descargado, con el archivo seleccionado. */
+  showDownloadInFolder: (id: string) => Promise<boolean>
+  /** Baja la última versión de yt-dlp (se desactualiza cada pocas semanas). */
+  updateYtDlp: () => Promise<ToolsUpdateResult>
   youtubeLogin: () => Promise<{ ok: boolean; cookies: number; error: string | null }>
   youtubeSessionStatus: () => Promise<boolean>
   youtubeLogout: () => Promise<void>
@@ -121,6 +177,30 @@ export interface ControlElectronAPI {
       install?: { step: string; ratio: number | null }
     }) => void
   ) => () => void
+
+  getEscuchaStatus: () => Promise<EscuchaStatus>
+  installEscucha: (modelo?: WhisperModelId) => Promise<EscuchaStatus>
+  deleteEscuchaModel: (modelo: WhisperModelId) => Promise<EscuchaStatus>
+  /** Carga el modelo en memoria antes de que haga falta. */
+  warmupEscucha: () => Promise<EscuchaStatus>
+  /** La Escucha se detuvo: el modelo se descarga de memoria si no se vuelve a usar. */
+  idleEscucha: () => Promise<void>
+  /**
+   * Manda un fragmento de PCM 16 bits mono. `null` = se descartó (saturación,
+   * o provisional con whisper ocupado). `prompt` = contexto para el
+   * reconocedor (null = ninguno). `provisional` = lo que va de una frase que
+   * todavía no terminó: cede el paso a las completas.
+   */
+  transcribirVentana: (
+    pcm: Uint8Array,
+    tasa: number,
+    prompt?: string | null,
+    provisional?: boolean
+  ) => Promise<Transcripcion | null>
+  onEscuchaProgress: (
+    callback: (p: { step: string; ratio: number | null }) => void
+  ) => () => void
+  onEscuchaStatus: (callback: (s: EscuchaStatus) => void) => () => void
 }
 
 export interface ProjectionElectronAPI {

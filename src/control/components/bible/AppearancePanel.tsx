@@ -198,12 +198,13 @@ export default function AppearancePanel({ versionLabel, onClose }: AppearancePan
       >
         {/* Encabezado */}
         <div className="flex items-center gap-2 border-b border-slate-700 px-5 py-3">
-          <Palette className="h-4 w-4 text-blue-400" />
+          <Palette className="h-4 w-4 text-listo" />
           <h2 className="text-sm font-semibold text-slate-100">
             Apariencia de los versículos
           </h2>
           <span className="text-xs text-slate-500">— se guarda solo y se aplica en vivo</span>
           <button
+            aria-label="Cerrar (Esc)"
             type="button"
             onClick={onClose}
             className="ml-auto rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-white"
@@ -274,7 +275,7 @@ export default function AppearancePanel({ versionLabel, onClose }: AppearancePan
             <button
               type="button"
               onClick={testOnProjection}
-              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500"
+              className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold border border-aire-borde bg-cabina-alto text-cabina-tinta transition-colors hover:bg-aire hover:text-white"
             >
               <Eye className="h-3.5 w-3.5" />
               Probar en proyección
@@ -351,7 +352,7 @@ export default function AppearancePanel({ versionLabel, onClose }: AppearancePan
                   const n = Number(e.target.value)
                   if (Number.isFinite(n)) patch({ fontSizePct: Math.max(50, Math.min(200, n)) })
                 }}
-                className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 focus:border-blue-500 focus:outline-none"
+                className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 focus:border-listo-borde focus:outline-none"
               />
               <span className="text-xs text-slate-500">%</span>
               <button
@@ -379,7 +380,7 @@ export default function AppearancePanel({ versionLabel, onClose }: AppearancePan
                     type="button"
                     onClick={() => patch({ textColor: c })}
                     className={`h-7 w-7 rounded-full border-2 transition-transform hover:scale-110 ${
-                      display.textColor.toLowerCase() === c ? 'border-blue-500' : 'border-slate-600'
+                      display.textColor.toLowerCase() === c ? 'border-listo' : 'border-slate-600'
                     }`}
                     style={{ backgroundColor: c }}
                     title={c}
@@ -487,7 +488,7 @@ export default function AppearancePanel({ versionLabel, onClose }: AppearancePan
                     onClick={() => patch({ backgroundId: null })}
                     className={`flex aspect-video w-full items-center justify-center rounded-md border text-xs transition-colors ${
                       display.backgroundId === null
-                        ? 'border-blue-500 bg-blue-500/10 text-blue-300 ring-2 ring-blue-500/40'
+                        ? 'border-listo bg-listo-suave text-listo ring-2 ring-listo-borde'
                         : 'border-slate-700 bg-slate-900 text-slate-500 hover:border-slate-500'
                     }`}
                   >
@@ -501,16 +502,16 @@ export default function AppearancePanel({ versionLabel, onClose }: AppearancePan
                       <button
                         type="button"
                         onClick={() => setBgPath(folderPath)}
-                        className="group relative block w-full overflow-hidden rounded-md border border-slate-700 bg-slate-800/60 transition-colors hover:border-amber-500/60"
+                        className="group relative block w-full overflow-hidden rounded-md border border-slate-700 bg-slate-800/60 transition-colors hover:border-listo"
                         title={`Abrir carpeta "${name}"`}
                       >
                         <div className="flex aspect-video flex-col items-center justify-center gap-0.5">
-                          <Folder className="h-6 w-6 text-amber-400/80 transition-transform group-hover:scale-110" />
+                          <Folder className="h-6 w-6 text-listo/80 transition-transform group-hover:scale-110" />
                           <span className="max-w-full truncate px-1 text-[10px] text-slate-300">
                             {name}
                           </span>
                         </div>
-                        <span className="absolute right-1 top-1 rounded bg-amber-500/20 px-1 text-[9px] font-medium text-amber-300">
+                        <span className="absolute right-1 top-1 rounded bg-listo-suave px-1 text-[9px] font-medium text-listo">
                           {countInFolder(bgSource, folderPath)}
                         </span>
                       </button>
@@ -526,7 +527,7 @@ export default function AppearancePanel({ versionLabel, onClose }: AppearancePan
                         onClick={() => patch({ backgroundId: item.id })}
                         className={`group relative block w-full overflow-hidden rounded-md border bg-black transition-colors ${
                           isSelected
-                            ? 'border-blue-500 ring-2 ring-blue-500/40'
+                            ? 'border-listo ring-2 ring-listo-borde'
                             : 'border-slate-700 hover:border-slate-500'
                         }`}
                         title={item.fileName}
@@ -555,7 +556,7 @@ export default function AppearancePanel({ versionLabel, onClose }: AppearancePan
                           </span>
                         )}
                         {isSelected && (
-                          <span className="absolute right-1 top-1 rounded-full bg-blue-600 p-0.5 text-white">
+                          <span className="absolute right-1 top-1 rounded-full bg-listo p-0.5 text-cabina-negro">
                             <Check className="h-3 w-3" />
                           </span>
                         )}
@@ -607,14 +608,14 @@ function FontRow({
     <div
       className={`group flex items-center gap-2 rounded-md border px-3 py-2 transition-colors ${
         selected
-          ? 'border-blue-500 bg-blue-500/10'
+          ? 'border-listo bg-listo-suave'
           : 'border-slate-700 bg-slate-800/40 hover:border-slate-500'
       }`}
     >
       <button type="button" onClick={onSelect} className="flex min-w-0 flex-1 items-center gap-2 text-left">
         <span
           className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-            selected ? 'border-blue-500 bg-blue-500 text-white' : 'border-slate-600 text-transparent'
+            selected ? 'border-listo bg-listo text-cabina-negro' : 'border-slate-600 text-transparent'
           }`}
         >
           <Check className="h-3 w-3" />
@@ -629,9 +630,10 @@ function FontRow({
       </button>
       {onDelete && (
         <button
+          aria-label="Borrar fuente"
           type="button"
           onClick={onDelete}
-          className="shrink-0 rounded p-1 text-slate-600 opacity-0 transition-opacity hover:bg-slate-700 hover:text-red-400 group-hover:opacity-100"
+          className="shrink-0 rounded p-1 text-slate-600 opacity-0 transition-opacity hover:bg-slate-700 hover:text-falla group-hover:opacity-100 focus-visible:opacity-100"
           title="Borrar fuente"
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -660,7 +662,7 @@ function ToggleChip({
         aria-checked={checked}
         onClick={() => onChange(!checked)}
         className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-          checked ? 'bg-blue-600' : 'bg-slate-600'
+          checked ? 'bg-listo' : 'bg-slate-600'
         }`}
       >
         <span

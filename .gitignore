@@ -34,3 +34,7 @@ Thumbs.db
 
 # electron-builder
 release/
+
+# Python
+__pycache__/
+*.pyc

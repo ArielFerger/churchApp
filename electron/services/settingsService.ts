@@ -1,22 +1,7 @@
 import Store from 'electron-store'
-import { DEFAULT_BIBLE_DISPLAY, type AppSettings } from '../../src/shared/types/ipc'
+import { DEFAULT_SETTINGS, type AppSettings } from '../../src/shared/types/ipc'
 
-const defaults: AppSettings = {
-  projectionDisplayId: null,
-  mediaFolder: null,
-  audioFolder: null,
-  toolsFolder: null,
-  downloadCookiesBrowser: null,
-  songsFolder: null,
-  liveLoopFolder: null,
-  bibleBackgroundsFolder: null,
-  defaultBibleVersion: null,
-  bibleDisplay: DEFAULT_BIBLE_DISPLAY,
-  videoFadeIn: true,
-  videoFadeOut: false,
-  videoFadeInSec: 1,
-  videoFadeOutSec: 2.5
-}
+const defaults: AppSettings = DEFAULT_SETTINGS
 
 interface Schema {
   settings: AppSettings

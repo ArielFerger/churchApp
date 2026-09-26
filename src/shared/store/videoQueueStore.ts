@@ -9,6 +9,8 @@ interface VideoQueueState {
   active: boolean
 
   add: (id: string) => void
+  /** Lo pone justo después del que está sonando (o primero, si no suena nada). */
+  addNext: (id: string) => void
   remove: (id: string) => void
   clear: () => void
   move: (id: string, dir: -1 | 1) => void
@@ -25,6 +27,15 @@ export const useVideoQueueStore = create<VideoQueueState>((set, get) => ({
 
   add: (id) =>
     set((s) => (s.ids.includes(id) ? s : { ids: [...s.ids, id] })),
+
+  addNext: (id) =>
+    set((s) => {
+      const sinEl = s.ids.filter((x) => x !== id)
+      const i = s.currentId ? sinEl.indexOf(s.currentId) : -1
+      const ids = [...sinEl]
+      ids.splice(i + 1, 0, id)
+      return { ids }
+    }),
 
   remove: (id) =>
     set((s) => ({
