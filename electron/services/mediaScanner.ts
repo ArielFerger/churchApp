@@ -1,10 +1,11 @@
 import { createHash } from 'crypto'
 import { extname, basename, dirname, relative, resolve, sep } from 'path'
-import { statSync } from 'fs'
+import type { Stats } from 'fs'
 import chokidar, { type FSWatcher } from 'chokidar'
 import log from 'electron-log'
 import type { MediaItem, MediaType } from '../../src/shared/types/media'
 
+const byName = new Intl.Collator('es', { numeric: true, sensitivity: 'base' })
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.avif'])
 const GIF_EXT = new Set(['.gif'])
 const VIDEO_EXT = new Set(['.mp4', '.webm', '.mov', '.mkv', '.m4v'])
@@ -29,28 +30,23 @@ function folderFor(filePath: string, root: string): string {
   return rel.split(sep).join('/')
 }
 
-function toItem(filePath: string, root: string): MediaItem | null {
+function toItem(filePath: string, root: string, stats: Stats): MediaItem | null {
   const type = classify(filePath)
   if (!type) return null
-  let addedAt = new Date().toISOString()
-  try {
-    addedAt = statSync(filePath).mtime.toISOString()
-  } catch {
-    // file may have disappeared during scan — keep "now"
-  }
   return {
     id: mediaIdFor(filePath),
     filePath: resolve(filePath),
     fileName: basename(filePath),
     type,
     folder: folderFor(filePath, root),
-    addedAt
+    addedAt: stats.mtime.toISOString(),
+    byteSize: stats.size
   }
 }
 
 /**
  * Watches a folder (recursively) and maintains an in-memory index of media files.
- * Listeners are notified on every change so renderer galleries can re-render.
+ * Changes are batched so a directory scan does not flood the renderers.
  */
 export class MediaScanner {
   private watcher: FSWatcher | null = null
@@ -58,10 +54,13 @@ export class MediaScanner {
   private listeners = new Set<(items: MediaItem[]) => void>()
   private currentFolder: string | null = null
 
+  private snapshot: MediaItem[] | null = null
+  private timer: ReturnType<typeof setTimeout> | undefined
+
   list(): MediaItem[] {
-    return [...this.items.values()].sort((a, b) =>
-      a.fileName.localeCompare(b.fileName, 'es', { numeric: true, sensitivity: 'base' })
-    )
+    return (this.snapshot ??= [...this.items.values()].sort((a, b) =>
+      byName.compare(a.fileName, b.fileName)
+    ))
   }
 
   getById(id: string): MediaItem | undefined {
@@ -79,41 +78,49 @@ export class MediaScanner {
     if (this.currentFolder === folder) return
     this.currentFolder = folder
 
-    if (this.watcher) {
-      await this.watcher.close()
-      this.watcher = null
-    }
+    const previous = this.watcher
+    this.watcher = null
+    clearTimeout(this.timer)
+    this.timer = undefined
     this.items.clear()
+    this.snapshot = null
     this.emit()
-
-    if (!folder) return
+    // Los callbacks del watcher anterior se descartan desde este momento.
+    if (previous) await previous.close()
+    if (!folder || this.currentFolder !== folder || this.watcher) return
 
     log.info('mediaScanner: watching', folder)
-    this.watcher = chokidar.watch(folder, {
+    const watcher = chokidar.watch(folder, {
       ignored: (path, stats) => stats?.isFile() === true && classify(path) === null,
+      alwaysStat: true,
       ignoreInitial: false,
       depth: 10,
       awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 }
     })
-
-    this.watcher
-      .on('add', (file) => this.add(file))
-      .on('unlink', (file) => this.remove(file))
-      .on('change', (file) => this.add(file)) // re-stat on change
+    this.watcher = watcher
+    const update = (file: string, stats?: Stats) => {
+      if (this.watcher !== watcher || !stats) return
+      const item = toItem(file, folder, stats)
+      if (!item) return
+      this.items.set(item.id, item)
+      this.scheduleUpdate()
+    }
+    watcher
+      .on('add', update)
+      .on('change', update)
+      .on('unlink', (file) => {
+        if (this.watcher === watcher && this.items.delete(mediaIdFor(file))) this.scheduleUpdate()
+      })
       .on('error', (err) => log.error('mediaScanner error', err))
   }
 
-  private add(file: string): void {
-    if (!this.currentFolder) return
-    const item = toItem(file, resolve(this.currentFolder))
-    if (!item) return
-    this.items.set(item.id, item)
-    this.emit()
-  }
-
-  private remove(file: string): void {
-    const id = mediaIdFor(file)
-    if (this.items.delete(id)) this.emit()
+  private scheduleUpdate(): void {
+    this.snapshot = null
+    if (this.timer) return
+    this.timer = setTimeout(() => {
+      this.timer = undefined
+      this.emit()
+    }, 250)
   }
 
   private emit(): void {
@@ -122,12 +129,15 @@ export class MediaScanner {
   }
 
   async dispose(): Promise<void> {
-    if (this.watcher) {
-      await this.watcher.close()
-      this.watcher = null
-    }
+    const watcher = this.watcher
+    this.watcher = null
+    this.currentFolder = null
+    clearTimeout(this.timer)
+    this.timer = undefined
+    this.snapshot = null
     this.items.clear()
     this.listeners.clear()
+    await watcher?.close()
   }
 }
 

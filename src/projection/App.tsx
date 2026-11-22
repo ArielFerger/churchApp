@@ -15,8 +15,8 @@ interface ProjectionState {
   content: ProjectionCommand | null
   isBlackout: boolean
   showLogo: boolean
-  /** Set of mediaIds to keep hot in the preload pool. */
-  preloadIds: string[]
+  /** Archivo preparado para la próxima proyección. */
+  preloadId: string | null
   /** Imperative seek signal for the active content video. */
   mediaSeek: { position: number; nonce: number } | null
   /** Imperative replay signal: bump to restart the content video from 0. */
@@ -40,7 +40,7 @@ const initialState: ProjectionState = {
   content: null,
   isBlackout: false,
   showLogo: false,
-  preloadIds: [],
+  preloadId: null,
   mediaSeek: null,
   mediaReplay: null,
   mediaPlaying: true,
@@ -67,7 +67,7 @@ function reducer(state: ProjectionState, cmd: ProjectionCommand): ProjectionStat
     case 'showLogo':
       return { ...state, showLogo: true, isBlackout: false }
     case 'clear':
-      return { ...state, content: null, isBlackout: false, showLogo: false }
+      return { ...state, content: null, preloadId: null, isBlackout: false, showLogo: false }
     case 'stopAll':
       // Panic stop: kill every source and go black.
       return {
@@ -77,6 +77,7 @@ function reducer(state: ProjectionState, cmd: ProjectionCommand): ProjectionStat
         backgroundSlideshow: null,
         isBlackout: true,
         showLogo: false,
+        preloadId: null,
         mediaPlaying: false,
         mediaSeek: null
       }
@@ -92,10 +93,10 @@ function reducer(state: ProjectionState, cmd: ProjectionCommand): ProjectionStat
         mediaSeek: null,
         mediaReplay: null,
         mediaPlaying: true,
-        preloadIds: dedupe([...state.preloadIds, cmd.mediaId])
+        preloadId: state.preloadId === cmd.mediaId ? null : state.preloadId
       }
     case 'preloadMedia':
-      return { ...state, preloadIds: dedupe([...state.preloadIds, cmd.mediaId]) }
+      return { ...state, preloadId: cmd.mediaId }
     case 'replayMedia':
       return {
         ...state,
@@ -114,10 +115,6 @@ function reducer(state: ProjectionState, cmd: ProjectionCommand): ProjectionStat
     default:
       return state
   }
-}
-
-function dedupe(arr: string[]): string[] {
-  return Array.from(new Set(arr)).slice(-10) // cap at 10 to bound memory
 }
 
 export default function ProjectionApp() {
@@ -205,9 +202,9 @@ export default function ProjectionApp() {
     }
   }, [liveVideoId])
 
-  const preloads = state.preloadIds
-    .map((id) => mediaById.get(id))
-    .filter((m): m is MediaItem => Boolean(m))
+  const preload = state.preloadId && state.preloadId !== currentMediaItem?.id
+    ? mediaById.get(state.preloadId)
+    : undefined
 
   const handlePlayback = (info: PlaybackInfo): void => {
     const now = Date.now()
@@ -245,7 +242,7 @@ export default function ProjectionApp() {
       <BackgroundLayer items={backgroundItems} intervalSec={backgroundIntervalSec} />
       <ContentLayer
         current={state.content}
-        preloads={preloads}
+        preload={preload}
         currentMediaItem={currentMediaItem}
         mediaSeek={state.mediaSeek}
         mediaReplay={state.mediaReplay}

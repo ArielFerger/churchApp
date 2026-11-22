@@ -15,12 +15,13 @@ import {
   RotateCcw
 } from 'lucide-react'
 import { useSettingsStore } from '@/shared/store/settingsStore'
+import MediaThumbnail from '@/control/components/MediaThumbnail'
 import { useLibraryStore } from '@/shared/store/libraryStore'
 import { syncFontFaces } from '@/shared/utils/fontLoader'
 import {
   itemsInFolder,
   childFolders,
-  countInFolder,
+  childFolderCounts,
   breadcrumbSegments
 } from '@/shared/utils/mediaFolders'
 import { DEFAULT_BIBLE_DISPLAY, type BibleDisplaySettings } from '@/shared/types/ipc'
@@ -179,7 +180,7 @@ export default function AppearancePanel({ versionLabel, onClose }: AppearancePan
       }),
     [bgSource, bgPath]
   )
-  const bgFolders = useMemo(() => childFolders(bgSource, bgPath), [bgSource, bgPath])
+  const bgFolders = useMemo(() => childFolderCounts(bgSource, bgPath), [bgSource, bgPath])
 
   // La proyección real muestra 48px sobre 1920 de ancho; la preview (~660px)
   // escala proporcionalmente para que "lo que ves sea lo que se proyecta".
@@ -495,7 +496,7 @@ export default function AppearancePanel({ versionLabel, onClose }: AppearancePan
                     Sin fondo
                   </button>
                 </li>
-                {bgFolders.map((name) => {
+                {bgFolders.map(([name, count]) => {
                   const folderPath = bgPath ? `${bgPath}/${name}` : name
                   return (
                     <li key={`folder-${name}`}>
@@ -512,7 +513,7 @@ export default function AppearancePanel({ versionLabel, onClose }: AppearancePan
                           </span>
                         </div>
                         <span className="absolute right-1 top-1 rounded bg-listo-suave px-1 text-[9px] font-medium text-listo">
-                          {countInFolder(bgSource, folderPath)}
+                          {count}
                         </span>
                       </button>
                     </li>
@@ -533,22 +534,7 @@ export default function AppearancePanel({ versionLabel, onClose }: AppearancePan
                         title={item.fileName}
                       >
                         <div className="aspect-video">
-                          {item.type === 'video' ? (
-                            <video
-                              src={`media://${item.id}`}
-                              className="h-full w-full object-cover"
-                              preload="metadata"
-                              muted
-                              playsInline
-                            />
-                          ) : (
-                            <img
-                              src={`media://${item.id}`}
-                              alt={item.fileName}
-                              className="h-full w-full object-cover"
-                              loading="lazy"
-                            />
-                          )}
+                          <MediaThumbnail item={item} />
                         </div>
                         {item.type === 'video' && (
                           <span className="absolute left-1 top-1 rounded bg-black/60 p-0.5 text-slate-200">
