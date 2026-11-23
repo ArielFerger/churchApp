@@ -60,14 +60,12 @@ export const OPCIONES_POR_DEFECTO: OpcionesSegmentador = {
   tasa: 16000,
   cuadroMs: 30,
   sensibilidad: 0.5,
-  // Afinados después de la primera prueba con gente: con 650/7000/12000 una
-  // cita dicha en medio de una frase larga tardaba ~12 s en aparecer. La
-  // transcripción provisional (ver `parcial`) resuelve la mayor parte; esto
-  // acorta además el peor caso.
-  pausaMs: 550,
-  pausaCortaMs: 240,
-  blandoMs: 5000,
-  maxSegMs: 10000,
+  // En las prédicas hay pausas entre "capítulo" y el número. Las parciales
+  // mantienen la respuesta en vivo mientras esperamos el final de la cita.
+  pausaMs: 1650,
+  pausaCortaMs: 1050,
+  blandoMs: 8500,
+  maxSegMs: 14000,
   minVozMs: 350,
   cuadrosInicio: 3,
   prerollMs: 300,
@@ -284,7 +282,9 @@ export class SegmentadorVoz {
       return f
     }
 
-    if (largoMs >= this.op.maxSegMs) {
+    // Si ya empezó una pausa, dejar que se cierre naturalmente. Si vuelve la
+    // voz antes de tiempo, este mismo límite corta en el primer cuadro hablado.
+    if (largoMs >= this.op.maxSegMs && sobre) {
       const f = this.emitir(true)
       // Se sigue en voz, arrancando con el final del anterior: si el corte cayó
       // en medio de "Juan tres dieciséis", el siguiente lo tiene entero.

@@ -472,3 +472,25 @@ describe('fonetica', () => {
     expect(fonetica('Hechos')).toBe('echos')
   })
 })
+
+describe('anuncio de lectura en la prédica', () => {
+  const texto = 'Quiero leer ahí en el Básiculo 1 en adelante hasta el 14.'
+  it('recupera el rango cuando el capítulo ya fue anunciado', () => {
+    const [r] = detectarReferencias(texto, { contexto: { bookId: 'LUK', chapter: 2 } })
+    expect(corta(r)).toBe('LUK 2:1-14')
+    expect(r.inferida).toBe(true)
+    const contexto = { bookId: 'LUK', chapter: 2 }
+    expect(corta(detectarReferencias('quiero leer ahí en el básico 1 en adelante hasta el 14', { contexto })[0])).toBe('LUK 2:1-14')
+    expect(detectarReferencias('el básico 1 sale diez pesos', { contexto })).toEqual([])
+  })
+
+  it('entiende "verse" junto al capítulo y conserva el verbo en habla normal', () => {
+    expect(corta(primera('San Juan, capítulo 15, verse 7, dice'))).toBe('JHN 15:7')
+    expect(detectarReferencias('pueden verse dos personas', { contexto: { bookId: 'JHN', chapter: 15 } })).toEqual([])
+  })
+
+  it('requiere contexto y un final explícito', () => {
+    expect(detectarReferencias(texto)).toEqual([])
+    expect(corta(primera('Lucas 2 versículo 1 en adelante vinieron 14 personas'))).toBe('LUK 2:1')
+  })
+})

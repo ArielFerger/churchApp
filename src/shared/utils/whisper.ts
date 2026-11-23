@@ -337,8 +337,11 @@ export function parseTranscripcion(stdout: string): string {
     if (!sinTiempo.replace(ANOTACION, '').trim()) continue
     const texto = sinTiempo.replace(ANOTACION, ' ').replace(/\s+/g, ' ').trim()
     if (!texto) continue
-    if (partes[partes.length - 1] === texto) continue
-    partes.push(texto)
+    // El modelo puede devolver decenas de copias en una sola línea tras una
+    // pausa. Cortar el bucle antes de que alimente el prompt de la próxima frase.
+    const sinBucle = texto.replace(/(?:^|\s)([^.!?]{2,100}[.!?])(?:\s+\1){3,}/gi, ' $1').trim()
+    if (partes[partes.length - 1] === sinBucle) continue
+    partes.push(sinBucle)
   }
   return partes.join(' ').replace(/\s+/g, ' ').trim()
 }

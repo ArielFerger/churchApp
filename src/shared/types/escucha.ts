@@ -1,3 +1,4 @@
+import type { ReferenciaDetectada } from '../utils/escuchaBiblica'
 import type { WhisperModelId } from '../utils/whisper'
 
 /**
@@ -50,6 +51,7 @@ export interface EscuchaStatus extends WhisperStatus {
 }
 
 export interface Transcripcion {
+  lecturas?: ReferenciaDetectada[]
   texto: string
   /** Cuánto tardó whisper, en ms. Es el número que hay que vigilar en vivo. */
   ms: number

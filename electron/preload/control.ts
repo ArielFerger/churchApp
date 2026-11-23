@@ -261,9 +261,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     pcm: Uint8Array,
     tasa: number,
     prompt?: string | null,
-    provisional?: boolean
+    provisional?: boolean,
+    colaLectura?: string
   ): Promise<Transcripcion | null> =>
-    ipcRenderer.invoke(IPC_CHANNELS.TRANSCRIBE_WINDOW, pcm, tasa, prompt, provisional),
+    ipcRenderer.invoke(IPC_CHANNELS.TRANSCRIBE_WINDOW, pcm, tasa, prompt, provisional, colaLectura),
 
   onEscuchaStatus: (callback: (s: EscuchaStatus) => void) => {
     const handler = (_: Electron.IpcRendererEvent, s: EscuchaStatus) => callback(s)

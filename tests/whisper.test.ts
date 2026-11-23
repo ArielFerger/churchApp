@@ -107,6 +107,11 @@ describe('parseTranscripcion', () => {
     expect(parseTranscripcion(salida)).toBe('Gracias por ver el video.')
   })
 
+  it('colapsa la frase repetida dentro de un solo segmento', () => {
+    const eco = 'En San Lucas capítulo. '.repeat(20)
+    expect(parseTranscripcion(eco + 'Dos.')).toBe('En San Lucas capítulo. Dos.')
+  })
+
   it('devuelve vacío cuando no hubo nada que transcribir', () => {
     expect(parseTranscripcion('')).toBe('')
     expect(parseTranscripcion('[00:00:00.000 --> 00:00:06.000]   [BLANK_AUDIO]')).toBe('')

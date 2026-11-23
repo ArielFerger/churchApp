@@ -49,6 +49,7 @@ export interface ReferenciaDetectada {
    * dando por sobreentendido el pasaje que ya está leyendo.
    */
   inferida?: boolean
+  porTexto?: boolean
   /** Posición en caracteres dentro del texto analizado: `[inicio, fin)`. */
   span?: [number, number]
 }
@@ -447,7 +448,7 @@ export function tokenizar(texto: string): Token[] {
 // ─── El escáner ──────────────────────────────────────────────────────────────
 
 const MARCA_CAPITULO = new Set(['capitulo', 'capitulos'])
-const MARCA_VERSICULO = new Set(['versiculo', 'versiculos', 'verso', 'versos', 'vers'])
+const MARCA_VERSICULO = new Set(['versiculo', 'versiculos', 'verso', 'versos', 'vers', 'basiculo'])
 
 /** Palabras que separan las partes de una cita sin aportar significado. */
 const RELLENO = new Set([
@@ -507,9 +508,15 @@ function leerFinDeRango(
   verso: number
 ): { fin: number; consumidas: number } | null {
   if (i >= palabras.length) return null
-  if (HASTA.has(palabras[i])) {
-    const fin = leerNumero(palabras, i + 1)
-    if (fin && fin.valor > verso) return { fin: fin.valor, consumidas: 1 + fin.consumidas }
+  // "del uno en adelante hasta el catorce", como se anuncia una lectura.
+  let j = i
+  if (palabras[j] === 'en' && palabras[j + 1] === 'adelante') j += 2
+  if (HASTA.has(palabras[j])) {
+    j++
+    if (palabras[j] === 'el' || palabras[j] === 'al') j++
+    if (MARCA_VERSICULO.has(palabras[j])) j++
+    const fin = leerNumero(palabras, j)
+    if (fin && fin.valor > verso) return { fin: fin.valor, consumidas: j - i + fin.consumidas }
   }
   // "versículos dieciséis y diecisiete": sólo si es el siguiente, porque
   // "Juan 3:16 y 5 hermanos más" no es un rango.
@@ -686,7 +693,11 @@ export function detectarReferencias(
 
     // ── Por contexto: "versículo N [al M]" sin libro ───────────────────────
     // Sólo con la palabra dicha: un ":" suelto no alcanza (ver SEP_VERSICULO).
-    if (MARCA_VERSICULO.has(palabras[i]) && contexto) {
+    // "Quiero leer ahí en el básico uno": sólo corregir esta palabra común
+    // si el predicador acaba de pedir una lectura y ya tenemos el capítulo.
+    const inicioLectura = ['basico', 'basiglo'].includes(palabras[i]) &&
+      palabras[i - 1] === 'el' && palabras.slice(Math.max(0, i - 6), i).includes('leer')
+    if ((MARCA_VERSICULO.has(palabras[i]) || inicioLectura) && contexto) {
       let j = i + 1
       if (palabras[j] === 'del') j++
       const ver = leerNumero(palabras, j)
@@ -756,7 +767,13 @@ export function detectarReferencias(
     // 4. Versículo opcional
     let verse: number | null = null
     let endVerse: number | undefined
+    // Whisper a veces escribe "San Juan capítulo 15, verse 7". En español
+    // "verse" también es un verbo: sólo usarlo aquí, justo tras un capítulo.
     const trasCap = saltarRelleno(palabras, i, 2)
+    if (palabras[i] === 'verse' || (palabras[i] === 'ver' && palabras[i + 1] === 'so')) {
+      trasCap.i = i + (palabras[i] === 'verse' ? 1 : 2)
+      trasCap.vioMarcador = true
+    }
     const ver = leerNumero(palabras, trasCap.i)
     // "Juan 3 y 5 hermanos" no es Juan 3:5: el "y" solo, sin marcador, no
     // separa capítulo de versículo.

@@ -194,8 +194,13 @@ export class ServidorWhisper {
     form.append('file', new Blob([copia.buffer], { type: 'audio/wav' }), 'ventana.wav')
     form.append('response_format', 'verbose_json')
     form.append('language', opciones.idioma ?? 'es')
+    // El idioma ya está fijado. Evitar una segunda inferencia sólo para informar probabilidades.
+    form.append('no_language_probabilities', 'true')
     form.append('temperature', '0.0')
     form.append('temperature_inc', '0.0')
+    // Cada parcial vuelve a incluir el comienzo de la frase. Evitar que el
+    // servidor arrastre hipótesis anteriores además del prompt explícito.
+    form.append('no_context', 'true')
     if (opciones.prompt) form.append('prompt', opciones.prompt)
     if (opciones.audioCtx) form.append('audio_ctx', String(opciones.audioCtx))
 

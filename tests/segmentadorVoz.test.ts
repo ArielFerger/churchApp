@@ -76,7 +76,7 @@ describe('SegmentadorVoz', () => {
     const audio = unir(
       ruido(1000, -60),
       frase(2400),
-      ruido(1000, -60),
+      ruido(1800, -60),
       frase(3200),
       ruido(1500, -60)
     )
@@ -117,9 +117,8 @@ describe('SegmentadorVoz', () => {
   })
 
   it('habla de corrido: corta en una micro-pausa pasado el largo blando', () => {
-    // 9 s de habla con una pausa de 300 ms a los 7,5 s: no alcanza para cerrar
-    // una frase normal (650 ms), pero con el fragmento ya largo sí.
-    const audio = unir(ruido(800, -60), frase(7500), ruido(300, -60), frase(1500), ruido(1500, -60))
+    // Una pausa de 1,1 s sólo cierra una frase cuando ya pasó el largo blando.
+    const audio = unir(ruido(800, -60), frase(9000), ruido(1100, -60), frase(1500), ruido(1500, -60))
     const fs = correr(new SegmentadorVoz(), audio)
     expect(fs).toHaveLength(2)
     expect(fs[0].forzado).toBe(false)
@@ -154,7 +153,7 @@ describe('SegmentadorVoz', () => {
 describe('SegmentadorVoz — frases y parciales', () => {
   it('numera las frases, y el corte forzado sigue en la misma', () => {
     const seg = new SegmentadorVoz({ maxSegMs: 4000, blandoMs: 99_000 })
-    const fs = correr(seg, unir(ruido(800, -60), frase(6000), ruido(1000, -60), frase(2000), ruido(1200, -60)))
+    const fs = correr(seg, unir(ruido(800, -60), frase(6000), ruido(1800, -60), frase(2000), ruido(1200, -60)))
     expect(fs.map((f) => f.frase)).toEqual([1, 1, 2])
     expect(fs[0].forzado).toBe(true)
   })
