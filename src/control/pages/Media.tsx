@@ -28,6 +28,7 @@ import {
   Tag,
   CalendarCheck
 } from 'lucide-react'
+import MediaThumbnail from '@/control/components/MediaThumbnail'
 import { useLibraryStore } from '@/shared/store/libraryStore'
 import { useSettingsStore } from '@/shared/store/settingsStore'
 import { useMediaPlaybackStore } from '@/shared/store/mediaPlaybackStore'
@@ -37,7 +38,7 @@ import { playQueueVideo } from '@/control/hooks/useProjectionBridge'
 import {
   itemsInFolder,
   childFolders,
-  countInFolder,
+  childFolderCounts,
   breadcrumbSegments,
   searchMedia
 } from '@/shared/utils/mediaFolders'
@@ -52,6 +53,8 @@ import {
 import type { ProjectionCommand } from '@/shared/types/ipc'
 import { useMenuContextual } from '../components/ui/MenuContextual'
 import { menuParaMedia } from '../menus'
+
+const PAGE_SIZE = 60
 
 type Filter = 'all' | MediaType
 /** Filtro de categoría: todas, una en concreto, o solo las que no tienen. */
@@ -113,6 +116,8 @@ export default function Media() {
     }
   }, [media, path])
 
+  const [requestedPage, setPage] = useState(0)
+  useEffect(() => setPage(0), [path, filter, categoryFilter, query, settings?.mediaFolder])
   const searching = query.trim().length > 0
 
   const visible = useMemo(() => {
@@ -126,7 +131,7 @@ export default function Media() {
 
   // Buscando: resultados planos de toda la librería. Si no, la carpeta abierta.
   const folders = useMemo(
-    () => (searching ? [] : childFolders(visible, path)),
+    () => (searching ? [] : childFolderCounts(visible, path)),
     [searching, visible, path]
   )
   const filtered = useMemo(
@@ -137,6 +142,13 @@ export default function Media() {
   // "Para hoy" ignora los filtros a propósito: es la lista del servicio y tiene
   // que estar completa aunque el operador esté filtrando por tipo o categoría.
   const forToday = useMemo(() => todayItems(media, meta), [media, meta])
+  const todayIds = useMemo(() => new Set(meta.today.ids), [meta.today.ids])
+  const pages = Math.ceil((folders.length + filtered.length) / PAGE_SIZE)
+  const page = Math.min(requestedPage, Math.max(0, pages - 1))
+  const start = page * PAGE_SIZE
+  const end = start + PAGE_SIZE
+  const pageFolders = folders.slice(start, end)
+  const pageItems = filtered.slice(Math.max(0, start - folders.length), Math.max(0, end - folders.length))
   const categoryCounts = useCategoryCounts(media, meta.categories)
   // Si el archivo seleccionado se borra del disco, el panel vuelve al vacío en
   // vez de quedar en blanco (SelectionPanel devolvía null con item === null).
@@ -219,7 +231,7 @@ export default function Media() {
         {/* Breadcrumb de carpetas — sin sentido mientras se busca en todo */}
         {!searching && <FolderBreadcrumb path={path} onNavigate={setPath} />}
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div key={page} className="flex-1 overflow-y-auto p-4">
           {searching && (
             <p className="mb-3 text-xs text-slate-500">
               {filtered.length === 0
@@ -237,25 +249,25 @@ export default function Media() {
             </p>
           ) : (
             <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {folders.map((name) => {
+              {pageFolders.map(([name, count]) => {
                 const folderPath = path ? `${path}/${name}` : name
                 return (
                   <FolderCard
                     key={`folder-${name}`}
                     name={name}
-                    count={countInFolder(visible, folderPath)}
+                    count={count}
                     onOpen={() => setPath(folderPath)}
                   />
                 )
               })}
-              {filtered.map((item) => (
+              {pageItems.map((item) => (
                 <MediaCard
                   key={item.id}
                   item={item}
                   isSelected={item.id === selectedId}
                   onSelect={() => setSelectedId(item.id)}
                   category={meta.categories[item.id] ?? null}
-                  isToday={meta.today.ids.includes(item.id)}
+                  isToday={todayIds.has(item.id)}
                   showFolder={searching}
                 />
               ))}
@@ -263,6 +275,30 @@ export default function Media() {
           )}
         </div>
 
+        {pages > 1 && (
+          <nav
+            aria-label="Páginas de multimedia"
+            className="flex items-center justify-center gap-4 border-t border-slate-700 py-2 text-xs text-slate-300"
+          >
+            <button
+              type="button"
+              disabled={page === 0}
+              onClick={() => setPage(page - 1)}
+              className="rounded px-2 py-1 hover:bg-slate-800 disabled:opacity-40"
+            >
+              Anterior
+            </button>
+            <span aria-live="polite">Página {page + 1} de {pages}</span>
+            <button
+              type="button"
+              disabled={page + 1 === pages}
+              onClick={() => setPage(page + 1)}
+              className="rounded px-2 py-1 hover:bg-slate-800 disabled:opacity-40"
+            >
+              Siguiente
+            </button>
+          </nav>
+        )}
         <VideoTransport media={media} />
       </div>
 
@@ -431,7 +467,7 @@ function TodayStrip({
                 title={item.fileName}
               >
                 <div className="aspect-video">
-                  <Thumb item={item} />
+                  <MediaThumbnail item={item} />
                 </div>
                 <span className="block truncate px-1.5 py-1 text-[10px] text-slate-300">
                   {item.fileName}
@@ -529,26 +565,6 @@ function FolderCard({
   )
 }
 
-/** Miniatura sin controles: video mudo con metadata o imagen perezosa. */
-function Thumb({ item, onDuration }: { item: MediaItem; onDuration?: (d: number) => void }) {
-  const src = `media://${item.id}`
-  if (item.type === 'video') {
-    return (
-      <video
-        src={src}
-        className="h-full w-full object-cover"
-        preload="metadata"
-        muted
-        playsInline
-        onLoadedMetadata={(e) => onDuration?.(e.currentTarget.duration)}
-      />
-    )
-  }
-  return (
-    <img src={src} alt={item.fileName} className="h-full w-full object-cover" loading="lazy" />
-  )
-}
-
 interface MediaCardProps {
   item: MediaItem
   isSelected: boolean
@@ -569,8 +585,6 @@ function MediaCard({
 }: MediaCardProps) {
   const toggleToday = useMediaMetaStore((s) => s.toggleToday)
   const abrirMenu = useMenuContextual()
-  // Duración leída del propio <video> una vez cargada la metadata.
-  const [duration, setDuration] = useState<number | null>(null)
   const info = category ? categoryInfo(category) : undefined
   return (
     <li>
@@ -597,12 +611,7 @@ function MediaCard({
           className="block w-full text-left"
         >
           <div className="relative aspect-video bg-black">
-            <Thumb item={item} onDuration={setDuration} />
-            {item.type === 'video' && duration !== null && (
-              <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] font-medium text-white">
-                {formatDuration(duration)}
-              </span>
-            )}
+            <MediaThumbnail item={item} durationLabel={formatDuration} />
             {info && (
               <span
                 className={`absolute bottom-1 left-1 rounded px-1.5 py-0.5 text-[10px] font-medium ${info.badgeClass}`}

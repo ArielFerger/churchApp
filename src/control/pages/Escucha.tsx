@@ -50,6 +50,10 @@ function escribiendo(e: KeyboardEvent): boolean {
   return t instanceof Element && Boolean(t.closest('input, textarea, select, [contenteditable="true"]'))
 }
 
+function versionParaEscucha(versiones: BibleVersionSummary[]): string | null {
+  return versiones.find((v) => v.version === 'RVR1960')?.version ?? versiones[0]?.version ?? null
+}
+
 export default function Escucha() {
   const settings = useSettingsStore((s) => s.settings)
   const updateSettings = useSettingsStore((s) => s.update)
@@ -121,7 +125,7 @@ export default function Escucha() {
   }, [estado])
 
   const version = useMemo(
-    () => settings?.defaultBibleVersion ?? versiones[0]?.version ?? null,
+    () => settings?.defaultBibleVersion ?? versionParaEscucha(versiones),
     [settings?.defaultBibleVersion, versiones]
   )
 
@@ -205,12 +209,13 @@ export default function Escucha() {
     async (p: Pasaje): Promise<boolean> => {
       setErrorAccion(null)
       const api = window.electronAPI
-      if (!api || !version) {
+      const elegida = version ?? (api ? versionParaEscucha(await api.getBibleVersions()) : null)
+      if (!api || !elegida) {
         setErrorAccion('No hay ninguna versión de la Biblia cargada.')
         return false
       }
       const res = await api.lookupVerse({
-        version,
+        version: elegida,
         bookId: p.bookId,
         chapter: p.chapter,
         verse: p.verse,
@@ -218,7 +223,7 @@ export default function Escucha() {
       })
       if (!res) {
         setErrorAccion(
-          `${textoReferencia(p.bookId, p.chapter, p.verse, p.endVerse)} no existe en ${version}. Corregí el número con el lápiz.`
+          `${textoReferencia(p.bookId, p.chapter, p.verse, p.endVerse)} no existe en ${elegida}. Corregí el número con el lápiz.`
         )
         return false
       }
@@ -329,9 +334,8 @@ export default function Escucha() {
             </span>
           }
         >
-          Oye la predicación y te ofrece el pasaje que se nombró. Vos decidís si sale:{' '}
-          <strong className="text-cabina-tinta">nunca proyecta sola</strong>. Todo se procesa en
-          esta máquina: el audio no se guarda ni sale a internet.
+          Escucha la predicación y sugiere pasajes por la cita anunciada o por las palabras leídas.
+          El audio se procesa en esta máquina. <strong className="text-cabina-tinta">Vos elegís qué proyectar.</strong>
         </EncabezadoPagina>
 
         {/* Falta whisper */}
@@ -497,7 +501,7 @@ export default function Escucha() {
           {/* Sugerencias */}
           <section aria-labelledby="escucha-sugerencias" className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <Rotulo id="escucha-sugerencias">Se nombró</Rotulo>
+              <Rotulo id="escucha-sugerencias">Pasajes sugeridos</Rotulo>
               <div className="flex items-center gap-3">
                 {masNueva && (
                   <span className="hidden text-[11px] text-cabina-tinta-tenue md:inline">
@@ -523,7 +527,7 @@ export default function Escucha() {
             {/* Anuncio para lectores de pantalla: sólo la cita nueva. */}
             <p className="sr-only" aria-live="polite">
               {masNueva
-                ? `Se nombró ${textoReferencia(masNueva.bookId, masNueva.chapter, masNueva.verse, masNueva.endVerse)}`
+                ? `Pasaje sugerido: ${textoReferencia(masNueva.bookId, masNueva.chapter, masNueva.verse, masNueva.endVerse)}`
                 : ''}
             </p>
 
@@ -531,7 +535,7 @@ export default function Escucha() {
               {todas.length === 0 && (
                 <li className="rounded-xl border border-dashed border-cabina-linea-fuerte px-4 py-10 text-center text-sm text-cabina-tinta-tenue">
                   {escuchando
-                    ? 'Escuchando. Las citas aparecen acá un par de segundos después de que se nombran.'
+                    ? 'Escuchando. Acá aparecen los pasajes reconocidos.'
                     : 'Todavía no hay nada. Apretá Escuchar cuando empiece la predicación.'}
                 </li>
               )}

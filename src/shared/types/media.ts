@@ -13,6 +13,7 @@ export interface MediaItem {
   thumbnailPath?: string
   width?: number
   height?: number
+  byteSize?: number
   addedAt: string
 }
 

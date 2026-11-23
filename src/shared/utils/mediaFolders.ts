@@ -12,17 +12,22 @@ export function itemsInFolder(items: MediaItem[], path: string): MediaItem[] {
 
 /** Nombres de las subcarpetas inmediatas de `path`, ordenadas alfabéticamente. */
 export function childFolders(items: MediaItem[], path: string): string[] {
+  return childFolderCounts(items, path).map(([name]) => name)
+}
+
+const byName = new Intl.Collator('es', { numeric: true, sensitivity: 'base' })
+
+/** Subcarpetas inmediatas con sus totales recursivos, en una pasada. */
+export function childFolderCounts(items: MediaItem[], path: string): [string, number][] {
   const prefix = path ? `${path}/` : ''
-  const names = new Set<string>()
-  for (const m of items) {
-    const folder = m.folder ?? ''
-    if (!folder || folder === path) continue
-    if (prefix && !folder.startsWith(prefix)) continue
-    const rest = prefix ? folder.slice(prefix.length) : folder
-    const first = rest.split('/')[0]
-    if (first) names.add(first)
+  const counts = new Map<string, number>()
+  for (const item of items) {
+    const folder = item.folder ?? ''
+    if (!folder.startsWith(prefix)) continue
+    const first = folder.slice(prefix.length).split('/', 1)[0]
+    if (first) counts.set(first, (counts.get(first) ?? 0) + 1)
   }
-  return [...names].sort((a, b) => a.localeCompare(b, 'es', { numeric: true, sensitivity: 'base' }))
+  return [...counts].sort(([a], [b]) => byName.compare(a, b))
 }
 
 /** Cantidad de items (recursiva) dentro de `path`. */

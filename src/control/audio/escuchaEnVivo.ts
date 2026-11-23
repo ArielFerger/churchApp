@@ -82,13 +82,17 @@ function enviar(pcm: Int16Array, forzado: boolean, frase: number): void {
   // El final de lo que se venía diciendo va como contexto: whisper mantiene
   // los nombres y la forma de escribir las citas entre una frase y la otra.
   const prompt = promptConContexto(s.textoReciente())
+  const anterior = s.fragmentos.at(-1)
+  const cola = anterior && Date.now() - anterior.t < 20_000
+    ? anterior.texto.split(/\s+/).slice(-6).join(' ')
+    : ''
   enVuelo++
   void api
-    .transcribirVentana(new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength), TASA, prompt)
+    .transcribirVentana(new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength), TASA, prompt, false, cola)
     .then((r) => {
       const st = useEscuchaStore.getState()
       if (!r) return st.ventanaDescartada()
-      st.aplicarVentana(r.texto, r.ms, { forzado, frase })
+      st.aplicarVentana(r.texto, r.ms, { forzado, frase, lecturas: r.lecturas })
     })
     .catch((e: unknown) => {
       const st = useEscuchaStore.getState()

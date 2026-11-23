@@ -37,7 +37,13 @@ function mimeFor(filePath: string): string {
 
 function toWeb(nodeStream: Readable): ReadableStream {
   // Node's Readable → web ReadableStream so the Response body streams lazily.
-  return Readable.toWeb(nodeStream) as unknown as ReadableStream
+  // La cola web debe contar bytes. Contar chunks permite acumular miles de bloques de 64 KiB.
+  return Readable.toWeb(nodeStream, {
+    strategy: {
+      highWaterMark: nodeStream.readableHighWaterMark,
+      size: (chunk: Buffer) => chunk.byteLength
+    }
+  }) as unknown as ReadableStream
 }
 
 /**

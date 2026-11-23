@@ -1,3 +1,4 @@
+import { IndiceLecturas } from './indiceLecturas'
 import { app } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import { promises as fs } from 'fs'
@@ -41,7 +42,29 @@ export interface VerseLookupResult {
 export class BibleService {
   private bibles = new Map<string, Bible>()
   private statsCache = new Map<string, Record<string, number[]>>()
+  private indiceLecturas?: { version: string; indice: Promise<IndiceLecturas> }
   private ready = false
+
+  async reconocerLectura(texto: string, version: string | null, cola = '') {
+    if ((cola + ' ' + texto).trim().split(/\s+/).length < 7) return []
+    await this.init()
+    const elegida = version ?? (this.bibles.has('RVR1960') ? 'RVR1960' : (await this.getVersions())[0]?.version)
+    const bible = elegida ? this.bibles.get(elegida) : undefined
+    if (!bible) return []
+    if (this.indiceLecturas?.version !== bible.metadata.version) {
+      this.indiceLecturas = { version: bible.metadata.version, indice: this.indexarLecturas(bible) }
+    }
+    return (await this.indiceLecturas.indice).buscar(texto, cola)
+  }
+
+  private async indexarLecturas(bible: Bible): Promise<IndiceLecturas> {
+    const indice = new IndiceLecturas()
+    for (const libro of bible.books) {
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      indice.agregarLibro(libro)
+    }
+    return indice
+  }
 
   async init(): Promise<void> {
     if (this.ready) return

@@ -43,7 +43,14 @@ export function registerMediaProtocolHandler(): void {
         return new Response('Not found', { status: 404 })
       }
       // Serve with real byte-range support so <video> scrubbing/fast-forward works.
-      return serveFileWithRange(item.filePath, request)
+      const response = await serveFileWithRange(item.filePath, request)
+      // El canvas de miniaturas necesita leer el primer fotograma desde control.
+      const origin = request.headers.get('origin')
+      const devUrl = process.env.ELECTRON_RENDERER_URL
+      if (origin === 'file://' || (devUrl && origin === new URL(devUrl).origin)) {
+        response.headers.set('Access-Control-Allow-Origin', origin)
+      }
+      return response
     } catch (err) {
       log.error('media protocol error', err)
       return new Response('Internal error', { status: 500 })

@@ -195,7 +195,8 @@ export interface ControlElectronAPI {
     pcm: Uint8Array,
     tasa: number,
     prompt?: string | null,
-    provisional?: boolean
+    provisional?: boolean,
+    colaLectura?: string
   ) => Promise<Transcripcion | null>
   onEscuchaProgress: (
     callback: (p: { step: string; ratio: number | null }) => void

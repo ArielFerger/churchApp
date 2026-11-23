@@ -120,6 +120,11 @@ const TarjetaSugerencia = forwardRef<
               <Repeat2 className="h-3 w-3" aria-hidden />×{r.veces}
             </span>
           )}
+          {r.porTexto && (
+            <span className="rounded border border-cabina-linea-fuerte px-1.5 py-0.5 text-[11px] text-cabina-tinta-dim">
+              Coincide con el texto leído
+            </span>
+          )}
           {r.inferida && (
             <span
               className="inline-flex items-center gap-1 rounded border border-cabina-linea-fuerte px-1.5 py-0.5 text-[11px] text-cabina-tinta-dim"

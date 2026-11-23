@@ -121,7 +121,7 @@ interface EscuchaState {
   aplicarVentana: (
     texto: string,
     ms?: number,
-    opciones?: { forzado?: boolean; frase?: number }
+    opciones?: { forzado?: boolean; frase?: number; lecturas?: ReferenciaDetectada[] }
   ) => void
   /**
    * Lo que va de una frase que todavía no terminó. Sus citas se muestran ya,
@@ -247,6 +247,12 @@ export const useEscuchaStore = create<EscuchaState>((set, get) => ({
         if (!cortada) vistasEnteras.add(claveSugerencia(r))
         return { ...r, offset: r.offset - colaTokens.length + palabrasPrevias }
       })
+      for (const lectura of opciones.lecturas ?? []) {
+        if (nuevas.some((r) => claveSugerencia(r) === claveSugerencia(lectura))) continue
+        vistasEnteras.add(claveSugerencia(lectura))
+        nuevas.push({ ...lectura, offset: palabrasPrevias + lectura.offset })
+      }
+      nuevas.sort((a, b) => a.offset - b.offset)
       palabrasPrevias += tokenizar(limpio).length
 
       // Metadatos que el detector no conoce: cuándo se oyó y cuántas veces.

@@ -1,5 +1,8 @@
+import log from 'electron-log'
 import { BrowserWindow, ipcMain } from 'electron'
 import { IPC_CHANNELS } from '../../src/shared/constants'
+import { bibleService } from '../services/bibleService'
+import { getSettings } from '../services/settingsService'
 import * as escucha from '../services/escuchaService'
 import type { WhisperModelId } from '../../src/shared/utils/whisper'
 import type { EscuchaStatus } from '../../src/shared/types/escucha'
@@ -47,11 +50,20 @@ export function registerEscuchaHandlers(controlWindow: BrowserWindow): () => voi
     IPC_CHANNELS.TRANSCRIBE_WINDOW,
     // El PCM llega como Uint8Array por structured clone, sin pasar por JSON:
     // un fragmento de 10 s son 320 KB y serializarlo como texto sería absurdo.
-    (_e, pcm: Uint8Array, tasa: number, prompt?: string | null, provisional?: boolean) =>
-      escucha.transcribirVentana(pcm, tasa, {
+    async (_e, pcm: Uint8Array, tasa: number, prompt?: string | null, provisional?: boolean, colaLectura?: string) => {
+      const r = await escucha.transcribirVentana(pcm, tasa, {
         ...(prompt === undefined ? {} : { prompt }),
         provisional: Boolean(provisional)
       })
+      if (!r?.texto || provisional) return r
+      try {
+        const lecturas = await bibleService.reconocerLectura(r.texto, getSettings().defaultBibleVersion, colaLectura)
+        return { ...r, lecturas }
+      } catch (err) {
+        log.warn('No se pudo comparar la lectura con la Biblia local', err)
+        return r
+      }
+    }
   )
 
   return () => {

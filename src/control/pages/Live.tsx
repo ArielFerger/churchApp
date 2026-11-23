@@ -18,13 +18,14 @@ import {
   X
 } from 'lucide-react'
 import { useLiveStore } from '@/shared/store/liveStore'
+import MediaThumbnail from '@/control/components/MediaThumbnail'
 import { useLibraryStore } from '@/shared/store/libraryStore'
 import { useLiveControlsStore } from '@/shared/store/liveControlsStore'
 import { useSettingsStore } from '@/shared/store/settingsStore'
 import {
   itemsInFolder,
   childFolders,
-  countInFolder,
+  childFolderCounts,
   breadcrumbSegments
 } from '@/shared/utils/mediaFolders'
 import type { ProjectionCommand } from '@/shared/types/ipc'
@@ -118,7 +119,7 @@ export default function Live() {
       }),
     [bgSource, bgPath]
   )
-  const bgFolders = useMemo(() => childFolders(bgSource, bgPath), [bgSource, bgPath])
+  const bgFolders = useMemo(() => childFolderCounts(bgSource, bgPath), [bgSource, bgPath])
 
   // Imágenes y GIFs disponibles para la presentación.
   const slideshowCandidates = useMemo(
@@ -285,7 +286,7 @@ export default function Live() {
                 </p>
               ) : (
                 <ul className={`mt-3 ${GRILLA}`}>
-                  {bgFolders.map((name) => {
+                  {bgFolders.map(([name, count]) => {
                     const folderPath = bgPath ? `${bgPath}/${name}` : name
                     return (
                       <li key={`folder-${name}`}>
@@ -305,7 +306,7 @@ export default function Live() {
                             </span>
                           </div>
                           <span className="absolute right-1 top-1 rounded bg-listo-suave px-1 font-mono text-[10px] font-medium text-listo">
-                            {countInFolder(bgSource, folderPath)}
+                            {count}
                           </span>
                         </button>
                       </li>
@@ -329,22 +330,7 @@ export default function Live() {
                           }`}
                         >
                           <div className="aspect-video">
-                            {item.type === 'video' ? (
-                              <video
-                                src={`media://${item.id}`}
-                                className="h-full w-full object-cover"
-                                preload="metadata"
-                                muted
-                                playsInline
-                              />
-                            ) : (
-                              <img
-                                src={`media://${item.id}`}
-                                alt=""
-                                className="h-full w-full object-cover"
-                                loading="lazy"
-                              />
-                            )}
+                            <MediaThumbnail item={item} />
                           </div>
                           <span className="absolute left-1 top-1 rounded bg-black/60 p-0.5 text-white" aria-hidden>
                             {item.type === 'video' ? <Film className="h-3 w-3" /> : <ImageIcon className="h-3 w-3" />}
@@ -425,12 +411,7 @@ export default function Live() {
                         }`}
                       >
                         <div className="aspect-video">
-                          <img
-                            src={`media://${item.id}`}
-                            alt=""
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                          />
+                          <MediaThumbnail item={item} />
                         </div>
                         <AnimatePresence>
                           {selected && (

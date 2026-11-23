@@ -9,8 +9,8 @@ import type { MediaItem } from '@/shared/types/media'
 
 interface Props {
   current: ProjectionCommand | null
-  /** Preload queue: rendered hidden so showMedia is instant. */
-  preloads: MediaItem[]
+  /** Próximo archivo preparado por el operador o la cola. */
+  preload?: MediaItem
   /** Resolved media item for the currently-displayed showMedia, if any. */
   currentMediaItem: MediaItem | null
   /** Imperative seek signal for the active content video. */
@@ -45,7 +45,7 @@ interface Props {
  */
 export default function ContentLayer({
   current,
-  preloads,
+  preload,
   currentMediaItem,
   mediaSeek,
   mediaReplay,
@@ -67,9 +67,7 @@ export default function ContentLayer({
     <div className="absolute inset-0 z-20 flex items-center justify-center">
       {/* Hidden preload pool — keeps decoded frames warm */}
       <div className="pointer-events-none absolute inset-0 opacity-0" aria-hidden="true">
-        {preloads.map((item) => (
-          <MediaSlide key={`preload-${item.id}`} item={item} active={false} />
-        ))}
+        {preload && <MediaSlide key={preload.id} item={preload} active={false} />}
       </div>
 
       {/* Fondo de versículos: se monta mientras haya un versículo en pantalla
